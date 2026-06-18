@@ -1,0 +1,74 @@
+{
+  "as_of": "2026-06-17T22:19:28",
+  "generated_at": "2026-06-18T03:53:45.752Z",
+  "session": "Asia",
+  "spot": 732.6416899626981,
+  "regime": "negative",
+  "levels": [
+    {
+      "strike": 735,
+      "reversal_prob": 55,
+      "side": "resistance",
+      "why": "Call Wall + 0DTE Call Wall; +237M GEX + enormous charm (-39.8B); 77k OI; highest-confluence resistance just 2.4pts above spot",
+      "outcome": "untouched",
+      "touched": false
+    },
+    {
+      "strike": 740,
+      "reversal_prob": 52,
+      "side": "resistance",
+      "why": "Named Call Wall; largest OI in dataset (107k); +232M GEX; single biggest charm mass (-94.7B); primary magnet if 735 breaks",
+      "outcome": "untouched",
+      "touched": false
+    },
+    {
+      "strike": 715,
+      "reversal_prob": 48,
+      "side": "support",
+      "why": "Put Wall 0DTE + Major Wall 0DTE; 100k OI; biggest charm reading (-56.6B); major institutional put floor; slight reduction for negative GEX regime",
+      "outcome": "untouched",
+      "touched": false
+    },
+    {
+      "strike": 745,
+      "reversal_prob": 43,
+      "side": "resistance",
+      "why": "Large OI (57k); +113M GEX; massive charm (-43.8B); outer call wall cluster extension",
+      "outcome": "untouched",
+      "touched": false
+    },
+    {
+      "strike": 750,
+      "reversal_prob": 42,
+      "side": "resistance",
+      "why": "Named Call Wall; 76k OI; +163M GEX; enormous charm (-66.5B); largest vanna (3.0B) in dataset — outer ceiling",
+      "outcome": "untouched",
+      "touched": false
+    },
+    {
+      "strike": 720,
+      "reversal_prob": 40,
+      "side": "support",
+      "why": "Named Put Wall; largest OI dataset-wide (125k); -445M GEX; massive charm (-41.6B); key structural put floor though negative GEX tempers pin",
+      "outcome": "untouched",
+      "touched": false
+    },
+    {
+      "strike": 730,
+      "reversal_prob": 38,
+      "side": "support",
+      "why": "Zero Gamma + Vol Trigger coincidence (730.24/730.2); 89k OI; gamma regime flip zone — meaningful bounce candidate on any dip from current 732.64",
+      "outcome": "pending",
+      "touched": true,
+      "touchedAt": "2026-06-17T20:00:00"
+    },
+    {
+      "strike": 724,
+      "reversal_prob": 28,
+      "side": "support",
+      "why": "Moderate put skew (21k OI); -143M GEX; large charm (-19.2B); secondary support shelf between 720 wall and spot",
+      "outcome": "untouched",
+      "touched": false
+    }
+  ]
+}

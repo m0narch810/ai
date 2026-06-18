@@ -10,9 +10,11 @@ data/scored/
 # captured API samples (live account data)
 fixtures/
 
-# generated dashboard payload (live board data; deploy still uploads it from local)
-web/dashboard.json
+# local preview artifact
 _board_preview.png
+
+# NOTE: web/dashboard.json IS tracked so the git-connected Netlify site has a board
+# to render. It refreshes when you commit a new capture (or via netlify CLI deploy).
 
 # node
 node_modules/
