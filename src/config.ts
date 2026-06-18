@@ -62,11 +62,12 @@ export const config = {
   breakBufferPct: num("BREAK_BUFFER_PCT", 0.0015),
   nearSpotBandPct: num("NEAR_SPOT_BAND_PCT", 0.025),
 
-  // Reversal grading in ABSOLUTE POINTS (QQQ strikes are ~$1 apart), per the trader's rule:
-  // a reversal is only "clean" if price turns within cleanReversalPts of the level, and price
-  // trading a full strike (hardStopPts) beyond the level is a hard stop = the level is broken.
-  hardStopPts: num("HARD_STOP_PTS", 1.0),
-  cleanReversalPts: num("CLEAN_REVERSAL_PTS", 0.20),
+  // Reversal grading in ABSOLUTE QQQ POINTS, sized to the trader's MNQ-futures method
+  // (entries are limit orders at the exact strike; ~41.5 MNQ pts per QQQ pt).
+  // hardStopPts ≈ the 20-MNQ-point stop (20 / ~41.5). A turn within cleanReversalPts
+  // (~4 MNQ pts) is a clean, near-to-the-tick reversal; beyond the stop = broken.
+  hardStopPts: num("HARD_STOP_PTS", 0.48),
+  cleanReversalPts: num("CLEAN_REVERSAL_PTS", 0.10),
   // How close price must actually trade to a level to count as TESTED — a resting limit
   // only fills if price reaches the strike. Coming within ~a point is not a touch.
   fillTolPts: num("FILL_TOL_PTS", 0.08),

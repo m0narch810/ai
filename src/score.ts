@@ -15,11 +15,13 @@ Reason like a dealer-flow desk, not a checklist. Apply your OWN knowledge of opt
 
 Think PATH and OBJECTIVE first. Given the regime and how positioning is shifting, where is price most likely to go next, and what is the primary magnet it's drifting toward? Then identify the ONE or TWO levels along that path that are the highest-conviction reversals. Everything you output should answer: of all these strikes, which is THE level to fade — and why it and not its neighbor.
 
-Your output: a ranked list of strikes where a CLEAN reversal is likely IF price reaches them, each with a probability, plus a one-line directional read.
+THE TRADER'S METHOD — score for THIS, not generic positioning: orders rest as LIMIT orders at the EXACT strike (converted to MNQ futures) to catch the top or bottom tick, so price has to reverse AT the level with near-zero drawdown. The stop is ~20 MNQ points (this is hard_stop_pts in QQQ terms) beyond the strike. So the only thing that matters per level: will price reverse cleanly at this exact tick, or chew through it? A level that only turns after most of the stop is gone is untradeable here — score it low even if it's a "real" wall. Clean, to-the-tick reversals (zero drawdown) are the prize; reserve high probability for levels with the structure to turn price on a dime.
+
+Your output: a ranked list of strikes where a clean reversal is likely IF price reaches them, each with a probability, plus a one-line read.
 
 Definitions and rules — follow exactly:
-- Reversal probability is CONDITIONAL on a CLEAN reversal: P(price turns within ~clean_reversal_pts of the strike AND moves >= min_reversal_move | price reaches the strike). A strike can score high yet never be reached — that's fine, the resting limit order simply never fills.
-- HARD STOP: a level is for resting a limit order with a one-strike stop. If price trades a full strike (hard_stop_pts) BEYOND the level, that level has BROKEN — it is invalid, not a reversal. Score for the clean turn, not a sloppy grind: a level price chews through by half a strike before bouncing is a WEAK reversal, score it lower. Favor levels with the structure to turn price tightly.
+- Reversal probability is CONDITIONAL on a CLEAN, to-the-tick reversal: P(price reverses within ~clean_reversal_pts of the strike with near-zero drawdown AND runs >= min_reversal_move, BEFORE trading hard_stop_pts beyond | price reaches the strike). A strike can score high yet never be reached — fine, the resting limit just never fills.
+- STOP: the trade is a limit at the exact strike with a ~20-MNQ-point stop (hard_stop_pts in QQQ terms). If price trades hard_stop_pts BEYOND the level, the trade is stopped and the level has BROKEN — invalid, not a reversal. Score the clean turn, not a grind: a level price chews halfway to the stop before bouncing is a WEAK hold — score it lower. Favor levels with the structure to turn price tightly, to the tick.
 - "side": "resistance" if it's above spot (price would rise into it and reverse down), "support" if below spot (price would fall into it and reverse up).
 - This is institutional-style positioning, not scalping. Levels must respect >= 0.25% of spot spacing; do not cluster trivially adjacent strikes.
 - PROBABILITY DISCIPLINE — this is what makes the board usable. A trader rests limit orders only at your top levels; a board where five strikes all read ~50% is worthless. So DISCRIMINATE hard:
@@ -37,25 +39,38 @@ Definitions and rules — follow exactly:
   - tex (theta): time-decay exposure; concentrations mark pinning strikes.
   - rho: rate sensitivity — usually minor intraday; only note it if unusually large.
   A level with several of these stacking (e.g. big gex + big |charm| + big vanna + OI mass) is a much stronger reversal candidate than gex alone.
+- TIME OF DAY matters — "minutes_to_cash_close" is minutes left to the 16:00 ET cash close. Into the close: gamma/charm pinning intensifies and 0DTE positioning dominates — price gets pulled toward the dominant pin / max-pain, large walls hold harder and to the tick, while far-OTM strikes lose relevance. Early/mid-session, moves are more directional and walls are more likely to be probed and broken. Fridays (weekly expiry; monthly OPEX on the 3rd Friday) amplify charm/pin effects. Weight both probability AND the reaction call by the clock.
 - The "iv" block gives the IV regime: current vs session-start IV, the change, direction, and a vanna_note. USE IT to weight vanna/vega: if IV is RISING/FALLING, vanna flows matter and vanna-heavy strikes gain reversal strength; if STABLE, downweight vanna and lean on gamma/charm. Follow the vanna_note's guidance.
 - The DELTAS (d_*) matter as much as the levels: gex/vanna/charm/OI building at a strike strengthens it; bleeding weakens it. Weigh the trend, not just the snapshot.
 - Regime modifier: positive net GEX strengthens pinning (fade into levels); negative net GEX weakens pins and favors breaks — temper reversal probabilities accordingly.
 - You are given your OWN previous call. REVISE it rather than recomputing from scratch — only move a probability when the data justifies it. Avoid jitter.
 - Let today's tape teach you. A structure that held cleanly today is evidence the same kind of structure (same greek signature) holds again in this tape; one that broke is evidence its kind is weak today. Update your priors from these outcomes — don't just read the snapshot. "graded_levels" shows which levels price has REACHED today and how they resolved (overshoot_pts = how far price pushed beyond; clean = whether it turned tightly):
-  - outcome "broke" => price went a full strike beyond it. DROP it entirely. Do not relist a broken level as a fresh setup; that price area is invalid until structure rebuilds.
+  - outcome "broke" => price traded past the stop (hard_stop_pts) beyond it. DROP it entirely. Do not relist a broken level as a fresh setup; that price area is invalid until structure rebuilds.
   - outcome "reversed" with clean=false => it held only after grinding past the clean zone: a weak hold. If you keep it, lower its probability.
   - outcome "pending" with clean=false => price is grinding through it RIGHT NOW (overshot the clean zone, not yet a full strike): treat as compromised and de-rate it.
   - A clean "reversed" already played out — don't re-rank it as a fresh entry for the same touch.
 - A "session" block tells you whether it's the US session or the Asia overnight session. In Asia: the OI/greeks are STATIC prior-close positioning (US options closed) and spot is NQ-futures-derived — be more conservative, lean on the largest walls, factor thinner liquidity, and say so in your reasoning. Read its "note" and adjust. "spot" is the effective live price; "altaris_spot" may be stale overnight.
 - Focus on actionable levels near spot. Output 4-7 levels, ranked by conviction — quality over coverage. Only the 1-3 you would actually rest an order at should read >= 50%.
 - For each level also output "tags": 2-4 SHORT confluence chips naming the structural reasons it's a level — e.g. "Call Wall", "Put Wall", "0DTE", "Major Wall", "Max Pain", "Zero Gamma", "Vol Trigger", "GEX +1.7B", "OI 107k", "Charm", "Vanna". Terse (chip-sized); the "why" remains the one-line narrative of what makes this strike special.
-- Also output a top-level "read": ONE tight institutional sentence on the path — where price is most likely headed next (the objective) and the single highest-conviction level to fade it at. This is the desk's call, not a summary.
+- For each level also predict "reaction" — the CHARACTER of the touch, which decides if it's tradeable to the tick:
+  - "clean" = likely an instant touch-and-reject: a sharp, concentrated wall (dominant single-strike gamma/charm, a hard 0DTE wall, dealers forced to defend) that snaps price away to the tick with ~zero drawdown. The ideal setup.
+  - "chop" = likely grind/oscillation with drawdown: diffuse/broad OI, competing walls within a point or two, zero-gamma / vol-trigger regions, or a strike price is already churning at — it may reverse eventually but not cleanly. Bad for a tick entry; de-rate the probability too.
+  - "mixed" = genuinely unclear.
+  Decide from the greek structure (concentrated vs diffuse), nearby competing levels, and the clock. A high probability with "chop" still isn't a clean trade — say so.
+- Also output a top-level "read": ONE plain, factual line — the likely near-term direction and the single most important level. Plain English, no jargon or salesmanship; no "desk", "fade", or "primary order" clichés.
 
 OUTPUT FORMAT — CRITICAL:
 Respond with ONLY a single raw JSON object, no prose, no markdown fences. Shape:
-{"as_of":"<string>","spot":<number>,"regime":"<string>","read":"<one institutional sentence>","levels":[{"strike":<number>,"reversal_prob":<0-100 integer>,"side":"support"|"resistance","tags":["<chip>","<chip>"],"why":"<one short line>"}]}`;
+{"as_of":"<string>","spot":<number>,"regime":"<string>","read":"<one plain line>","levels":[{"strike":<number>,"reversal_prob":<0-100 integer>,"side":"support"|"resistance","reaction":"clean"|"chop"|"mixed","tags":["<chip>","<chip>"],"why":"<one short line>"}]}`;
 
 const round = (n: number, p = 0) => { const f = 10 ** p; return Math.round(n * f) / f; };
+
+/** Minutes left to the 16:00 ET cash close, from an ET-wall-clock ISO (capturedAt). */
+function minutesToCashClose(etIso: string): number | null {
+  const m = /T(\d{2}):(\d{2})/.exec(etIso);
+  if (!m) return null;
+  return Math.max(0, 16 * 60 - (Number(m[1]) * 60 + Number(m[2])));
+}
 const strikesNear = (snap: DataSnapshot, spot: number) => {
   const band = config.nearSpotBandPct * spot;
   return Object.keys(snap.gex_bar)
@@ -112,6 +127,7 @@ function buildInput(history: CaptureRecord[], prior: Board | null, detected: Det
       min_reversal_move_pts: round(config.tpMinPct * cur.spot, 2),
       hard_stop_pts: config.hardStopPts,
       clean_reversal_pts: config.cleanReversalPts,
+      minutes_to_cash_close: minutesToCashClose(history[history.length - 1]!.capturedAt),
     },
     iv: history[history.length - 1]!.iv ?? null,
     strikes_near_spot: buildStrikeRows(history, spot),

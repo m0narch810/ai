@@ -114,6 +114,11 @@ export interface ScoredLevel {
   why: string;
   /** 2-4 terse confluence tags for the dashboard chips (e.g. "Call Wall", "GEX +1.7B"). */
   tags?: string[];
+  /**
+   * Predicted CHARACTER of the touch — decides if it's tradeable to the tick.
+   * "clean" = instant touch-and-reject; "chop" = grinds/oscillates with drawdown; "mixed" = unclear.
+   */
+  reaction?: "clean" | "chop" | "mixed";
 }
 
 /** The board the AI returns each tick. */

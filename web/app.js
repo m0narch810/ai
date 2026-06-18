@@ -78,8 +78,9 @@ function buildRung(level) {
 
   const body = el("div", "body");
   const tags = Array.isArray(level.tags) ? level.tags.slice(0, 4) : [];
-  if (tags.length) {
+  if (level.reaction || tags.length) {
     const chips = el("div", "chips");
+    if (level.reaction) chips.appendChild(el("span", `chip react ${level.reaction}`, level.reaction === "clean" ? "clean reject" : level.reaction === "chop" ? "chop risk" : "mixed"));
     for (const t of tags) chips.appendChild(el("span", "chip", t));
     body.appendChild(chips);
   }
