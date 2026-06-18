@@ -27,6 +27,8 @@ export interface DashboardData {
   session: string | null;
   spot: number;
   regime: string;
+  /** One-line institutional read (path + the level to fade). */
+  read?: string;
   /** Points beyond a level that count as a hard break (lets the live spot flag breaks). */
   hard_stop_pts: number;
   /** Points beyond a level still considered a clean reversal. */
@@ -59,6 +61,7 @@ export function buildDashboard(board: Board, detected: DetectedLevel[], session?
     session: session ?? activeSession()?.name ?? null,
     spot: board.spot,
     regime: board.regime,
+    read: board.read,
     hard_stop_pts: config.hardStopPts,
     clean_reversal_pts: config.cleanReversalPts,
     iv: board.iv,

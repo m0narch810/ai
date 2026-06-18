@@ -189,6 +189,9 @@ function render(data) {
 
   renderHeroMetrics(data);
 
+  const read = $("#heroRead");
+  if (data.read) { read.hidden = false; read.textContent = data.read; } else { read.hidden = true; }
+
   const levels = Array.isArray(data.levels) ? data.levels : [];
   const ceil = $("#ceilings"), floor = $("#floors");
   ceil.replaceChildren(); floor.replaceChildren(); rungEls = [];

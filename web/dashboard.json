@@ -1,130 +1,90 @@
 {
-  "as_of": "2026-06-18T14:20:31",
-  "scored_at": 1781807024082,
-  "generated_at": "2026-06-18T18:34:37.756Z",
+  "as_of": "2026-06-18T14:46:55",
+  "scored_at": 1781808610803,
+  "generated_at": "2026-06-18T18:50:10.808Z",
   "session": "US",
-  "spot": 739.66,
+  "spot": 739.37,
   "regime": "positive",
+  "read": "Price is trapped below the dominant 740 pin after two clean rejections today; IV spiking +7.66 and call vanna force mechanical dealer selling on any rally — the primary fade is 745 on a 740 breakout, and the board stays short-biased above spot into the cash close.",
   "hard_stop_pts": 1,
   "clean_reversal_pts": 0.2,
   "iv": {
-    "current": 23.85,
-    "direction": "STABLE"
+    "current": 24.07,
+    "direction": "RISING"
   },
-  "expected_move": 14.9,
+  "expected_move": 14.48,
   "levels": [
     {
-      "strike": 740,
-      "reversal_prob": 72,
-      "side": "resistance",
-      "tags": [
-        "Call Wall",
-        "Major Wall",
-        "GEX $2.2B",
-        "0DTE"
-      ],
-      "why": "$2.2B GEX wall surging +$937M intraday with charm building; second test from 739.66 but structure is strengthening not fading — dominant pin/ceiling, raise from 63%.",
-      "outcome": "reversed",
-      "touched": true,
-      "touchedAt": "2026-06-18T11:11:00",
-      "overshoot": 0,
-      "clean": true
-    },
-    {
       "strike": 745,
-      "reversal_prob": 55,
+      "reversal_prob": 57,
       "side": "resistance",
       "tags": [
         "Call Wall",
-        "GEX $676M",
-        "OI 46k",
-        "Charm"
+        "GEX 675M",
+        "Charm -59k",
+        "Vanna 1679"
       ],
-      "why": "Second call wall with $676M GEX +$340M intraday and massive charm drag (-57k building); high-conviction ceiling if 740 yields.",
-      "outcome": "untouched",
-      "touched": false
-    },
-    {
-      "strike": 750,
-      "reversal_prob": 52,
-      "side": "resistance",
-      "tags": [
-        "Call Wall",
-        "GEX $588M",
-        "OI 73k",
-        "Charm"
-      ],
-      "why": "Third call wall; 73k call OI + extraordinary charm concentration (-112k, +6.5k intraday) — most-structured stop above 745.",
+      "why": "Named call wall with the board's largest charm reading (-59k) and massive vanna (+1,679) — rising IV forces dealers to mechanically sell this strike harder than any other above spot, making it the top fade on any 740 break.",
       "outcome": "untouched",
       "touched": false
     },
     {
       "strike": 743,
-      "reversal_prob": 47,
+      "reversal_prob": 48,
       "side": "resistance",
       "tags": [
-        "GEX $481M",
+        "GEX 480M",
+        "Charm -20k",
         "OI 20k",
-        "Charm",
-        "Call Wall Zone"
+        "Vanna 506"
       ],
-      "why": "GEX surging +$253M nestled between the 740 and 745 walls; secondary ceiling if 740 breaks on momentum — don't let a breach run unchecked past here.",
+      "why": "First GEX wall above 740 ($480M and building fast, d_gex +252M) — not a named wall but the immediate mechanical stop before price targets 745 on a breakout.",
       "outcome": "untouched",
       "touched": false
     },
     {
-      "strike": 728,
-      "reversal_prob": 42,
-      "side": "support",
+      "strike": 750,
+      "reversal_prob": 40,
+      "side": "resistance",
       "tags": [
-        "Put Wall",
-        "GEX -148M",
-        "OI 29k",
-        "Charm"
+        "Call Wall",
+        "GEX 588M",
+        "Charm -114k",
+        "Vanna 3123"
       ],
-      "why": "Named put wall with 29k put OI and GEX re-building toward less-negative; cleaner structure than 730 for a support limit entry.",
+      "why": "Extreme charm (-114k) and board-largest vanna (+3,123) make this the dominant backstop call wall; requires ~10-pt rally to reach so it's the far target only if 745 breaks.",
       "outcome": "untouched",
       "touched": false
     },
     {
       "strike": 730,
-      "reversal_prob": 40,
+      "reversal_prob": 37,
       "side": "support",
       "tags": [
-        "0DTE Put Wall",
         "OI 100k",
-        "Charm"
+        "GEX 51M",
+        "Charm +18k",
+        "Vanna -239"
       ],
-      "why": "Enormous OI mass (56k+44k) with 0DTE put wall at 731; GEX bleeding hard (-96M) so a grind-through is plausible — reduce from 48%, raw positioning gravity still sizable.",
+      "why": "Massive combined OI (~100k) with positive charm providing mechanical dealer buying — primary downside magnet if zero-gamma at 737.5 cracks; 735 has no support structure left after today's break.",
       "outcome": "untouched",
       "touched": false
     },
     {
-      "strike": 755,
-      "reversal_prob": 40,
-      "side": "resistance",
-      "tags": [
-        "Call Wall",
-        "GEX $189M",
-        "OI 42k",
-        "Charm"
-      ],
-      "why": "Outer call wall; 42k call OI and massive charm drain (-61k, +2.5k intraday); catches any extension beyond 750.",
-      "outcome": "untouched",
-      "touched": false
-    },
-    {
-      "strike": 735,
-      "reversal_prob": 36,
+      "strike": 737.5,
+      "reversal_prob": 32,
       "side": "support",
       "tags": [
-        "GEX $481M",
-        "OI 80k",
-        "Charm"
+        "Zero Gamma",
+        "Vol Trigger",
+        "Regime Flip"
       ],
-      "why": "Large OI (57k+24k) with $481M GEX but bleeding -$253M intraday; weakening floor — secondary support only, below-spot backstop if price slides.",
-      "outcome": "none",
-      "touched": false
+      "why": "Zero Gamma / Vol Trigger confluence — below here GEX pinning weakens and selling can accelerate; already reversed once today as resistance so a re-test as support is reduced-conviction.",
+      "outcome": "reversed",
+      "touched": true,
+      "touchedAt": "2026-06-18T09:30:00",
+      "overshoot": 0.14,
+      "clean": true
     }
   ]
 }

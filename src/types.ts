@@ -123,6 +123,8 @@ export interface Board {
   scored_at?: number;
   spot: number;
   regime: string;
+  /** One-line institutional read: where price is headed next + the level to fade it at. */
+  read?: string;
   levels: ScoredLevel[];
   /** Current IV regime, surfaced for the dashboard hero. */
   iv?: { current: number; direction: string };
