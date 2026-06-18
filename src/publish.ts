@@ -15,16 +15,19 @@ import { config } from "./config.js";
 import { buildDashboard, writeDashboard, type DashboardData } from "./dashboard.js";
 import type { Board, DetectedLevel } from "./types.js";
 
-const NETLIFY_BIN = process.env.NETLIFY_BIN?.trim() || (process.platform === "win32" ? "netlify.cmd" : "netlify");
+const NETLIFY_BIN = process.env.NETLIFY_BIN?.trim() || "netlify";
 
 /** Deploy web/ as pre-built static files (no build step → no Netlify build minutes). */
 function netlifyDeploy(): Promise<void> {
   const siteId = process.env.NETLIFY_SITE_ID?.trim();
-  const args = ["deploy", "--prod", "--dir", path.join(config.paths.root, "web")];
-  if (siteId) args.push("--site", siteId);
+  // Run via a shell: on Windows the CLI is netlify.cmd, which Node can't spawn
+  // directly (EINVAL) — shell:true resolves it through PATHEXT. Quote the dir for spaces.
+  const cmd = [NETLIFY_BIN, "deploy", "--prod", "--dir", `"${path.join(config.paths.root, "web")}"`]
+    .concat(siteId ? ["--site", siteId] : [])
+    .join(" ");
 
   return new Promise((resolve, reject) => {
-    const child = spawn(NETLIFY_BIN, args, { stdio: ["ignore", "pipe", "pipe"], env: process.env });
+    const child = spawn(cmd, { stdio: ["ignore", "pipe", "pipe"], env: process.env, shell: true });
     let err = "";
     child.stdout.on("data", (d) => process.stdout.write(d));
     child.stderr.on("data", (d) => (err += d));
