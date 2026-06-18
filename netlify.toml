@@ -1,0 +1,11 @@
+# Hybrid model: scoring runs locally on the Max plan and pushes web/ here.
+# No build step — web/ is already static, so deploys cost zero build minutes.
+[build]
+  publish = "web"
+  command = ""
+
+# The board JSON must never be cached by the CDN, or the phone shows a stale board.
+[[headers]]
+  for = "/dashboard.json"
+  [headers.values]
+    Cache-Control = "no-store, max-age=0"

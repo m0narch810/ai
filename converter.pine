@@ -1,0 +1,280 @@
+//@version=5
+//@envyisntfake, @depthofmarkets
+//xhengo is a fat chud
+//
+indicator("[uxo, @envyisntfake] accurate strike -> futures conversion", overlay = true, max_lines_count = 500, max_boxes_count = 500, max_labels_count = 500)
+
+// --- 1. INPUTS ---
+grp_sym = "Asset Selection (Best used for everything but YM)"
+preset_select = input.string("Manual Selection", "Asset Preset", options=[
+  "Manual Selection", "ES / MES -> SPX (INDEX)", "ES / MES -> SPY (ETF)", 
+  "NQ / MNQ -> NDX (INDEX)", "NQ / MNQ -> QQQ (ETF)", "GC / MGC -> GLD (ETF)", 
+  "SI / SIL -> SLV (ETF)", "YM / MYM -> RUT (INDEX)", "YM / MYM -> IWM (ETF)"
+  ], group=grp_sym, tooltip="Choose a pre-configured ETF/Index to Futures pairing, or select 'Manual Selection' to define your own tickers below.")
+
+sym_etf_manual = input.symbol("AMEX:SPY", "ETF / Index Symbol (Manual)", group=grp_sym, tooltip="Only active if 'Manual Selection' is chosen above. Enter the cash/ETF ticker here.")
+sym_fut_manual = input.symbol("CME_MINI:ES1!", "Futures Symbol (Manual)", group=grp_sym, tooltip="Only active if 'Manual Selection' is chosen above. Enter the Futures ticker here.")
+
+grp_calc = "Conversion Engine (Levels are most accurate on low timeframes like the 1 and 5 minute due to how levels are smoothed)"
+input_smoothing = input.int(100, "Level Smoothing", minval=1, maxval=600, group=grp_calc, tooltip="Averages the price ratio over this many bars. Higher values prevent the levels from jumping around erratically during micro-volatility.")
+decimals = input.int(2, "Output Decimals", minval=0, maxval=10, group=grp_calc, tooltip="Number of decimal places to display on the chart labels.")
+tick_size = input.float(0, "Tick Size Rounding", minval=0, group=grp_calc, tooltip="Forces the converted futures level to round to the nearest valid tick size (e.g., 0.25 for ES). Leave at 0 for exact math.")
+
+// --- STRIKE GENERATION INPUTS ---
+grp_strike_mode = "Strike Generation Mode"
+strike_input_mode = input.string("Auto Strikes around Price", "Strike Input Mode", options=["Batch Text", "Auto Strikes around Price"], group=grp_strike_mode, tooltip="Choose 'Batch Text' to paste custom strikes, or 'Auto' to dynamically generate a grid of strikes around the current price.")
+auto_strike_count = input.int(10, "Auto Strikes Count (+/-)", minval=1, group=grp_strike_mode, tooltip="If using Auto Mode, this sets how many strikes above and below the current price to display on the chart.")
+auto_interval_type = input.string("Auto (From Preset)", "Auto Strike Interval", options=["Auto (From Preset)", "Manual Override"], group=grp_strike_mode, tooltip="Auto uses standard increments (SPX=5, SPY=1, NDX=10). Choose Manual to define your own gap between generated strikes.")
+manual_strike_interval = input.float(1.0, "Manual Strike Interval (Points)", group=grp_strike_mode, tooltip="If 'Manual Override' is selected above, enter the point distance between your auto-generated strikes.")
+
+grp_batch = "Batch Processing & Style"
+show_table = input.bool(false, "Show Conversion Table", group=grp_batch, tooltip="Displays a small table on the chart mapping your input strikes to their converted Futures targets.")
+batch_str = input.text_area('680 "Call Wall"\n683\n685 "Pivot"\n690 "Put Wall"', "Batch Strikes", group=grp_batch, tooltip="If using 'Batch Text' mode, enter one strike per line. You can optionally add a label in quotes next to it.")
+extension_mode = input.string("Mitigated (Stop at Price)", "Extension Logic", options=["Mitigated (Stop at Price)", "Extend Full Left"], group=grp_batch, tooltip="'Mitigated' stops drawing the line to the left once historical price has touched it, keeping your chart clean. 'Extend Full Left' draws it endlessly.")
+
+style_mode = input.string("Line", "Draw Style", options=["Line", "Box"], group=grp_batch, tooltip="Choose whether to draw simple horizontal lines or shaded zones (Boxes) for your levels.")
+box_height = input.float(2.0, "Box Height (+/- Points)", minval=0, group=grp_batch, tooltip="Only used if 'Box' style is selected. Adds +/- this amount of points to the center level to create a zone.")
+
+line_color = input.color(color.blue, "Line / Box Color", group=grp_batch, tooltip="Sets the primary color for your lines or boxes.")
+line_style_inp = input.string("Solid", "Line/Border Style", options=["Solid", "Dashed", "Dotted"], group=grp_batch, tooltip="Changes the pattern of the line or box border.")
+line_width = input.int(1, "Line/Border Width", minval=0, group=grp_batch, tooltip="Adjusts the thickness of the drawn lines or box borders.")
+
+label_text_color = input.color(color.blue, "Label Text Color", group=grp_batch, tooltip="Sets the text color for the level labels on the right side of the chart.")
+label_offset = input.int(15, "Label Offset (Bars)", minval=0, group=grp_batch, tooltip="Pushes the text labels further to the right of the current candle to prevent overlapping with price action.")
+
+grp_mon = "Live Price Monitor"
+show_mon1 = input.bool(true, "Show Monitor Symbol 1", group=grp_mon, tooltip="Toggles the display of the first live price in the on-chart monitor.")
+show_mon2 = input.bool(true, "Show Monitor Symbol 2", group=grp_mon, tooltip="Toggles the display of the second live price in the on-chart monitor.")
+mon_sym1 = input.symbol("AMEX:SPY", "Monitor Symbol 1", group=grp_mon, tooltip="Ticker symbol for the first item in the live price monitor.")
+mon_sym2 = input.symbol("SP:SPX", "Monitor Symbol 2", group=grp_mon, tooltip="Ticker symbol for the second item in the live price monitor.")
+mon_color = input.color(color.black, "Monitor Text Color", group=grp_mon, tooltip="Sets the text color for the live price monitor.")
+mon_offset = input.int(5, "Monitor Offset (Bars)", minval=0, group=grp_mon, tooltip="Adjusts how far right the live price monitor sits from the most recent candle.")
+
+grp_alert = "Alert Settings"
+enable_alerts = input.bool(true, "Enable Alerts on Touch", group=grp_alert, tooltip="Fires an alert when the price enters a box or crosses a generated line.")
+alert_freq_inp = input.string("Once Per Bar", "Alert Frequency", options=["Once Per Bar", "Once Per Bar Close"], group=grp_alert)
+
+// --- 2. CALCULATIONS ---
+var string sym_etf = na
+
+if preset_select == "Manual Selection"
+    sym_etf := sym_etf_manual
+else if preset_select == "ES / MES -> SPX (INDEX)"
+    sym_etf := "SP:SPX"
+else if preset_select == "ES / MES -> SPY (ETF)"
+    sym_etf := "AMEX:SPY"
+else if preset_select == "NQ / MNQ -> NDX (INDEX)"
+    sym_etf := "NASDAQ:NDX"
+else if preset_select == "NQ / MNQ -> QQQ (ETF)"
+    sym_etf := "NASDAQ:QQQ"
+else if preset_select == "GC / MGC -> GLD (ETF)"
+    sym_etf := "AMEX:GLD"
+else if preset_select == "SI / SIL -> SLV (ETF)"
+    sym_etf := "AMEX:SLV"
+else if preset_select == "YM / MYM -> RUT (INDEX)"
+    sym_etf := "TVC:RUT"
+else if preset_select == "YM / MYM -> IWM (ETF)"
+    sym_etf := "AMEX:IWM"
+
+// Force the script to pull pre/post-market data for the ETF
+sym_etf_ext = ticker.modify(sym_etf, session.extended)
+
+ETFClose = request.security(sym_etf_ext, timeframe.period, close, barmerge.gaps_on)
+CurClose = close 
+Diff     = CurClose / ETFClose
+smoothed_diff = ta.sma(Diff, input_smoothing)
+
+// Live Monitor Data (Extended Hours)
+p_mon1 = request.security(ticker.modify(mon_sym1, session.extended), "", close)
+p_mon2 = request.security(ticker.modify(mon_sym2, session.extended), "", close)
+
+// Force history buffer
+max_bars_back(time, 5000)
+max_bars_back(high, 5000)
+max_bars_back(low, 5000)
+
+// Helper Functions
+round_tick(val, tick) => tick == 0 ? val : math.round(val / tick) * tick
+get_ticker_name(sym) => 
+    parts = str.split(sym, ":"), array.size(parts) > 1 ? array.get(parts, 1) : sym
+
+get_auto_interval(preset) =>
+    float interval = 1.0 // Default for ETFs
+    if preset == "ES / MES -> SPX (INDEX)"
+        interval := 5.0
+    else if preset == "NQ / MNQ -> NDX (INDEX)"
+        interval := 10.0
+    else if preset == "YM / MYM -> RUT (INDEX)"
+        interval := 5.0
+    interval
+
+// --- 3. STRIKE AGGREGATION (Runs Every Bar for Alerts) ---
+// Parse batch strikes ONCE for performance, instead of every tick
+var float[] batch_strikes = array.new_float()
+var string[] batch_comments = array.new_string()
+var bool init_batch = false
+
+if not init_batch and strike_input_mode == "Batch Text"
+    string[] items = str.split(batch_str, "\n")
+    if array.size(items) > 0
+        for i = 0 to array.size(items) - 1
+            string entry = str.trim(array.get(items, i))
+            if entry != ""
+                string[] parts = str.split(entry, "\"")
+                float val = str.tonumber(str.trim(array.get(parts, 0)))
+                string cmt = array.size(parts) > 1 ? str.trim(array.get(parts, 1)) : ""
+                if not na(val)
+                    array.push(batch_strikes, val)
+                    array.push(batch_comments, cmt)
+    init_batch := true
+
+float[] gen_strikes = array.new_float()
+string[] gen_comments = array.new_string()
+
+if strike_input_mode == "Batch Text"
+    gen_strikes := array.copy(batch_strikes)
+    gen_comments := array.copy(batch_comments)
+else if strike_input_mode == "Auto Strikes around Price" and not na(smoothed_diff)
+    float active_interval = auto_interval_type == "Auto (From Preset)" ? get_auto_interval(preset_select) : manual_strike_interval
+    
+    // Calculate the implied ETF price from the futures price so strikes generate even when the ETF market is closed
+    float implied_etf_price = CurClose / smoothed_diff
+    float center_strike = math.round(implied_etf_price / active_interval) * active_interval
+    
+    for i = -auto_strike_count to auto_strike_count
+        array.push(gen_strikes, center_strike + (i * active_interval))
+        array.push(gen_comments, i == 0 ? "ATM" : "")
+
+// --- 4. ALERT EVALUATION ---
+if enable_alerts and array.size(gen_strikes) > 0 and not na(smoothed_diff)
+    string freq_val = alert_freq_inp == "Once Per Bar" ? alert.freq_once_per_bar : alert.freq_once_per_bar_close
+    
+    for i = 0 to array.size(gen_strikes) - 1
+        float val_in = array.get(gen_strikes, i)
+        float val_out = round_tick(val_in * smoothed_diff, tick_size)
+        string comment = array.get(gen_comments, i)
+        
+        float box_top = val_out + box_height
+        float box_btm = val_out - box_height
+
+        if style_mode == "Line"
+            if high >= val_out and low <= val_out
+                string msg = "Price touched level: " + str.tostring(val_out, "#.##") + (comment != "" ? " (" + comment + ")" : "")
+                alert(msg, freq_val)
+        else
+            if high >= box_btm and low <= box_top
+                string msg = "Price entered box zone: " + str.tostring(val_out, "#.##") + (comment != "" ? " (" + comment + ")" : "")
+                alert(msg, freq_val)
+
+// --- 5. DRAWING ENGINE (TIME-BASED) ---
+var table panel = table.new(position.top_right, 2, 30, border_width=1, frame_color=color.gray)
+var line[] level_lines = array.new_line()
+var box[] level_boxes = array.new_box() 
+var label[] level_labels = array.new_label()
+var label monitor_label = na
+
+lstyle = switch line_style_inp
+    "Solid"  => line.style_solid
+    "Dashed" => line.style_dashed
+    "Dotted" => line.style_dotted
+
+// Only execute on the last bar
+if barstate.islast
+    // Clear Old Drawings
+    table.clear(panel, 0, 0, 1, 29)
+    if not na(monitor_label)
+        label.delete(monitor_label)
+     
+    if array.size(level_lines) > 0
+        for i = 0 to array.size(level_lines) - 1
+            line.delete(array.get(level_lines, i))
+    array.clear(level_lines)
+
+    if array.size(level_boxes) > 0
+        for i = 0 to array.size(level_boxes) - 1
+            box.delete(array.get(level_boxes, i))
+    array.clear(level_boxes)
+     
+    if array.size(level_labels) > 0
+        for i = 0 to array.size(level_labels) - 1
+            label.delete(array.get(level_labels, i))
+    array.clear(level_labels)
+
+    // Draw Monitor
+    if show_mon1 or show_mon2
+        string txt_mon = ""
+        if show_mon1
+            txt_mon := get_ticker_name(mon_sym1) + ": " + str.tostring(p_mon1, "#.##")
+        if show_mon2
+            if txt_mon != ""
+                txt_mon := txt_mon + "\n"
+            txt_mon := txt_mon + get_ticker_name(mon_sym2) + ": " + str.tostring(p_mon2, "#.##")
+        
+        if txt_mon != ""
+            monitor_label := label.new(bar_index + mon_offset, close, text=txt_mon, color=color.new(color.white, 100), textcolor=mon_color, style=label.style_label_left, textalign=text.align_left, text_font_family=font.family_monospace)
+
+    // Table Header
+    if show_table
+        table.cell(panel, 0, 0, "ETF Strike", bgcolor=color.new(line_color, 90), text_size=size.small)
+        table.cell(panel, 1, 0, "Futs Target", bgcolor=color.new(line_color, 90), text_size=size.small)
+
+    // --- DRAWING STRIKES ---
+    int row_idx = 1
+    int time_offset_ms = (time - time[1]) * label_offset
+    int right_x_time = time + time_offset_ms
+
+    if array.size(gen_strikes) > 0 and not na(smoothed_diff)
+        for i = 0 to array.size(gen_strikes) - 1
+            float val_in = array.get(gen_strikes, i)
+            string comment = array.get(gen_comments, i)
+
+            float val_out = round_tick(val_in * smoothed_diff, tick_size)
+            string s_val_out = str.tostring(val_out, "#." + str.repeat("#", decimals))
+            
+            int start_time = time
+            string ext_type = extend.none 
+            string ext_type_box = extend.none
+            
+            float box_top = val_out + box_height
+            float box_btm = val_out - box_height
+
+            if extension_mode == "Extend Full Left"
+                start_time := time 
+                ext_type := extend.left 
+                ext_type_box := extend.left
+            else 
+                ext_type := extend.none 
+                ext_type_box := extend.none
+                
+                start_time := time[math.min(bar_index, 1000)]
+                for k = 1 to 1000
+                    if k > bar_index
+                        break
+                    
+                    bool touched = false
+                    if style_mode == "Line"
+                        if high[k] >= val_out and low[k] <= val_out
+                            touched := true
+                    else
+                        if high[k] >= box_btm and low[k] <= box_top
+                            touched := true
+                    
+                    if touched
+                        start_time := time[k]
+                        break 
+            
+            if style_mode == "Line"
+                line l = line.new(start_time, val_out, right_x_time, val_out, xloc=xloc.bar_time, color=line_color, width=line_width, style=lstyle, extend=ext_type)
+                array.push(level_lines, l)
+            else 
+                box b = box.new(start_time, box_top, right_x_time, box_btm, xloc=xloc.bar_time, border_color=line_color, border_width=line_width, border_style=lstyle, bgcolor=color.new(line_color, 85), extend=ext_type_box)
+                array.push(level_boxes, b)
+            
+            label_txt = s_val_out + " (" + str.tostring(val_in) + ")" + (comment != "" ? "\n" + comment : "")
+            label lb = label.new(right_x_time, val_out, text=label_txt, xloc=xloc.bar_time, style=label.style_label_left, color=color.new(color.white, 100), textcolor=label_text_color, size=size.small, text_font_family=font.family_monospace)
+            array.push(level_labels, lb)
+
+            if show_table and row_idx < 30 
+                table.cell(panel, 0, row_idx, str.tostring(val_in), text_halign=text.align_right, text_size=size.small)
+                table.cell(panel, 1, row_idx, s_val_out, text_halign=text.align_right, text_color=line_color, text_size=size.small)
+                row_idx += 1
