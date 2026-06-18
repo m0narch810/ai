@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#0b0c0f" />
-  <title>QQQ · Reversal Elevation</title>
+  <meta name="theme-color" content="#080a0f" />
+  <title>QQQ · Reversal Ladder</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
@@ -16,8 +16,8 @@
       <div class="brand">
         <span class="ticker">QQQ</span>
         <div class="brandtext">
-          <span class="title">Reversal Levels</span>
-          <span class="eyebrow">Altaris · options structure</span>
+          <span class="title">Reversal Ladder</span>
+          <span class="eyebrow">Altaris · dealer positioning</span>
         </div>
       </div>
       <div class="status" id="status">
@@ -26,28 +26,41 @@
       </div>
     </header>
 
+    <section class="hero">
+      <div class="spotblock">
+        <span class="lbl">Spot</span>
+        <div class="spotrow">
+          <span class="spotnum" id="heroSpot">—</span>
+          <span class="spotchg" id="heroChg"></span>
+        </div>
+        <span class="spotsrc muted" id="heroSrc"></span>
+      </div>
+      <div class="metrics" id="heroMetrics"></div>
+    </section>
+
     <div class="banner" id="banner" hidden></div>
 
-    <div class="readout" id="readout"></div>
-
-    <section class="gauge" id="gauge" aria-label="Reversal levels by price">
-      <div class="axis" id="axis"></div>
-      <div class="walls" id="walls"></div>
-      <div class="datum" id="datum" hidden>
-        <span class="datum-tag" id="datumTag"></span>
-        <span class="datum-line"></span>
+    <section class="ladder" id="ladder" aria-label="Reversal levels by price">
+      <div class="rungs" id="ceilings"></div>
+      <div class="spotrail" id="spotrail" hidden>
+        <span class="rail-line"></span>
+        <span class="rail-tag" id="railTag"></span>
+        <span class="rail-line"></span>
       </div>
+      <div class="rungs" id="floors"></div>
     </section>
+
+    <div class="empty" id="empty" hidden></div>
 
     <footer class="foot">
       <ul class="legend">
-        <li><span class="swatch sup"></span>support floor</li>
-        <li><span class="swatch res"></span>resistance ceiling</li>
+        <li><span class="swatch sup"></span>floor / support</li>
+        <li><span class="swatch res"></span>ceiling / resistance</li>
         <li><span class="swatch spot"></span>spot</li>
       </ul>
       <div class="foot-right">
         <span id="asOf" class="muted"></span>
-        <button id="refresh" type="button" aria-label="Refresh board">↻</button>
+        <button id="refresh" type="button" aria-label="Refresh">↻</button>
       </div>
     </footer>
   </main>

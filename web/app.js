@@ -1,49 +1,50 @@
-// Reads dashboard.json and renders the reversal elevation. No framework, no build.
-// Levels are placed at their true price on a vertical scale; the gold datum line
-// marks spot. Bar length = reversal probability (relative to the strongest level).
-//
-// Two independent clocks:
-//   • the BOARD (levels + regime) is AI-scored locally and can go stale if the PC is off.
-//   • the SPOT line is fetched live from a Netlify function, so it keeps moving regardless.
-// When the board is stale we keep showing the last levels but mark them "as scored Xago".
-const POLL_MS = 60_000;          // re-read dashboard.json
-const SPOT_MS = 60_000;          // re-fetch live spot
-const STALE_MS = 30 * 60_000;    // board older than this = AI not currently updating
+// Reversal ladder — reads dashboard.json (AI-scored levels) and overlays a live spot.
+// No framework, no build. Levels are grouped into ceilings (resistance) and floors
+// (support) around a live violet spot rail. Two clocks: the board (AI, can go stale)
+// and the spot (live from a Netlify function, updates regardless of the scoring box).
+const POLL_MS = 60_000;
+const SPOT_MS = 60_000;
+const STALE_MS = 30 * 60_000;
 const SPOT_URL = "/.netlify/functions/spot";
-const PAD = 30;            // top/bottom room (px) inside the gauge for the datum tag
-const MIN_GAP = 44;        // min vertical spacing between walls before de-overlap kicks in
 
 const $ = (s) => document.querySelector(s);
 const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
-
-const fmtPrice = (n) => (typeof n === "number" ? n.toFixed(Number.isInteger(n) ? 0 : 2) : "—");
+const fmtPrice = (n) => (typeof n === "number" ? (Number.isInteger(n) ? String(n) : n.toFixed(2)) : "—");
 const fmtSpot = (n) => (typeof n === "number" ? n.toFixed(2) : "—");
+const signed = (n, d = 2) => `${n >= 0 ? "+" : "−"}${Math.abs(n).toFixed(d)}`;
 
-function ago(iso) {
-  const t = Date.parse(iso);
-  if (Number.isNaN(t)) return "";
+function agoMs(t) {
+  if (typeof t !== "number" || Number.isNaN(t)) return "";
   const s = Math.max(0, (Date.now() - t) / 1000);
   if (s < 90) return `${Math.round(s)}s ago`;
   if (s < 5400) return `${Math.round(s / 60)}m ago`;
   return `${Math.round(s / 3600)}h ago`;
 }
+/** Absolute scored time (timezone-proof); falls back to generated_at if missing. */
+const scoredAt = () => (typeof lastData?.scored_at === "number" ? lastData.scored_at : Date.parse(lastData?.generated_at ?? ""));
+const scoredAgo = () => agoMs(scoredAt());
 
-const TAG = { resistance: "ceiling", support: "floor" };
+// ---- state -------------------------------------------------------------------
+let lastData = null;
+let liveSpot = null;
+let liveSpotAt = null;
+let rungEls = []; // [{ el, level, distEl, badgeEl, fill }]
 
-// ---- shared state across the two clocks --------------------------------------
-let lastData = null;       // last dashboard.json
-let liveSpot = null;       // last live price from the spot function
-let liveSpotAt = null;     // when we fetched it
-let scaleFn = null;        // price -> y, fixed per board so the ladder doesn't reflow
-let gaugeH = 0;
-let placedWalls = [];      // [{ level, wall, markEl }] for live outcome updates
+const currentSpot = () => (typeof liveSpot === "number" ? liveSpot : lastData?.spot);
+const boardStale = () => lastData && scoredAt() < Date.now() - STALE_MS;
 
-/**
- * Live outcome from the current spot vs the level's clean/hard-stop zones — lets the board
- * flag a grind or a break between 15-min scores. "broke" once price is a full strike beyond,
- * "grind" once it's past the clean zone but not yet broken. Mirrors the detector's rule.
- */
+/** RTH (09:15–16:00 ET, Mon–Fri) = when the AI re-scores; outside it, levels are held. */
+function isRthNow() {
+  const p = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(new Date());
+  const get = (t) => p.find((x) => x.type === t)?.value;
+  const WD = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+  const wd = WD[get("weekday")] ?? 0;
+  const minutes = Number(get("hour")) * 60 + Number(get("minute"));
+  return wd >= 1 && wd <= 5 && minutes >= 555 && minutes <= 960;
+}
+
+/** Live status from current spot vs a level's clean/hard-stop zones (between scores). */
 function liveStatusFor(level) {
   if (typeof liveSpot !== "number" || !lastData) return null;
   const hard = lastData.hard_stop_pts ?? 1.0;
@@ -54,7 +55,7 @@ function liveStatusFor(level) {
   return null;
 }
 
-/** Merge the scored detector outcome with the live status into a single badge. */
+/** Detector outcome + live status → one badge. */
 function outcomeView(level) {
   const live = liveStatusFor(level);
   const o = level.outcome || "none";
@@ -62,224 +63,178 @@ function outcomeView(level) {
   if (o === "reversed") return { cls: "held", text: level.clean === false ? "held loose" : "held" };
   if (live === "grind") return { cls: "grinding", text: "grinding" };
   if (o === "pending") return level.clean === false ? { cls: "grinding", text: "grinding" } : { cls: "testing", text: "testing" };
-  return { cls: "", text: "" }; // untouched / none / resting — no badge
+  return { cls: "resting", text: "resting" };
+}
+
+// ---- building ----------------------------------------------------------------
+function buildRung(level) {
+  const row = el("div", `rung ${level.side === "resistance" ? "res" : "sup"}`);
+
+  const price = el("div", "price");
+  price.appendChild(el("span", "strike", `$${fmtPrice(level.strike)}`));
+  const distEl = el("span", "dist");
+  price.appendChild(distEl);
+  row.appendChild(price);
+
+  const body = el("div", "body");
+  const tags = Array.isArray(level.tags) ? level.tags.slice(0, 4) : [];
+  if (tags.length) {
+    const chips = el("div", "chips");
+    for (const t of tags) chips.appendChild(el("span", "chip", t));
+    body.appendChild(chips);
+  }
+  if (level.why) body.appendChild(el("div", "why", level.why));
+  row.appendChild(body);
+
+  const meter = el("div", "meter");
+  const tier = level.reversal_prob >= 60 ? "hi" : level.reversal_prob >= 45 ? "mid" : "lo";
+  const prob = el("div", `prob ${tier}`);
+  prob.appendChild(el("span", "pnum", String(level.reversal_prob)));
+  prob.appendChild(el("span", "ppct", "%"));
+  meter.appendChild(prob);
+  const heat = el("div", "heat");
+  const fill = el("span");
+  heat.appendChild(fill);
+  meter.appendChild(heat);
+  const badgeEl = el("span", "badge");
+  meter.appendChild(badgeEl);
+  row.appendChild(meter);
+
+  row.addEventListener("click", () => row.classList.toggle("open"));
+  return { el: row, level, distEl, badgeEl, fill };
 }
 
 function applyOutcome(entry) {
   const v = outcomeView(entry.level);
-  entry.wall.classList.toggle("broke", v.cls === "broke");
-  entry.wall.classList.toggle("testing", v.cls === "testing");
-  entry.wall.classList.toggle("grinding", v.cls === "grinding");
-  entry.markEl.className = `mark ${v.cls}`.trim();
-  entry.markEl.textContent = v.text;
-  entry.markEl.hidden = !v.text;
+  entry.el.classList.toggle("broke", v.cls === "broke");
+  entry.el.classList.toggle("grinding", v.cls === "grinding");
+  entry.el.classList.toggle("testing", v.cls === "testing");
+  entry.badgeEl.className = `badge ${v.cls}`;
+  entry.badgeEl.textContent = v.text;
 }
 
-const refreshOutcomes = () => placedWalls.forEach(applyOutcome);
-
-/** Spot to draw the datum at: live if we have it, else the board's scored spot. */
-const currentSpot = () => (typeof liveSpot === "number" ? liveSpot : lastData?.spot);
-const boardStale = () => lastData && Date.parse(lastData.as_of) < Date.now() - STALE_MS;
-
-/** RTH (09:15–16:00 ET, Mon–Fri) = when the AI re-scores. Outside it, levels are held. */
-function isRthNow() {
-  const p = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(new Date());
-  const get = (t) => p.find((x) => x.type === t)?.value;
-  const WD = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
-  const wd = WD[get("weekday")] ?? 0;
-  const minutes = Number(get("hour")) * 60 + Number(get("minute"));
-  return wd >= 1 && wd <= 5 && minutes >= 555 && minutes <= 960;
+function paintDist(entry, spot) {
+  if (typeof spot !== "number") { entry.distEl.textContent = ""; return; }
+  const d = entry.level.strike - spot;
+  const pct = spot ? (d / spot) * 100 : 0;
+  entry.distEl.textContent = `${signed(d, 1)} · ${signed(pct, 1)}%`;
 }
 
-function gaugeHeight(n) {
-  const byCount = n * 76 + 2 * PAD;
-  const byScreen = clamp(window.innerHeight * 0.68, 460, 760);
-  return Math.round(clamp(byCount, 360, Math.max(byScreen, byCount)));
-}
-
-/** Map prices to y within [PAD, H-PAD]; high price at top. Anchored on the board spot. */
-function makeScale(levels, spot, H) {
-  const prices = [...levels.map((l) => l.strike), spot];
-  let lo = Math.min(...prices), hi = Math.max(...prices);
-  const pad = Math.max((hi - lo) * 0.08, spot * 0.0015, 0.5);
-  lo -= pad; hi += pad;
-  const usable = H - 2 * PAD;
-  return (price) => PAD + ((hi - price) / (hi - lo)) * usable;
-}
-
-/** Keep at true price, but nudge crowded walls apart so bars never overlap. */
-function deOverlap(items) {
-  const sorted = [...items].sort((a, b) => a.y - b.y); // top→bottom
-  for (let i = 1; i < sorted.length; i++) {
-    if (sorted[i].y - sorted[i - 1].y < MIN_GAP) sorted[i].y = sorted[i - 1].y + MIN_GAP;
-  }
-  return items;
-}
-
-function buildWall(level, x) {
-  const wall = el("div", `wall ${level.side === "resistance" ? "res" : "sup"}`);
-  wall.style.top = `${x.y}px`;
-
-  wall.appendChild(el("span", "stem"));
-
-  const bar = el("div", "bar");
-  const track = el("div", "track");
-  track.style.setProperty("--p", "0%");
-  track.dataset.p = `${clamp(level.reversal_prob, 0, 100)}%`;
-  bar.appendChild(track);
-  bar.appendChild(el("span", "strike", `$${fmtPrice(level.strike)}`));
-  bar.appendChild(el("span", "tag", TAG[level.side] || level.side));
-  bar.appendChild(el("span", "spacer"));
-  const markEl = el("span", "mark");
-  markEl.hidden = true;
-  bar.appendChild(markEl);
-  const prob = el("span", `prob ${level.reversal_prob < 45 ? "lo" : ""}`.trim(), `${level.reversal_prob}%`);
-  bar.appendChild(prob);
-  wall.appendChild(bar);
-
-  const why = el("div", "why", level.why || "");
-  wall.appendChild(why);
-
-  wall.addEventListener("click", () => wall.classList.toggle("open"));
-  return { wall, track, markEl };
-}
-
-function renderReadout(data) {
-  const r = $("#readout");
-  r.replaceChildren();
-  const regimeCls = data.regime === "positive" ? "pos" : data.regime === "negative" ? "neg" : "";
-  const cells = [
-    ["spot", `$${fmtSpot(currentSpot())}`, "", null, "spotVal"],
-    ["regime", data.regime || "—", regimeCls, data.regime === "negative" ? "breaks favored" : data.regime === "positive" ? "pins favored" : "", null],
-    ["session", data.session || "—", "", data.session === "Asia" ? "NQ-derived" : null, null],
-  ];
-  for (const [k, v, cls, note, id] of cells) {
-    const cell = el("div", "cell");
-    cell.appendChild(el("div", "k", k));
-    const val = el("div", `v ${cls}`.trim(), v);
-    if (id) val.id = id;
-    if (note) val.appendChild(el("small", null, note));
-    cell.appendChild(val);
-    r.appendChild(cell);
-  }
-}
-
-/** Position the datum line + spot readout from the *current* (live if available) spot. */
-function paintSpot() {
-  if (!lastData || !scaleFn) return;
+/** Everything that depends on the (live) spot — hero, rail, per-rung distance + badge. */
+function repaintLive() {
+  if (!lastData) return;
   const spot = currentSpot();
-  const datum = $("#datum");
-
-  if (typeof spot !== "number") { datum.hidden = true; return; }
-  datum.hidden = false;
-  datum.style.top = `${clamp(scaleFn(spot), PAD, gaugeH - PAD)}px`;
-
-  const tag = $("#datumTag");
-  tag.replaceChildren();
   const live = typeof liveSpot === "number";
-  tag.appendChild(el("small", null, live ? "LIVE" : "SPOT"));
-  tag.append(`$${fmtSpot(spot)}`);
-  tag.classList.toggle("is-live", live);
 
-  const spotVal = $("#spotVal");
-  if (spotVal) {
-    spotVal.childNodes[0] && (spotVal.childNodes[0].nodeValue = `$${fmtSpot(spot)}`);
-    const note = spotVal.querySelector("small") || spotVal.appendChild(el("small"));
-    note.textContent = live ? `live · ${ago(liveSpotAt)}` : "";
-    note.className = live ? "live-note" : "";
-  }
+  $("#heroSpot").textContent = fmtSpot(spot);
+  const chg = $("#heroChg");
+  if (typeof spot === "number" && typeof lastData.spot === "number") {
+    const d = spot - lastData.spot;
+    const pct = lastData.spot ? (d / lastData.spot) * 100 : 0;
+    chg.className = `spotchg ${d > 0.005 ? "up" : d < -0.005 ? "down" : "flat"}`;
+    chg.textContent = `${signed(d)} (${signed(pct)}%)`;
+  } else chg.textContent = "";
 
-  refreshOutcomes(); // live spot may have just turned a level into a grind/break
+  $("#heroSrc").textContent = [live ? "live" : "last print", lastData.session, lastData.session === "Asia" ? "NQ-equiv" : null]
+    .filter(Boolean).join(" · ");
+
+  const rail = $("#spotrail");
+  if (typeof spot === "number") {
+    rail.hidden = false;
+    const rt = $("#railTag");
+    rt.replaceChildren(el("small", null, live ? "LIVE" : "SPOT"));
+    rt.append(fmtSpot(spot));
+  } else rail.hidden = true;
+
+  for (const e of rungEls) { paintDist(e, spot); applyOutcome(e); }
 }
 
-/**
- * Stale banner. Two reasons a board can be old:
- *  • off-RTH (expected): levels are deliberately held from the last RTH score — not alarming.
- *  • during RTH (unexpected): the scorer isn't updating — likely the box is offline.
- */
+function renderHeroMetrics(data) {
+  const m = $("#heroMetrics");
+  m.replaceChildren();
+  const cells = [];
+  const reg = data.regime || "—";
+  cells.push({ k: "Gamma", v: reg === "positive" ? "Positive" : reg === "negative" ? "Negative" : reg, cls: reg === "positive" ? "pos" : reg === "negative" ? "neg" : "" });
+  if (data.iv && typeof data.iv.current === "number") {
+    const dir = (data.iv.direction || "").toUpperCase();
+    const arrow = dir.startsWith("RIS") ? "▲" : dir.startsWith("FALL") ? "▼" : "→";
+    cells.push({ k: "IV", v: `${data.iv.current.toFixed(1)} ${arrow}`, cls: dir.startsWith("RIS") ? "warn" : "" });
+  }
+  if (typeof data.expected_move === "number") cells.push({ k: "Exp move", v: `±${data.expected_move.toFixed(1)}`, cls: "" });
+  cells.push({ k: "Session", v: data.session || "—", cls: "" });
+  for (const c of cells) {
+    const cell = el("div", "metric");
+    cell.appendChild(el("span", "mk", c.k));
+    cell.appendChild(el("span", `mv ${c.cls}`.trim(), c.v));
+    m.appendChild(cell);
+  }
+}
+
 function renderBanner(data) {
   const b = $("#banner");
   if (!boardStale()) { b.hidden = true; return; }
   b.hidden = false;
   const text = isRthNow()
-    ? `Levels last scored ${ago(data.as_of)} — AI scoring paused (box offline). Spot & reversals are live.`
-    : `Outside market hours — holding levels from the last RTH session (scored ${ago(data.as_of)}). Spot & reversals are live.`;
+    ? `Levels last scored ${scoredAgo()} — AI scoring paused (box offline). Spot & reversals are live.`
+    : `Outside market hours — holding levels from the last RTH session (scored ${scoredAgo()}). Spot & reversals are live.`;
   b.replaceChildren(el("span", "banner-dot"), el("span", "banner-text", text));
 }
 
 function render(data) {
   renderBanner(data);
-
   const stale = boardStale();
-  const offline = stale && isRthNow(); // old board DURING RTH = something's wrong
+  const offline = stale && isRthNow();
   $("#statusDot").className = `status-dot ${stale ? "stale" : "live"}`;
-  $("#statusText").textContent = !stale ? "live" : isRthNow() ? `levels ${ago(data.as_of)}` : "held · off-rth";
+  $("#statusText").textContent = !stale ? "live" : isRthNow() ? `scored ${scoredAgo()}` : "held · off-rth";
 
-  renderReadout(data);
+  renderHeroMetrics(data);
 
-  const gauge = $("#gauge");
-  const walls = $("#walls");
   const levels = Array.isArray(data.levels) ? data.levels : [];
-  walls.replaceChildren();
-  walls.classList.toggle("prev", offline); // dim only when unexpectedly stale; held overnight reads normally
-  $("#datum").hidden = true;
-  scaleFn = null;
-  placedWalls = [];
+  const ceil = $("#ceilings"), floor = $("#floors");
+  ceil.replaceChildren(); floor.replaceChildren(); rungEls = [];
+  $("#ladder").classList.toggle("prev", offline);
 
   if (!levels.length) {
-    gauge.style.height = "auto";
-    const empty = el("div", "empty");
-    empty.appendChild(el("b", null, "No board yet."));
-    empty.appendChild(document.createElement("br"));
+    $("#ladder").hidden = true; $("#spotrail").hidden = true;
+    const empty = $("#empty");
+    empty.hidden = false;
+    empty.replaceChildren(el("b", null, "No board yet."), document.createElement("br"));
     empty.append("Run a capture to map the levels.");
-    walls.appendChild(empty);
     $("#asOf").textContent = "";
     return;
   }
+  $("#ladder").hidden = false; $("#empty").hidden = true;
 
-  const H = gaugeHeight(levels.length);
-  gauge.style.height = `${H}px`;
-  walls.style.height = `${H}px`;
-  gaugeH = H;
+  const res = levels.filter((l) => l.side === "resistance").sort((a, b) => b.strike - a.strike);
+  const sup = levels.filter((l) => l.side === "support").sort((a, b) => b.strike - a.strike);
+  for (const l of res) { const e = buildRung(l); ceil.appendChild(e.el); rungEls.push(e); }
+  for (const l of sup) { const e = buildRung(l); floor.appendChild(e.el); rungEls.push(e); }
 
-  scaleFn = makeScale(levels, data.spot, H);
-  const placed = deOverlap(levels.map((l) => ({ level: l, y: scaleFn(l.strike) })));
+  requestAnimationFrame(() => rungEls.forEach((e, i) =>
+    setTimeout(() => (e.fill.style.width = `${clamp(e.level.reversal_prob, 0, 100)}%`), 40 + i * 55)));
 
-  // Stagger the bar-draw outward from spot: nearest levels animate first.
-  const order = [...placed].sort((a, b) => Math.abs(a.level.strike - data.spot) - Math.abs(b.level.strike - data.spot));
-  const tracks = [];
-  for (const p of placed) {
-    const { wall, track, markEl } = buildWall(p.level, p);
-    walls.appendChild(wall);
-    placedWalls.push({ level: p.level, wall, markEl });
-    tracks.push({ track, rank: order.indexOf(p) });
-  }
-  refreshOutcomes(); // badges from detector outcome + live status
-  requestAnimationFrame(() => tracks.forEach(({ track, rank }) =>
-    setTimeout(() => (track.style.setProperty("--p", track.dataset.p)), 60 + rank * 70)));
-
-  $("#datumTag").replaceChildren();
-  paintSpot(); // draws the (live or scored) spot line into the fresh ladder
-
-  $("#asOf").textContent = `levels scored ${ago(data.as_of)}`;
+  repaintLive();
+  $("#asOf").textContent = `scored ${scoredAgo()}`;
 }
 
+// ---- data --------------------------------------------------------------------
 async function load() {
   try {
     const res = await fetch(`dashboard.json?t=${Date.now()}`, { cache: "no-store" });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     lastData = await res.json();
     render(lastData);
-  } catch (err) {
+  } catch {
     $("#statusText").textContent = "no data";
     $("#statusDot").className = "status-dot";
     $("#banner").hidden = true;
-    $("#walls").replaceChildren(Object.assign(el("div", "empty"), { textContent: "Waiting for dashboard.json — run a capture." }));
-    $("#datum").hidden = true;
+    $("#ladder").hidden = true;
+    const empty = $("#empty");
+    empty.hidden = false;
+    empty.textContent = "Waiting for dashboard.json — run a capture.";
   }
 }
 
-/** Live spot — independent of the board; degrades silently (e.g. on LAN, no function). */
 async function loadSpot() {
   try {
     const res = await fetch(`${SPOT_URL}?t=${Date.now()}`, { cache: "no-store" });
@@ -288,16 +243,13 @@ async function loadSpot() {
     if (typeof j.spot === "number") {
       liveSpot = j.spot;
       liveSpotAt = j.at || new Date().toISOString();
-      paintSpot();
+      repaintLive();
     }
-  } catch {
-    /* no live spot here (offline / LAN) — datum falls back to the scored spot */
-  }
+  } catch { /* no live spot (offline / LAN) — fall back to the scored spot */ }
 }
 
 $("#refresh").addEventListener("click", () => { load(); loadSpot(); });
 document.addEventListener("visibilitychange", () => { if (!document.hidden) { load(); loadSpot(); } });
-window.addEventListener("resize", () => { if (lastData) render(lastData); });
 
 load();
 loadSpot();

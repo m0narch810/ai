@@ -112,14 +112,22 @@ export interface ScoredLevel {
   side: Side;
   /** One short line of the confluences driving the score. */
   why: string;
+  /** 2-4 terse confluence tags for the dashboard chips (e.g. "Call Wall", "GEX +1.7B"). */
+  tags?: string[];
 }
 
 /** The board the AI returns each tick. */
 export interface Board {
   as_of: string;
+  /** Absolute epoch ms the levels were scored — timezone-proof staleness (as_of is ET wall-clock). */
+  scored_at?: number;
   spot: number;
   regime: string;
   levels: ScoredLevel[];
+  /** Current IV regime, surfaced for the dashboard hero. */
+  iv?: { current: number; direction: string };
+  /** Expected daily move (points), surfaced for the dashboard hero. */
+  expected_move?: number;
 }
 
 /** Detector outcome for a level over the day's spot path. */

@@ -39,10 +39,11 @@ Definitions and rules — follow exactly:
   - A clean "reversed" already played out — don't re-rank it as a fresh entry for the same touch.
 - A "session" block tells you whether it's the US session or the Asia overnight session. In Asia: the OI/greeks are STATIC prior-close positioning (US options closed) and spot is NQ-futures-derived — be more conservative, lean on the largest walls, factor thinner liquidity, and say so in your reasoning. Read its "note" and adjust. "spot" is the effective live price; "altaris_spot" may be stale overnight.
 - Focus on actionable levels near spot. Output at most ~8 levels. Be selective.
+- For each level also output "tags": 2-4 SHORT confluence chips naming the structural reasons it's a level — e.g. "Call Wall", "Put Wall", "0DTE", "Major Wall", "Max Pain", "Zero Gamma", "Vol Trigger", "GEX +1.7B", "OI 107k", "Charm", "Vanna". Terse (chip-sized); the "why" remains the one-line narrative.
 
 OUTPUT FORMAT — CRITICAL:
 Respond with ONLY a single raw JSON object, no prose, no markdown fences. Shape:
-{"as_of":"<string>","spot":<number>,"regime":"<string>","levels":[{"strike":<number>,"reversal_prob":<0-100 integer>,"side":"support"|"resistance","why":"<one short line>"}]}`;
+{"as_of":"<string>","spot":<number>,"regime":"<string>","levels":[{"strike":<number>,"reversal_prob":<0-100 integer>,"side":"support"|"resistance","tags":["<chip>","<chip>"],"why":"<one short line>"}]}`;
 
 const round = (n: number, p = 0) => { const f = 10 ** p; return Math.round(n * f) / f; };
 const strikesNear = (snap: DataSnapshot, spot: number) => {
@@ -156,9 +157,13 @@ export async function scoreBoard(
   const board = parseBoard(await runClaude(JSON.stringify(input)));
 
   const cur = history[history.length - 1]!.data;
+  const iv = history[history.length - 1]!.iv;
   board.as_of = input.as_of;
+  board.scored_at = Date.now();
   board.spot = spot;
   board.regime = cur.gex_regime;
+  board.iv = iv ? { current: iv.current_iv, direction: iv.direction } : undefined;
+  board.expected_move = cur.expected_move;
   board.levels = (board.levels ?? []).sort((a, b) => b.reversal_prob - a.reversal_prob);
   return board;
 }

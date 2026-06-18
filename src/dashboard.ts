@@ -21,6 +21,8 @@ export interface DashboardLevel extends ScoredLevel {
 /** Everything the static page renders, in one fetchable object. */
 export interface DashboardData {
   as_of: string;
+  /** Absolute epoch ms the levels were scored (timezone-proof staleness). */
+  scored_at?: number;
   generated_at: string;
   session: string | null;
   spot: number;
@@ -29,6 +31,9 @@ export interface DashboardData {
   hard_stop_pts: number;
   /** Points beyond a level still considered a clean reversal. */
   clean_reversal_pts: number;
+  /** IV regime + expected daily move, for the hero. */
+  iv?: { current: number; direction: string };
+  expected_move?: number;
   levels: DashboardLevel[];
 }
 
@@ -49,12 +54,15 @@ function outcomeFor(strike: number, detected: DetectedLevel[]): LevelOutcome {
 export function buildDashboard(board: Board, detected: DetectedLevel[], session?: string | null): DashboardData {
   return {
     as_of: board.as_of,
+    scored_at: board.scored_at,
     generated_at: new Date().toISOString(),
     session: session ?? activeSession()?.name ?? null,
     spot: board.spot,
     regime: board.regime,
     hard_stop_pts: config.hardStopPts,
     clean_reversal_pts: config.cleanReversalPts,
+    iv: board.iv,
+    expected_move: board.expected_move,
     levels: board.levels.map((l) => ({ ...l, ...outcomeFor(l.strike, detected) })),
   };
 }
