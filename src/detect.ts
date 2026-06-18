@@ -14,7 +14,8 @@ const r2 = (n: number) => Math.round(n * 100) / 100;
  *              `clean` = the overshoot beyond the level stayed within CLEAN_REVERSAL_PTS
  *              (a tight turn). A non-clean reversed held only after grinding past it.
  *  pending   : reached the level, still live — neither hard-stopped nor rejected yet.
- *  untouched : price never reached it (excluded from grading, not a miss).
+ *  untouched : price never actually REACHED it (within FILL_TOL_PTS) — excluded from grading.
+ *              Coming within ~a point is NOT a touch; a resting limit there would never fill.
  *
  * Overshoot is the ADVERSE excursion beyond the level (above it for resistance, below for
  * support); reject is the FAVORABLE move back off it. Within one bar the hard stop is checked
@@ -23,27 +24,28 @@ const r2 = (n: number) => Math.round(n * 100) / 100;
 export function detectLevel(bars: Bar[], strike: number): DetectedLevel {
   if (bars.length === 0) return { strike, side: "resistance", touched: false, outcome: "untouched" };
 
-  const tol = Math.max(config.touchTolerancePct, 0.0015) * strike;
   const swing = config.reversalSwingPct * strike;
   const hardStop = config.hardStopPts;     // points beyond the level = a break
   const cleanTol = config.cleanReversalPts; // points beyond the level still counted as clean
+  const fillTol = config.fillTolPts;        // price must REACH the strike to be tested
 
-  const hi = Math.max(...bars.map((b) => b.high));
-  const lo = Math.min(...bars.map((b) => b.low));
   const lastClose = bars[bars.length - 1]!.close;
 
-  // Price never reached the level — not a miss, just excluded from grading.
-  if (!(hi >= strike - tol && lo <= strike + tol)) {
+  // First bar where price genuinely REACHES the strike, from a clear side. A resting limit
+  // only fills if price trades to the level — coming within ~a point is not a test, so those
+  // levels stay "untouched" and are never graded as a hold. Decided pre-touch (no look-ahead).
+  let ti = -1;
+  let side: Side = "resistance";
+  for (let i = 0; i < bars.length; i++) {
+    const b = bars[i]!;
+    const prevClose = i > 0 ? bars[i - 1]!.close : b.open;
+    if (prevClose <= strike && b.high >= strike - fillTol) { ti = i; side = "resistance"; break; } // up into it
+    if (prevClose >= strike && b.low <= strike + fillTol) { ti = i; side = "support"; break; }     // down into it
+  }
+  if (ti === -1) {
     return { strike, side: strike >= lastClose ? "resistance" : "support", touched: false, outcome: "untouched" };
   }
-
-  const ti = bars.findIndex((b) => b.high >= strike - tol && b.low <= strike + tol);
   const touchedAt = bars[ti]!.ts;
-
-  // Approach side from just before the touch: came from below => resistance (reject down),
-  // came from above => support (bounce up). Decided pre-touch, so no look-ahead.
-  const prevClose = ti > 0 ? bars[ti - 1]!.close : bars[ti]!.open;
-  const side: Side = prevClose <= strike ? "resistance" : "support";
 
   let worstOvershoot = 0;
   for (let i = ti; i < bars.length; i++) {

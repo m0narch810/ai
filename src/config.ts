@@ -67,6 +67,9 @@ export const config = {
   // trading a full strike (hardStopPts) beyond the level is a hard stop = the level is broken.
   hardStopPts: num("HARD_STOP_PTS", 1.0),
   cleanReversalPts: num("CLEAN_REVERSAL_PTS", 0.20),
+  // How close price must actually trade to a level to count as TESTED — a resting limit
+  // only fills if price reaches the strike. Coming within ~a point is not a touch.
+  fillTolPts: num("FILL_TOL_PTS", 0.08),
 
   // Reversal detection uses Yahoo OHLC bars (wicks), not the Altaris spot tape.
   marketInterval: process.env.MARKET_INTERVAL?.trim() || "1m",

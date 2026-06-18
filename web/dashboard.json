@@ -1,90 +1,102 @@
 {
-  "as_of": "2026-06-18T14:46:55",
-  "scored_at": 1781808610803,
-  "generated_at": "2026-06-18T18:50:10.808Z",
+  "as_of": "2026-06-18T15:02:55",
+  "scored_at": 1781809701553,
+  "generated_at": "2026-06-18T19:08:21.556Z",
   "session": "US",
-  "spot": 739.37,
+  "spot": 739.385,
   "regime": "positive",
-  "read": "Price is trapped below the dominant 740 pin after two clean rejections today; IV spiking +7.66 and call vanna force mechanical dealer selling on any rally — the primary fade is 745 on a 740 breakout, and the board stays short-biased above spot into the cash close.",
+  "read": "Spot is coiling just below the dominant 740 Call/Major Wall (GEX 2.2B, largest on board) in a positive-gamma pin regime where charm into the final hour gravitates price back toward 740 — fade the next clean re-test of 740 with a 1-pt stop, that is the desk's primary order.",
   "hard_stop_pts": 1,
   "clean_reversal_pts": 0.2,
   "iv": {
-    "current": 24.07,
-    "direction": "RISING"
+    "current": 24.04,
+    "direction": "STABLE"
   },
   "expected_move": 14.48,
   "levels": [
     {
+      "strike": 740,
+      "reversal_prob": 60,
+      "side": "resistance",
+      "tags": [
+        "Call Wall",
+        "Major Wall",
+        "0DTE",
+        "GEX +2.2B"
+      ],
+      "why": "Dominant GEX wall (2212M, +515 building) with 110k OI and highest theta node (7.8); pending/unclean today's touch de-rates from 70%+ but structural mass is unmatched — every other resistance level is a footnote to this one.",
+      "outcome": "pending",
+      "touched": true,
+      "touchedAt": "2026-06-18T13:05:00",
+      "overshoot": 0.62,
+      "clean": false
+    },
+    {
       "strike": 745,
-      "reversal_prob": 57,
+      "reversal_prob": 55,
       "side": "resistance",
       "tags": [
         "Call Wall",
-        "GEX 675M",
-        "Charm -59k",
-        "Vanna 1679"
+        "GEX +675M",
+        "Charm -59K",
+        "OI 56k"
       ],
-      "why": "Named call wall with the board's largest charm reading (-59k) and massive vanna (+1,679) — rising IV forces dealers to mechanically sell this strike harder than any other above spot, making it the top fade on any 740 break.",
+      "why": "Second-tier Call Wall with GEX 675M building and the highest |charm| of any resistance strike (-59K vs 740's -12K); the primary conditional fade if 740 breaks — charm magnitude uniquely distinguishes it from 743.",
       "outcome": "untouched",
       "touched": false
     },
     {
-      "strike": 743,
+      "strike": 735,
       "reversal_prob": 48,
-      "side": "resistance",
-      "tags": [
-        "GEX 480M",
-        "Charm -20k",
-        "OI 20k",
-        "Vanna 506"
-      ],
-      "why": "First GEX wall above 740 ($480M and building fast, d_gex +252M) — not a named wall but the immediate mechanical stop before price targets 745 on a breakout.",
-      "outcome": "untouched",
-      "touched": false
-    },
-    {
-      "strike": 750,
-      "reversal_prob": 40,
-      "side": "resistance",
-      "tags": [
-        "Call Wall",
-        "GEX 588M",
-        "Charm -114k",
-        "Vanna 3123"
-      ],
-      "why": "Extreme charm (-114k) and board-largest vanna (+3,123) make this the dominant backstop call wall; requires ~10-pt rally to reach so it's the far target only if 745 breaks.",
-      "outcome": "untouched",
-      "touched": false
-    },
-    {
-      "strike": 730,
-      "reversal_prob": 37,
       "side": "support",
       "tags": [
-        "OI 100k",
-        "GEX 51M",
-        "Charm +18k",
-        "Vanna -239"
+        "GEX +481M",
+        "OI 81k",
+        "Charm +30K"
       ],
-      "why": "Massive combined OI (~100k) with positive charm providing mechanical dealer buying — primary downside magnet if zero-gamma at 737.5 cracks; 735 has no support structure left after today's break.",
-      "outcome": "untouched",
+      "why": "Largest-OI cluster below spot (81k) with the second-biggest GEX on the downside (481M) and a positive charm floor; the key catch if 737.5 zero-gamma loses — structurally 9x stronger than 730 on GEX alone.",
+      "outcome": "none",
       "touched": false
     },
     {
       "strike": 737.5,
-      "reversal_prob": 32,
+      "reversal_prob": 42,
       "side": "support",
       "tags": [
         "Zero Gamma",
         "Vol Trigger",
         "Regime Flip"
       ],
-      "why": "Zero Gamma / Vol Trigger confluence — below here GEX pinning weakens and selling can accelerate; already reversed once today as resistance so a re-test as support is reduced-conviction.",
-      "outcome": "reversed",
-      "touched": true,
-      "touchedAt": "2026-06-18T09:30:00",
-      "overshoot": 0.14,
-      "clean": true
+      "why": "Gamma-flip tripwire where dealer behavior shifts from stabilizing to amplifying; confirmed by today's earlier clean resistance hold from below — a functional regime-change level, not an OI-mass level, and that is what separates it from 735.",
+      "outcome": "none",
+      "touched": false
+    },
+    {
+      "strike": 750,
+      "reversal_prob": 38,
+      "side": "resistance",
+      "tags": [
+        "Call Wall",
+        "GEX +588M",
+        "OI 77k",
+        "Charm -114K"
+      ],
+      "why": "Third Call Wall with the dataset's largest |charm| (-114K) and 77k OI, but 10+ points OTM — high-conviction backstop only if 745 breaks; charm magnitude alone keeps it on the board despite the distance.",
+      "outcome": "untouched",
+      "touched": false
+    },
+    {
+      "strike": 730,
+      "reversal_prob": 35,
+      "side": "support",
+      "tags": [
+        "OI 100k",
+        "GEX +51M",
+        "Charm +19K"
+      ],
+      "why": "Largest combined OI anchor on the downside (100k) makes it a structural backstop, but GEX is modest (51M vs 735's 481M) and 9+ point distance limits near-term relevance.",
+      "outcome": "untouched",
+      "touched": false
     }
   ]
 }

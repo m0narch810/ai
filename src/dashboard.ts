@@ -4,7 +4,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { config } from "./config.js";
 import { activeSession } from "./config.js";
-import type { Board, DetectedLevel, ReversalOutcome, ScoredLevel } from "./types.js";
+import type { Board, DetectedLevel, ReversalOutcome, ScoredLevel, Side } from "./types.js";
 
 /** A scored level annotated with how it has played out on today's tape. */
 export interface DashboardLevel extends ScoredLevel {
@@ -45,9 +45,13 @@ const OUTCOME_RANK: Record<ReversalOutcome, number> = { reversed: 4, broke: 3, p
 
 type LevelOutcome = Pick<DashboardLevel, "outcome" | "touched" | "touchedAt" | "overshoot" | "clean">;
 
-/** Pick the most-resolved detector outcome at/near a board strike. */
-function outcomeFor(strike: number, detected: DetectedLevel[]): LevelOutcome {
-  const near = detected.filter((d) => Math.abs(d.strike - strike) <= MATCH_TOL_PTS);
+/**
+ * Pick the most-resolved detector outcome at a board strike — but only when the detector
+ * graded that strike on the SAME side. A 737.5 that rejected as resistance must not stamp
+ * "held" on a 737.5 the board is showing as support; as support, nothing happened there.
+ */
+function outcomeFor(strike: number, side: Side, detected: DetectedLevel[]): LevelOutcome {
+  const near = detected.filter((d) => d.side === side && Math.abs(d.strike - strike) <= MATCH_TOL_PTS);
   if (near.length === 0) return { outcome: "none", touched: false };
   const best = near.reduce((a, b) => (OUTCOME_RANK[b.outcome] > OUTCOME_RANK[a.outcome] ? b : a));
   return { outcome: best.outcome, touched: best.touched, touchedAt: best.touchedAt, overshoot: best.overshoot, clean: best.clean };
@@ -66,7 +70,7 @@ export function buildDashboard(board: Board, detected: DetectedLevel[], session?
     clean_reversal_pts: config.cleanReversalPts,
     iv: board.iv,
     expected_move: board.expected_move,
-    levels: board.levels.map((l) => ({ ...l, ...outcomeFor(l.strike, detected) })),
+    levels: board.levels.map((l) => ({ ...l, ...outcomeFor(l.strike, l.side, detected) })),
   };
 }
 
