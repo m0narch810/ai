@@ -14,7 +14,8 @@ const SYSTEM = `You are a reversal-level analyst for QQQ options flow from the A
 Your one job: given the current options structure and how it is SHIFTING intraday, output a ranked list of price levels (strikes) where a reversal is likely IF price reaches them, each with a probability.
 
 Definitions and rules — follow exactly:
-- Reversal probability is CONDITIONAL: P(price reverses >= 0.25% of spot at this strike | price reaches the strike). A strike can score high yet never be reached — that's fine, the resting limit order simply never fills.
+- Reversal probability is CONDITIONAL on a CLEAN reversal: P(price turns within ~clean_reversal_pts of the strike AND moves >= min_reversal_move | price reaches the strike). A strike can score high yet never be reached — that's fine, the resting limit order simply never fills.
+- HARD STOP: a level is for resting a limit order with a one-strike stop. If price trades a full strike (hard_stop_pts) BEYOND the level, that level has BROKEN — it is invalid, not a reversal. Score for the clean turn, not a sloppy grind: a level price chews through by half a strike before bouncing is a WEAK reversal, score it lower. Favor levels with the structure to turn price tightly.
 - "side": "resistance" if it's above spot (price would rise into it and reverse down), "support" if below spot (price would fall into it and reverse up).
 - This is institutional-style positioning, not scalping. Levels must respect >= 0.25% of spot spacing; do not cluster trivially adjacent strikes.
 - Evidence for a strong reversal level: large OI mass (calls+puts), strong gamma wall (|GEX|), being a named level (Call/Put/Major Wall, Max Pain, Gamma Flip / zero_gamma, Vol Trigger), and CONFLUENCE of several at/near the same strike.
@@ -31,7 +32,11 @@ Definitions and rules — follow exactly:
 - The DELTAS (d_*) matter as much as the levels: gex/vanna/charm/OI building at a strike strengthens it; bleeding weakens it. Weigh the trend, not just the snapshot.
 - Regime modifier: positive net GEX strengthens pinning (fade into levels); negative net GEX weakens pins and favors breaks — temper reversal probabilities accordingly.
 - You are given your OWN previous call. REVISE it rather than recomputing from scratch — only move a probability when the data justifies it. Avoid jitter.
-- You are given which levels have ALREADY reversed or broken today. Do not re-rank a level that has already played out as a fresh setup.
+- "graded_levels" shows which levels price has REACHED today and how they resolved on the tape (overshoot_pts = how far price pushed beyond the level; clean = whether it turned tightly):
+  - outcome "broke" => price went a full strike beyond it. DROP it entirely. Do not relist a broken level as a fresh setup; that price area is invalid until structure rebuilds.
+  - outcome "reversed" with clean=false => it held only after grinding past the clean zone: a weak hold. If you keep it, lower its probability.
+  - outcome "pending" with clean=false => price is grinding through it RIGHT NOW (overshot the clean zone, not yet a full strike): treat as compromised and de-rate it.
+  - A clean "reversed" already played out — don't re-rank it as a fresh entry for the same touch.
 - A "session" block tells you whether it's the US session or the Asia overnight session. In Asia: the OI/greeks are STATIC prior-close positioning (US options closed) and spot is NQ-futures-derived — be more conservative, lean on the largest walls, factor thinner liquidity, and say so in your reasoning. Read its "note" and adjust. "spot" is the effective live price; "altaris_spot" may be stale overnight.
 - Focus on actionable levels near spot. Output at most ~8 levels. Be selective.
 
@@ -94,13 +99,15 @@ function buildInput(history: CaptureRecord[], prior: Board | null, detected: Det
       gex_regime: cur.gex_regime, atm_iv: cur.atm_iv, expected_move: cur.expected_move,
       realized_vol: cur.realized_vol, net_vanna: cur.net_vanna,
       min_reversal_move_pts: round(config.tpMinPct * cur.spot, 2),
+      hard_stop_pts: config.hardStopPts,
+      clean_reversal_pts: config.cleanReversalPts,
     },
     iv: history[history.length - 1]!.iv ?? null,
     strikes_near_spot: buildStrikeRows(history, spot),
     your_prior_call: prior ? prior.levels.map((l) => ({ strike: l.strike, reversal_prob: l.reversal_prob, side: l.side })) : null,
-    already_played_out_today: detected
-      .filter((d) => d.outcome === "reversed" || d.outcome === "broke")
-      .map((d) => ({ strike: d.strike, outcome: d.outcome, side: d.side })),
+    graded_levels: detected
+      .filter((d) => d.touched)
+      .map((d) => ({ strike: d.strike, side: d.side, outcome: d.outcome, overshoot_pts: d.overshoot ?? null, clean: d.clean ?? null })),
   };
 }
 

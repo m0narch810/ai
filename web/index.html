@@ -3,25 +3,30 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#0a0f1a" />
+  <meta name="theme-color" content="#0b0c0f" />
   <title>QQQ · Reversal Elevation</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <main id="app">
-    <header class="masthead">
+    <header class="topbar">
       <div class="brand">
-        <span class="eyebrow">Altaris · options structure</span>
-        <h1>QQQ Reversal Elevation</h1>
+        <span class="ticker">QQQ</span>
+        <div class="brandtext">
+          <span class="title">Reversal Levels</span>
+          <span class="eyebrow">Altaris · options structure</span>
+        </div>
       </div>
       <div class="status" id="status">
         <span class="status-dot" id="statusDot"></span>
         <span class="status-text" id="statusText">loading</span>
       </div>
     </header>
+
+    <div class="banner" id="banner" hidden></div>
 
     <div class="readout" id="readout"></div>
 

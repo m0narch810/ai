@@ -1,8 +1,15 @@
 // Reads dashboard.json and renders the reversal elevation. No framework, no build.
 // Levels are placed at their true price on a vertical scale; the gold datum line
 // marks spot. Bar length = reversal probability (relative to the strongest level).
-const POLL_MS = 60_000;
-const STALE_MS = 30 * 60_000;
+//
+// Two independent clocks:
+//   • the BOARD (levels + regime) is AI-scored locally and can go stale if the PC is off.
+//   • the SPOT line is fetched live from a Netlify function, so it keeps moving regardless.
+// When the board is stale we keep showing the last levels but mark them "as scored Xago".
+const POLL_MS = 60_000;          // re-read dashboard.json
+const SPOT_MS = 60_000;          // re-fetch live spot
+const STALE_MS = 30 * 60_000;    // board older than this = AI not currently updating
+const SPOT_URL = "/.netlify/functions/spot";
 const PAD = 30;            // top/bottom room (px) inside the gauge for the datum tag
 const MIN_GAP = 44;        // min vertical spacing between walls before de-overlap kicks in
 
@@ -23,8 +30,56 @@ function ago(iso) {
 }
 
 const TAG = { resistance: "ceiling", support: "floor" };
-const MARK = { reversed: "held", broke: "broke", pending: "testing", untouched: "resting", none: "resting" };
-const OUTCOME_CLASS = { reversed: "held", broke: "broke", pending: "testing" };
+
+// ---- shared state across the two clocks --------------------------------------
+let lastData = null;       // last dashboard.json
+let liveSpot = null;       // last live price from the spot function
+let liveSpotAt = null;     // when we fetched it
+let scaleFn = null;        // price -> y, fixed per board so the ladder doesn't reflow
+let gaugeH = 0;
+let placedWalls = [];      // [{ level, wall, markEl }] for live outcome updates
+
+/**
+ * Live outcome from the current spot vs the level's clean/hard-stop zones — lets the board
+ * flag a grind or a break between 15-min scores. "broke" once price is a full strike beyond,
+ * "grind" once it's past the clean zone but not yet broken. Mirrors the detector's rule.
+ */
+function liveStatusFor(level) {
+  if (typeof liveSpot !== "number" || !lastData) return null;
+  const hard = lastData.hard_stop_pts ?? 1.0;
+  const clean = lastData.clean_reversal_pts ?? 0.2;
+  const over = level.side === "resistance" ? liveSpot - level.strike : level.strike - liveSpot;
+  if (over >= hard) return "broke";
+  if (over > clean) return "grind";
+  return null;
+}
+
+/** Merge the scored detector outcome with the live status into a single badge. */
+function outcomeView(level) {
+  const live = liveStatusFor(level);
+  const o = level.outcome || "none";
+  if (o === "broke" || live === "broke") return { cls: "broke", text: "broke" };
+  if (o === "reversed") return { cls: "held", text: level.clean === false ? "held loose" : "held" };
+  if (live === "grind") return { cls: "grinding", text: "grinding" };
+  if (o === "pending") return level.clean === false ? { cls: "grinding", text: "grinding" } : { cls: "testing", text: "testing" };
+  return { cls: "", text: "" }; // untouched / none / resting — no badge
+}
+
+function applyOutcome(entry) {
+  const v = outcomeView(entry.level);
+  entry.wall.classList.toggle("broke", v.cls === "broke");
+  entry.wall.classList.toggle("testing", v.cls === "testing");
+  entry.wall.classList.toggle("grinding", v.cls === "grinding");
+  entry.markEl.className = `mark ${v.cls}`.trim();
+  entry.markEl.textContent = v.text;
+  entry.markEl.hidden = !v.text;
+}
+
+const refreshOutcomes = () => placedWalls.forEach(applyOutcome);
+
+/** Spot to draw the datum at: live if we have it, else the board's scored spot. */
+const currentSpot = () => (typeof liveSpot === "number" ? liveSpot : lastData?.spot);
+const boardStale = () => lastData && Date.parse(lastData.as_of) < Date.now() - STALE_MS;
 
 function gaugeHeight(n) {
   const byCount = n * 76 + 2 * PAD;
@@ -32,7 +87,7 @@ function gaugeHeight(n) {
   return Math.round(clamp(byCount, 360, Math.max(byScreen, byCount)));
 }
 
-/** Map prices to y within [PAD, H-PAD]; high price at top. */
+/** Map prices to y within [PAD, H-PAD]; high price at top. Anchored on the board spot. */
 function makeScale(levels, spot, H) {
   const prices = [...levels.map((l) => l.strike), spot];
   let lo = Math.min(...prices), hi = Math.max(...prices);
@@ -52,8 +107,7 @@ function deOverlap(items) {
 }
 
 function buildWall(level, x) {
-  const outcome = level.outcome || "none";
-  const wall = el("div", `wall ${level.side === "resistance" ? "res" : "sup"} ${OUTCOME_CLASS[outcome] || ""}`.trim());
+  const wall = el("div", `wall ${level.side === "resistance" ? "res" : "sup"}`);
   wall.style.top = `${x.y}px`;
 
   wall.appendChild(el("span", "stem"));
@@ -66,7 +120,9 @@ function buildWall(level, x) {
   bar.appendChild(el("span", "strike", `$${fmtPrice(level.strike)}`));
   bar.appendChild(el("span", "tag", TAG[level.side] || level.side));
   bar.appendChild(el("span", "spacer"));
-  if (outcome !== "untouched" && outcome !== "none") bar.appendChild(el("span", `mark ${MARK[outcome]}`, MARK[outcome]));
+  const markEl = el("span", "mark");
+  markEl.hidden = true;
+  bar.appendChild(markEl);
   const prob = el("span", `prob ${level.reversal_prob < 45 ? "lo" : ""}`.trim(), `${level.reversal_prob}%`);
   bar.appendChild(prob);
   wall.appendChild(bar);
@@ -75,7 +131,7 @@ function buildWall(level, x) {
   wall.appendChild(why);
 
   wall.addEventListener("click", () => wall.classList.toggle("open"));
-  return { wall, track };
+  return { wall, track, markEl };
 }
 
 function renderReadout(data) {
@@ -83,24 +139,69 @@ function renderReadout(data) {
   r.replaceChildren();
   const regimeCls = data.regime === "positive" ? "pos" : data.regime === "negative" ? "neg" : "";
   const cells = [
-    ["spot", `$${fmtSpot(data.spot)}`, "", null],
-    ["regime", data.regime || "—", regimeCls, data.regime === "negative" ? "breaks favored" : data.regime === "positive" ? "pins favored" : ""],
-    ["session", data.session || "—", "", data.session === "Asia" ? "NQ-derived" : null],
+    ["spot", `$${fmtSpot(currentSpot())}`, "", null, "spotVal"],
+    ["regime", data.regime || "—", regimeCls, data.regime === "negative" ? "breaks favored" : data.regime === "positive" ? "pins favored" : "", null],
+    ["session", data.session || "—", "", data.session === "Asia" ? "NQ-derived" : null, null],
   ];
-  for (const [k, v, cls, note] of cells) {
+  for (const [k, v, cls, note, id] of cells) {
     const cell = el("div", "cell");
     cell.appendChild(el("div", "k", k));
     const val = el("div", `v ${cls}`.trim(), v);
+    if (id) val.id = id;
     if (note) val.appendChild(el("small", null, note));
     cell.appendChild(val);
     r.appendChild(cell);
   }
 }
 
+/** Position the datum line + spot readout from the *current* (live if available) spot. */
+function paintSpot() {
+  if (!lastData || !scaleFn) return;
+  const spot = currentSpot();
+  const datum = $("#datum");
+
+  if (typeof spot !== "number") { datum.hidden = true; return; }
+  datum.hidden = false;
+  datum.style.top = `${clamp(scaleFn(spot), PAD, gaugeH - PAD)}px`;
+
+  const tag = $("#datumTag");
+  tag.replaceChildren();
+  const live = typeof liveSpot === "number";
+  tag.appendChild(el("small", null, live ? "LIVE" : "SPOT"));
+  tag.append(`$${fmtSpot(spot)}`);
+  tag.classList.toggle("is-live", live);
+
+  const spotVal = $("#spotVal");
+  if (spotVal) {
+    spotVal.childNodes[0] && (spotVal.childNodes[0].nodeValue = `$${fmtSpot(spot)}`);
+    const note = spotVal.querySelector("small") || spotVal.appendChild(el("small"));
+    note.textContent = live ? `live · ${ago(liveSpotAt)}` : "";
+    note.className = live ? "live-note" : "";
+  }
+
+  refreshOutcomes(); // live spot may have just turned a level into a grind/break
+}
+
+/** Stale banner: when the AI isn't currently scoring, say so plainly. */
+function renderBanner() {
+  const b = $("#banner");
+  if (boardStale()) {
+    b.hidden = false;
+    b.replaceChildren(
+      Object.assign(el("span", "banner-dot"), {}),
+      el("span", "banner-text", `Levels last scored ${ago(lastData.as_of)} — AI not currently running (scoring box offline). Spot below is live.`),
+    );
+  } else {
+    b.hidden = true;
+  }
+}
+
 function render(data) {
-  const stale = Date.parse(data.as_of) < Date.now() - STALE_MS;
+  renderBanner();
+
+  const stale = boardStale();
   $("#statusDot").className = `status-dot ${stale ? "stale" : "live"}`;
-  $("#statusText").textContent = stale ? "last board" : "live";
+  $("#statusText").textContent = stale ? `levels ${ago(data.as_of)}` : "live";
 
   renderReadout(data);
 
@@ -108,7 +209,10 @@ function render(data) {
   const walls = $("#walls");
   const levels = Array.isArray(data.levels) ? data.levels : [];
   walls.replaceChildren();
+  walls.classList.toggle("prev", stale); // dim the bars to read as "previously scored"
   $("#datum").hidden = true;
+  scaleFn = null;
+  placedWalls = [];
 
   if (!levels.length) {
     gauge.style.height = "auto";
@@ -124,34 +228,30 @@ function render(data) {
   const H = gaugeHeight(levels.length);
   gauge.style.height = `${H}px`;
   walls.style.height = `${H}px`;
+  gaugeH = H;
 
-  const scale = makeScale(levels, data.spot, H);
-  const placed = deOverlap(levels.map((l) => ({ level: l, y: scale(l.strike) })));
+  scaleFn = makeScale(levels, data.spot, H);
+  const placed = deOverlap(levels.map((l) => ({ level: l, y: scaleFn(l.strike) })));
 
   // Stagger the bar-draw outward from spot: nearest levels animate first.
   const order = [...placed].sort((a, b) => Math.abs(a.level.strike - data.spot) - Math.abs(b.level.strike - data.spot));
   const tracks = [];
   for (const p of placed) {
-    const { wall, track } = buildWall(p.level, p);
+    const { wall, track, markEl } = buildWall(p.level, p);
     walls.appendChild(wall);
+    placedWalls.push({ level: p.level, wall, markEl });
     tracks.push({ track, rank: order.indexOf(p) });
   }
+  refreshOutcomes(); // badges from detector outcome + live status
   requestAnimationFrame(() => tracks.forEach(({ track, rank }) =>
     setTimeout(() => (track.style.setProperty("--p", track.dataset.p)), 60 + rank * 70)));
 
-  // Datum: the spot line, the signature element.
-  const datum = $("#datum");
-  datum.hidden = false;
-  datum.style.top = `${clamp(scale(data.spot), PAD, H - PAD)}px`;
-  const tag = $("#datumTag");
-  tag.replaceChildren();
-  tag.appendChild(el("small", null, "SPOT"));
-  tag.append(`$${fmtSpot(data.spot)}`);
+  $("#datumTag").replaceChildren();
+  paintSpot(); // draws the (live or scored) spot line into the fresh ladder
 
-  $("#asOf").textContent = `scored ${ago(data.as_of)}`;
+  $("#asOf").textContent = `levels scored ${ago(data.as_of)}`;
 }
 
-let lastData = null;
 async function load() {
   try {
     const res = await fetch(`dashboard.json?t=${Date.now()}`, { cache: "no-store" });
@@ -161,13 +261,33 @@ async function load() {
   } catch (err) {
     $("#statusText").textContent = "no data";
     $("#statusDot").className = "status-dot";
+    $("#banner").hidden = true;
     $("#walls").replaceChildren(Object.assign(el("div", "empty"), { textContent: "Waiting for dashboard.json — run a capture." }));
     $("#datum").hidden = true;
   }
 }
 
-$("#refresh").addEventListener("click", load);
-document.addEventListener("visibilitychange", () => { if (!document.hidden) load(); });
+/** Live spot — independent of the board; degrades silently (e.g. on LAN, no function). */
+async function loadSpot() {
+  try {
+    const res = await fetch(`${SPOT_URL}?t=${Date.now()}`, { cache: "no-store" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const j = await res.json();
+    if (typeof j.spot === "number") {
+      liveSpot = j.spot;
+      liveSpotAt = j.at || new Date().toISOString();
+      paintSpot();
+    }
+  } catch {
+    /* no live spot here (offline / LAN) — datum falls back to the scored spot */
+  }
+}
+
+$("#refresh").addEventListener("click", () => { load(); loadSpot(); });
+document.addEventListener("visibilitychange", () => { if (!document.hidden) { load(); loadSpot(); } });
 window.addEventListener("resize", () => { if (lastData) render(lastData); });
+
 load();
+loadSpot();
 setInterval(load, POLL_MS);
+setInterval(loadSpot, SPOT_MS);

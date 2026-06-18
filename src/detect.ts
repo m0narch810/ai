@@ -1,80 +1,73 @@
 import { config } from "./config.js";
 import type { Bar, DetectedLevel, Side } from "./types.js";
 
+const r2 = (n: number) => Math.round(n * 100) / 100;
+
 /**
- * Wick-and-reject reversal detection on OHLC bars (Yahoo).
+ * Wick-and-reject reversal detection on OHLC bars (Yahoo) — graded for CALIBRATION HISTORY,
+ * so the labels must be honest: a sloppy grind is not a reversal, and a clean break through
+ * the level is not a "valid" hold. Strictly sequential from the first touch (no look-ahead,
+ * no retroactive wins) — the first of {hard-stop, reject} to occur wins, checked per bar.
  *
- * Classify a level by where price LIVED relative to it across the session, not by a
- * single bar — that's what makes 735 (price stayed below, wicked up, rejected) a clean
- * resistance reversal while a mid-range level price closed on both sides of is "broke".
+ *  broke     : price overshot the level by a full strike (HARD_STOP_PTS) — the hard stop.
+ *  reversed  : price rejected >= REVERSAL_SWING_PCT off the level before any hard stop.
+ *              `clean` = the overshoot beyond the level stayed within CLEAN_REVERSAL_PTS
+ *              (a tight turn). A non-clean reversed held only after grinding past it.
+ *  pending   : reached the level, still live — neither hard-stopped nor rejected yet.
+ *  untouched : price never reached it (excluded from grading, not a miss).
  *
- *  reversed  : price stayed one side, wicked the level, and rejected >= REVERSAL_SWING_PCT
- *  broke     : price closed clean through it (on both sides, or out the far side)
- *  pending   : reached the level but hugged it — no decisive reject or break
- *  untouched : price never reached it (excluded from grading, not a miss)
- *
- * NOTE: a "close beyond" uses the bar close (acceptance); a mere wick beyond is just a test.
+ * Overshoot is the ADVERSE excursion beyond the level (above it for resistance, below for
+ * support); reject is the FAVORABLE move back off it. Within one bar the hard stop is checked
+ * first, so a bar that both spikes a strike through and snaps back grades as a break, not a win.
  */
 export function detectLevel(bars: Bar[], strike: number): DetectedLevel {
   if (bars.length === 0) return { strike, side: "resistance", touched: false, outcome: "untouched" };
 
   const tol = Math.max(config.touchTolerancePct, 0.0015) * strike;
   const swing = config.reversalSwingPct * strike;
-  const breakBuf = config.breakBufferPct * strike;
+  const hardStop = config.hardStopPts;     // points beyond the level = a break
+  const cleanTol = config.cleanReversalPts; // points beyond the level still counted as clean
 
   const hi = Math.max(...bars.map((b) => b.high));
   const lo = Math.min(...bars.map((b) => b.low));
   const lastClose = bars[bars.length - 1]!.close;
-  const sideByPos: Side = strike >= lastClose ? "resistance" : "support";
 
-  // Price never reached the level — not a miss, just excluded.
+  // Price never reached the level — not a miss, just excluded from grading.
   if (!(hi >= strike - tol && lo <= strike + tol)) {
-    return { strike, side: sideByPos, touched: false, outcome: "untouched" };
+    return { strike, side: strike >= lastClose ? "resistance" : "support", touched: false, outcome: "untouched" };
   }
 
   const ti = bars.findIndex((b) => b.high >= strike - tol && b.low <= strike + tol);
   const touchedAt = bars[ti]!.ts;
 
-  const closedAbove = bars.some((b) => b.close >= strike + breakBuf);
-  const closedBelow = bars.some((b) => b.close <= strike - breakBuf);
+  // Approach side from just before the touch: came from below => resistance (reject down),
+  // came from above => support (bounce up). Decided pre-touch, so no look-ahead.
+  const prevClose = ti > 0 ? bars[ti - 1]!.close : bars[ti]!.open;
+  const side: Side = prevClose <= strike ? "resistance" : "support";
 
-  // Crossed on both sides (or sliced clean through) => not a one-sided barrier.
-  if (closedAbove && closedBelow) {
-    return { strike, side: sideByPos, touched: true, outcome: "broke", touchedAt };
+  let worstOvershoot = 0;
+  for (let i = ti; i < bars.length; i++) {
+    const b = bars[i]!;
+    const overshoot = side === "resistance" ? b.high - strike : strike - b.low;
+    if (overshoot > worstOvershoot) worstOvershoot = overshoot;
+
+    // Hard stop first (adverse excursion): a full strike beyond kills the level.
+    if (overshoot >= hardStop) {
+      return { strike, side, touched: true, outcome: "broke", touchedAt, resolvedAt: b.ts, overshoot: r2(worstOvershoot) };
+    }
+    // Then the favorable reject: price snapped >= swing back off the level => reversal.
+    const reject = side === "resistance" ? strike - b.low : b.high - strike;
+    if (reject >= swing) {
+      return {
+        strike, side, touched: true, outcome: "reversed", touchedAt, resolvedAt: b.ts,
+        reversalPct: Math.round((reject / strike) * 10000) / 10000,
+        overshoot: r2(worstOvershoot), clean: worstOvershoot <= cleanTol,
+      };
+    }
   }
 
-  // Price lived BELOW and wicked up into it => resistance candidate.
-  if (closedBelow && !closedAbove) {
-    return rejectOrPending(bars, ti, strike, "resistance", swing);
-  }
-  // Price lived ABOVE and wicked down into it => support candidate.
-  if (closedAbove && !closedBelow) {
-    return rejectOrPending(bars, ti, strike, "support", swing);
-  }
-
-  // Hugged the level all session (never closed beyond the buffer either way).
-  return { strike, side: sideByPos, touched: true, outcome: "pending", touchedAt };
-}
-
-function rejectOrPending(bars: Bar[], ti: number, strike: number, side: Side, swing: number): DetectedLevel {
-  const after = bars.slice(ti);
-  const extreme = side === "resistance"
-    ? Math.min(...after.map((b) => b.low))
-    : Math.max(...after.map((b) => b.high));
-  const move = Math.abs(strike - extreme);
-  const touchedAt = bars[ti]!.ts;
-
-  if (move >= swing) {
-    const resolvedBar = side === "resistance"
-      ? after.find((b) => b.low <= strike - swing)
-      : after.find((b) => b.high >= strike + swing);
-    return {
-      strike, side, touched: true, outcome: "reversed",
-      touchedAt, resolvedAt: resolvedBar?.ts ?? touchedAt,
-      reversalPct: Math.round((move / strike) * 10000) / 10000,
-    };
-  }
-  return { strike, side, touched: true, outcome: "pending", touchedAt };
+  // Touched, still hovering — no hard stop, no decisive reject yet.
+  return { strike, side, touched: true, outcome: "pending", touchedAt, overshoot: r2(worstOvershoot), clean: worstOvershoot <= cleanTol };
 }
 
 export function detectMany(bars: Bar[], strikes: number[]): DetectedLevel[] {

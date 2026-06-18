@@ -24,9 +24,17 @@ function normalizeCookie(raw: string): string {
   return v.includes("=") ? v : `altaris_session=${v}`;
 }
 
+const baseUrl = (process.env.ALTARIS_BASE_URL?.trim() || "https://altaris.up.railway.app/api").replace(/\/$/, "");
+const rawCookie = process.env.ALTARIS_COOKIE?.trim();
+
 export const config = {
-  baseUrl: (process.env.ALTARIS_BASE_URL?.trim() || "https://altaris.up.railway.app/api").replace(/\/$/, ""),
-  cookie: normalizeCookie(req("ALTARIS_COOKIE")),
+  baseUrl,
+  // A pasted cookie is now optional: if ALTARIS_USER/PASS are set we log in for it.
+  cookie: rawCookie ? normalizeCookie(rawCookie) : "",
+  // Credentials for auto-login + cookie refresh on expiry (src/auth.ts).
+  altarisUser: process.env.ALTARIS_USER?.trim() || "",
+  altarisPass: process.env.ALTARIS_PASS?.trim() || "",
+  loginUrl: `${baseUrl}/login`,
   symbol: process.env.ALTARIS_SYMBOL?.trim() || "QQQ",
 
   sessionTz: process.env.SESSION_TZ?.trim() || "America/New_York",
@@ -49,6 +57,12 @@ export const config = {
   touchTolerancePct: num("TOUCH_TOLERANCE_PCT", 0.0010),
   breakBufferPct: num("BREAK_BUFFER_PCT", 0.0015),
   nearSpotBandPct: num("NEAR_SPOT_BAND_PCT", 0.025),
+
+  // Reversal grading in ABSOLUTE POINTS (QQQ strikes are ~$1 apart), per the trader's rule:
+  // a reversal is only "clean" if price turns within cleanReversalPts of the level, and price
+  // trading a full strike (hardStopPts) beyond the level is a hard stop = the level is broken.
+  hardStopPts: num("HARD_STOP_PTS", 1.0),
+  cleanReversalPts: num("CLEAN_REVERSAL_PTS", 0.20),
 
   // Reversal detection uses Yahoo OHLC bars (wicks), not the Altaris spot tape.
   marketInterval: process.env.MARKET_INTERVAL?.trim() || "1m",

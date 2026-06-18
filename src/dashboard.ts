@@ -12,6 +12,10 @@ export interface DashboardLevel extends ScoredLevel {
   outcome: ReversalOutcome | "none";
   touched: boolean;
   touchedAt?: string;
+  /** Adverse overshoot beyond the level, in points (for the clean/grind display). */
+  overshoot?: number;
+  /** Whether the reversal/hold stayed within the clean tolerance. */
+  clean?: boolean;
 }
 
 /** Everything the static page renders, in one fetchable object. */
@@ -21,6 +25,10 @@ export interface DashboardData {
   session: string | null;
   spot: number;
   regime: string;
+  /** Points beyond a level that count as a hard break (lets the live spot flag breaks). */
+  hard_stop_pts: number;
+  /** Points beyond a level still considered a clean reversal. */
+  clean_reversal_pts: number;
   levels: DashboardLevel[];
 }
 
@@ -28,14 +36,14 @@ export interface DashboardData {
 const MATCH_TOL_PTS = 0.75;
 const OUTCOME_RANK: Record<ReversalOutcome, number> = { reversed: 4, broke: 3, pending: 2, untouched: 1 };
 
-type LevelOutcome = Pick<DashboardLevel, "outcome" | "touched" | "touchedAt">;
+type LevelOutcome = Pick<DashboardLevel, "outcome" | "touched" | "touchedAt" | "overshoot" | "clean">;
 
 /** Pick the most-resolved detector outcome at/near a board strike. */
 function outcomeFor(strike: number, detected: DetectedLevel[]): LevelOutcome {
   const near = detected.filter((d) => Math.abs(d.strike - strike) <= MATCH_TOL_PTS);
   if (near.length === 0) return { outcome: "none", touched: false };
   const best = near.reduce((a, b) => (OUTCOME_RANK[b.outcome] > OUTCOME_RANK[a.outcome] ? b : a));
-  return { outcome: best.outcome, touched: best.touched, touchedAt: best.touchedAt };
+  return { outcome: best.outcome, touched: best.touched, touchedAt: best.touchedAt, overshoot: best.overshoot, clean: best.clean };
 }
 
 export function buildDashboard(board: Board, detected: DetectedLevel[], session?: string | null): DashboardData {
@@ -45,6 +53,8 @@ export function buildDashboard(board: Board, detected: DetectedLevel[], session?
     session: session ?? activeSession()?.name ?? null,
     spot: board.spot,
     regime: board.regime,
+    hard_stop_pts: config.hardStopPts,
+    clean_reversal_pts: config.cleanReversalPts,
     levels: board.levels.map((l) => ({ ...l, ...outcomeFor(l.strike, detected) })),
   };
 }

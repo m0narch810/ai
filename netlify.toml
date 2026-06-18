@@ -4,6 +4,12 @@
   publish = "web"
   command = ""
 
+# Live-spot service: runs server-side on Netlify so the dashboard's spot keeps
+# updating even when the local scoring box is off (see netlify/functions/spot.mjs).
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+
 # The board JSON must never be cached by the CDN, or the phone shows a stale board.
 [[headers]]
   for = "/dashboard.json"

@@ -22,7 +22,13 @@ function netlifyDeploy(): Promise<void> {
   const siteId = process.env.NETLIFY_SITE_ID?.trim();
   // Run via a shell: on Windows the CLI is netlify.cmd, which Node can't spawn
   // directly (EINVAL) — shell:true resolves it through PATHEXT. Quote the dir for spaces.
-  const cmd = [NETLIFY_BIN, "deploy", "--prod", "--dir", `"${path.join(config.paths.root, "web")}"`]
+  // --functions ships the live-spot service alongside the static web/ dir; without
+  // it, deploying with --dir would drop the function and the spot would go stale too.
+  const cmd = [
+    NETLIFY_BIN, "deploy", "--prod",
+    "--dir", `"${path.join(config.paths.root, "web")}"`,
+    "--functions", `"${path.join(config.paths.root, "netlify", "functions")}"`,
+  ]
     .concat(siteId ? ["--site", siteId] : [])
     .join(" ");
 

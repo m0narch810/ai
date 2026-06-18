@@ -136,4 +136,12 @@ export interface DetectedLevel {
   resolvedAt?: string;
   /** For a reversed level: how far price retraced off it, as a fraction of the level. */
   reversalPct?: number;
+  /** Worst adverse excursion BEYOND the level, in points (how far price overshot it). */
+  overshoot?: number;
+  /**
+   * True only if price reversed/held within CLEAN_REVERSAL_PTS of the level — i.e. a
+   * tight reversal, not a grind through it. False = it held but sloppily; for grading,
+   * a non-clean "reversed" should be treated as a weak signal, not a model win.
+   */
+  clean?: boolean;
 }
