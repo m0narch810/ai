@@ -44,6 +44,10 @@ export const config = {
   asiaStart: process.env.ASIA_START?.trim() || "20:00",
   asiaEnd: process.env.ASIA_END?.trim() || "04:00",
   scoreIntervalMin: num("SCORE_INTERVAL_MIN", 15),
+  // AI re-scoring runs RTH only (Mon–Fri 09:15–16:00 ET). Outside this the loop holds the
+  // last RTH board's levels but still refreshes spot + reversal outcomes — no AI call.
+  aiScoreStart: process.env.AI_SCORE_START?.trim() || "09:15",
+  aiScoreEnd: process.env.AI_SCORE_END?.trim() || "16:00",
 
   // Scoring runs through Claude Code headless on the Max subscription — no API key.
   // model is a CLI alias ("opus"/"sonnet") or a full id.
@@ -133,4 +137,16 @@ export function activeSession(d = new Date()): SessionDef | null {
   if (evening || morning) return { name: "Asia", source: "NQ=F", startMin: aS, endMin: aE };
 
   return null;
+}
+
+/**
+ * Whether the AI scorer should run now: RTH only (Mon–Fri 09:15–16:00 ET by default).
+ * Outside this window the loop refreshes spot + reversal outcomes but reuses the last
+ * RTH board's levels instead of re-scoring (overnight positioning is the prior close).
+ */
+export function isAiScoreTime(d = new Date()): boolean {
+  const wd = etWeekday(d);
+  const { minutes } = nowInSessionTz(d);
+  const s = hhmmToMinutes(config.aiScoreStart), e = hhmmToMinutes(config.aiScoreEnd);
+  return wd >= 1 && wd <= 5 && minutes >= s && minutes <= e;
 }

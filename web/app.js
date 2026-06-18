@@ -81,6 +81,16 @@ const refreshOutcomes = () => placedWalls.forEach(applyOutcome);
 const currentSpot = () => (typeof liveSpot === "number" ? liveSpot : lastData?.spot);
 const boardStale = () => lastData && Date.parse(lastData.as_of) < Date.now() - STALE_MS;
 
+/** RTH (09:15–16:00 ET, Mon–Fri) = when the AI re-scores. Outside it, levels are held. */
+function isRthNow() {
+  const p = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(new Date());
+  const get = (t) => p.find((x) => x.type === t)?.value;
+  const WD = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+  const wd = WD[get("weekday")] ?? 0;
+  const minutes = Number(get("hour")) * 60 + Number(get("minute"));
+  return wd >= 1 && wd <= 5 && minutes >= 555 && minutes <= 960;
+}
+
 function gaugeHeight(n) {
   const byCount = n * 76 + 2 * PAD;
   const byScreen = clamp(window.innerHeight * 0.68, 460, 760);
@@ -182,26 +192,28 @@ function paintSpot() {
   refreshOutcomes(); // live spot may have just turned a level into a grind/break
 }
 
-/** Stale banner: when the AI isn't currently scoring, say so plainly. */
-function renderBanner() {
+/**
+ * Stale banner. Two reasons a board can be old:
+ *  • off-RTH (expected): levels are deliberately held from the last RTH score — not alarming.
+ *  • during RTH (unexpected): the scorer isn't updating — likely the box is offline.
+ */
+function renderBanner(data) {
   const b = $("#banner");
-  if (boardStale()) {
-    b.hidden = false;
-    b.replaceChildren(
-      Object.assign(el("span", "banner-dot"), {}),
-      el("span", "banner-text", `Levels last scored ${ago(lastData.as_of)} — AI not currently running (scoring box offline). Spot below is live.`),
-    );
-  } else {
-    b.hidden = true;
-  }
+  if (!boardStale()) { b.hidden = true; return; }
+  b.hidden = false;
+  const text = isRthNow()
+    ? `Levels last scored ${ago(data.as_of)} — AI scoring paused (box offline). Spot & reversals are live.`
+    : `Outside market hours — holding levels from the last RTH session (scored ${ago(data.as_of)}). Spot & reversals are live.`;
+  b.replaceChildren(el("span", "banner-dot"), el("span", "banner-text", text));
 }
 
 function render(data) {
-  renderBanner();
+  renderBanner(data);
 
   const stale = boardStale();
+  const offline = stale && isRthNow(); // old board DURING RTH = something's wrong
   $("#statusDot").className = `status-dot ${stale ? "stale" : "live"}`;
-  $("#statusText").textContent = stale ? `levels ${ago(data.as_of)}` : "live";
+  $("#statusText").textContent = !stale ? "live" : isRthNow() ? `levels ${ago(data.as_of)}` : "held · off-rth";
 
   renderReadout(data);
 
@@ -209,7 +221,7 @@ function render(data) {
   const walls = $("#walls");
   const levels = Array.isArray(data.levels) ? data.levels : [];
   walls.replaceChildren();
-  walls.classList.toggle("prev", stale); // dim the bars to read as "previously scored"
+  walls.classList.toggle("prev", offline); // dim only when unexpectedly stale; held overnight reads normally
   $("#datum").hidden = true;
   scaleFn = null;
   placedWalls = [];

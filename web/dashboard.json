@@ -1,17 +1,17 @@
 {
-  "as_of": "2026-06-18T13:31:44",
-  "generated_at": "2026-06-18T17:45:51.931Z",
+  "as_of": "2026-06-18T13:45:00",
+  "generated_at": "2026-06-18T17:53:18.593Z",
   "session": "US",
-  "spot": 739.91,
+  "spot": 739.825,
   "regime": "positive",
   "hard_stop_pts": 1,
   "clean_reversal_pts": 0.2,
   "levels": [
     {
       "strike": 740,
-      "reversal_prob": 62,
+      "reversal_prob": 60,
       "side": "resistance",
-      "why": "Call/major/0dte wall; GEX $1698.6M (+$1467M build this session, largest in chain); charm exploded +$90.8B delta; clean prior reversal here + structure strengthened — positive-GEX regime strongly favors fade on second test.",
+      "why": "Call Wall + Major Wall + 0dte wall; GEX $1698M dominant; second clean approach — IV drop trims vanna but gamma pin remains overwhelming",
       "outcome": "reversed",
       "touched": true,
       "touchedAt": "2026-06-18T11:11:00",
@@ -19,26 +19,18 @@
       "clean": true
     },
     {
-      "strike": 728,
-      "reversal_prob": 58,
+      "strike": 735,
+      "reversal_prob": 56,
       "side": "support",
-      "why": "Named put wall; GEX -$227.6M with -$184M additional build; vanna +$1348M surging (+$1310M build) adds force with IV rising; charm -$34.4B building; 29k put OI — strong dealer-hedging floor.",
-      "outcome": "untouched",
+      "why": "GEX $657M (2nd largest near spot); charm +31k building; OI 81k+; strongest structural floor if 740 rejects price",
+      "outcome": "none",
       "touched": false
     },
     {
       "strike": 745,
-      "reversal_prob": 53,
+      "reversal_prob": 54,
       "side": "resistance",
-      "why": "Named call wall; GEX +$480.4M (+$367M build); vanna +$1637M drives short-delta hedging on rallies with IV rising; charm -$56.9B; solid secondary resistance above the 740 wall.",
-      "outcome": "untouched",
-      "touched": false
-    },
-    {
-      "strike": 730,
-      "reversal_prob": 50,
-      "side": "support",
-      "why": "100k+ combined OI (largest support cluster below); GEX +$124.4M; charm +$26.8B building; 0dte put wall at 731 adjacent; positive-GEX zone gravitational on dips.",
+      "why": "Named call wall; GEX $480M; charm −57k surging intraday; primary target if 740 breaks cleanly",
       "outcome": "untouched",
       "touched": false
     },
@@ -46,36 +38,44 @@
       "strike": 750,
       "reversal_prob": 48,
       "side": "resistance",
-      "why": "Named call wall; GEX +$346.4M (+$183M build); vanna +$3263M (chain-high) and charm -$115B (most negative) create powerful outer wall — vanna weight elevated with IV rising.",
+      "why": "Major call wall; GEX $346M; charm −115k (largest above spot); vanna $3280M — strong cap but far from spot",
+      "outcome": "untouched",
+      "touched": false
+    },
+    {
+      "strike": 730,
+      "reversal_prob": 48,
+      "side": "support",
+      "why": "0dte put wall at 731 adjacent; OI 100k+; charm +26k; GEX $124M; deep put-heavy floor",
       "outcome": "untouched",
       "touched": false
     },
     {
       "strike": 743,
-      "reversal_prob": 42,
+      "reversal_prob": 46,
       "side": "resistance",
-      "why": "GEX +$307.5M with massive +$287.3M session build; vanna +$426.6M; charm -$17.3B — interim wall between 740 and 745 if 740 breaks on heavy volume.",
+      "why": "GEX $307M rapidly building (+$287M delta); charm −17.7k; fills gap between 740 and 745 on a grind higher",
       "outcome": "untouched",
       "touched": false
     },
     {
-      "strike": 737.5,
-      "reversal_prob": 34,
+      "strike": 733,
+      "reversal_prob": 42,
       "side": "support",
-      "why": "Named zero_gamma and vol_trigger — structural regime line; price falling through here shifts dealer hedging and risks acceleration; actual strike OI tiny so probability moderate, but key gamma-flip level.",
+      "why": "GEX $224M; charm +18k; secondary gamma wall acting as mid-support between 735 and 730",
+      "outcome": "none",
+      "touched": false
+    },
+    {
+      "strike": 738,
+      "reversal_prob": 36,
+      "side": "support",
+      "why": "Zero-gamma / vol-trigger zone edge; GEX $140M; first near-spot pullback test before 735 engages",
       "outcome": "reversed",
       "touched": true,
       "touchedAt": "2026-06-18T09:30:00",
       "overshoot": 0.14,
       "clean": true
-    },
-    {
-      "strike": 725,
-      "reversal_prob": 34,
-      "side": "support",
-      "why": "93k+ combined OI; vanna +$854M building adds support with IV rising; GEX bleeding (-$51M build) weakens pin — outer structural support on a deep unwind, lower conviction than 728/730.",
-      "outcome": "untouched",
-      "touched": false
     }
   ]
 }

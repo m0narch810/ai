@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import cron from "node-cron";
-import { activeSession, config, nowInSessionTz, RTH_MIN, type SessionDef } from "./config.js";
+import { activeSession, config, isAiScoreTime, nowInSessionTz, RTH_MIN, type SessionDef } from "./config.js";
 import { captureTick, compactSnapshot, loadDaySnapshots } from "./capture.js";
 import { detectMany } from "./detect.js";
 import { fetchSessionBars, liveQqqEquivSpot } from "./market.js";
@@ -27,6 +27,15 @@ async function loadLatestBoard(date: string): Promise<Board | null> {
   try {
     const b = JSON.parse(await fs.readFile(path.join(config.paths.scored, "latest.json"), "utf8")) as Board;
     return b.as_of.startsWith(date) ? b : null; // ignore yesterday's board
+  } catch {
+    return null;
+  }
+}
+
+/** The most recent scored board regardless of date — what overnight holds onto. */
+async function loadLatestBoardAny(): Promise<Board | null> {
+  try {
+    return JSON.parse(await fs.readFile(path.join(config.paths.scored, "latest.json"), "utf8")) as Board;
   } catch {
     return null;
   }
@@ -101,13 +110,55 @@ async function scoreFromHistory(date: string, history: CaptureRecord[], session:
   return board;
 }
 
-/** Live tick: capture, then score for the active session. */
-async function liveTick(session: SessionDef) {
+/**
+ * Off-RTH refresh: keep the last RTH board's LEVELS (overnight = prior-close positioning,
+ * not re-scored), but still update the live spot and re-grade reversal outcomes on the
+ * current tape. No AI call. The board's as_of stays frozen so the dashboard honestly shows
+ * the levels as held-from-RTH, not freshly scored.
+ */
+async function refreshTick(session: SessionDef) {
+  const prior = await loadLatestBoardAny();
+  if (!prior?.levels?.length) {
+    console.log(`[${new Date().toISOString()}] [${session.name}] refresh skipped — no prior board to hold.`);
+    return;
+  }
+  const strikes = prior.levels.map((l) => l.strike);
+  const [detected, spot] = await Promise.all([
+    detectForSession(session, strikes),
+    effectiveSpot(session, prior.spot),
+  ]);
+  const board: Board = { ...prior, spot }; // hold as_of / regime / levels; only spot moves
+
+  // Grade overnight outcomes too, under the held board's as_of (for calibration history).
+  await fs.mkdir(config.paths.scored, { recursive: true });
+  await fs.appendFile(
+    path.join(config.paths.scored, `${prior.as_of.slice(0, 10)}.calibration.jsonl`),
+    JSON.stringify({ as_of: board.as_of, detected, refresh: true }) + "\n",
+    "utf8",
+  );
+  printBoard(board, session, spot);
+  try {
+    await publish(board, detected, session.name);
+  } catch (err) {
+    console.warn("publish failed (refresh):", err instanceof Error ? err.message : err);
+  }
+}
+
+/**
+ * One scheduled tick. During RTH (or a forced manual run) capture + AI-score; otherwise
+ * just refresh spot + reversal outcomes against the held board.
+ */
+async function liveTick(session: SessionDef, force = false) {
   const { date } = nowInSessionTz();
-  console.log(`[${new Date().toISOString()}] [${session.name}] capturing...`);
-  await captureTick();
-  const history = await loadDaySnapshots(date);
-  await scoreFromHistory(date, history, session);
+  if (force || isAiScoreTime()) {
+    console.log(`[${new Date().toISOString()}] [${session.name}] capture + AI score (RTH)...`);
+    await captureTick();
+    const history = await loadDaySnapshots(date);
+    await scoreFromHistory(date, history, session);
+  } else {
+    console.log(`[${new Date().toISOString()}] [${session.name}] off-RTH refresh — spot + reversals only...`);
+    await refreshTick(session);
+  }
 }
 
 async function fixtureRun() {
@@ -121,11 +172,11 @@ async function main() {
   const arg = process.argv[2];
 
   if (arg === "--fixture") return fixtureRun();
-  if (arg === "--once") return liveTick(activeSession() ?? US_SESSION);
+  if (arg === "--once") return liveTick(activeSession() ?? US_SESSION, true); // manual run always scores
 
-  // Scheduled mode — runs in both the US and Asia windows.
+  // Scheduled mode — runs in the US and Asia windows; AI-scores only during RTH.
   const expr = `*/${config.scoreIntervalMin} * * * *`;
-  console.log(`Scheduler armed: every ${config.scoreIntervalMin}m. US ${config.sessionStart}-${config.sessionEnd}, Asia ${config.asiaStart}-${config.asiaEnd} ${config.sessionTz}.`);
+  console.log(`Scheduler armed: every ${config.scoreIntervalMin}m. AI score ${config.aiScoreStart}-${config.aiScoreEnd} (RTH); off-RTH = spot+reversal refresh. Windows US ${config.sessionStart}-${config.sessionEnd}, Asia ${config.asiaStart}-${config.asiaEnd} ${config.sessionTz}.`);
   cron.schedule(expr, async () => {
     const session = activeSession();
     if (!session) return;
