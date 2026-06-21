@@ -3,11 +3,11 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#080a0f" />
+  <meta name="theme-color" content="#0d0b08" />
   <title>Mesa · QQQ</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -27,28 +27,44 @@
     </header>
 
     <section class="hero">
-      <div class="spotblock">
-        <span class="lbl">Spot</span>
-        <div class="spotrow">
-          <span class="spotnum" id="heroSpot">—</span>
-          <span class="spotchg" id="heroChg"></span>
+      <div class="hero-left">
+        <div class="spotblock">
+          <span class="lbl">Spot</span>
+          <div class="spotrow">
+            <span class="spotnum" id="heroSpot">—</span>
+            <span class="spotchg" id="heroChg"></span>
+          </div>
+          <span class="spotsrc muted" id="heroSrc"></span>
         </div>
-        <span class="spotsrc muted" id="heroSrc"></span>
+        <div class="metrics" id="heroMetrics"></div>
       </div>
-      <div class="metrics" id="heroMetrics"></div>
+      <div class="sparkline-wrap">
+        <canvas id="sparkline" class="sparkline" width="110" height="58"></canvas>
+        <span class="spark-range" id="sparkRange"></span>
+      </div>
     </section>
 
     <p class="read" id="heroRead" hidden></p>
 
     <div class="banner" id="banner" hidden></div>
 
+    <div class="level-map-wrap" id="levelMapWrap" hidden>
+      <div class="level-map-hdr">
+        <span class="level-map-title">Level Map</span>
+        <span class="spark-range" id="levelMapLabel"></span>
+      </div>
+      <svg id="levelMap" class="level-map"></svg>
+    </div>
+
     <section class="ladder" id="ladder" aria-label="Price levels">
+      <div class="section-label" id="ceilLabel">Ceilings</div>
       <div class="rungs" id="ceilings"></div>
       <div class="spotrail" id="spotrail" hidden>
         <span class="rail-line"></span>
         <span class="rail-tag" id="railTag"></span>
         <span class="rail-line"></span>
       </div>
+      <div class="section-label" id="floorLabel">Floors</div>
       <div class="rungs" id="floors"></div>
     </section>
 
