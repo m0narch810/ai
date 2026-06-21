@@ -766,19 +766,21 @@ function renderNarrative(n) {
   const otHead = el("div", `vv ${otTone}`.trim(), n.open_type_label || n.open_type);
   otHead.style.fontSize = "17px"; otHead.style.marginBottom = "6px";
   open.appendChild(otHead);
-  const line = (k, val) => {
-    if (val == null || val === "") return;
+  // Build nodes explicitly — never innerHTML (move_extent/completion_signal are LLM-sourced).
+  const line = (k, val, nodes) => {
+    if (!nodes && (val == null || val === "")) return;
     const r = el("div", "narr-line");
     r.appendChild(el("span", "nk", k));
     const nv = el("span", "nv");
-    nv.innerHTML = val;
+    if (nodes) for (const node of nodes) nv.appendChild(node);
+    else nv.textContent = String(val);
     r.appendChild(nv);
     open.appendChild(r);
   };
-  if (n.targeted_level != null) line("Targets", `<b>$${fmtPrice(n.targeted_level)}</b>`);
+  if (n.targeted_level != null) line("Targets", null, [el("b", null, `$${fmtPrice(n.targeted_level)}`)]);
   line("Extent", n.move_extent);
   line("Confirms done", n.completion_signal);
-  if (n.next_target != null) line("Then", `<b>$${fmtPrice(n.next_target)}</b>`);
+  if (n.next_target != null) line("Then", null, [el("b", null, `$${fmtPrice(n.next_target)}`)]);
   if (n.manipulation_tell) {
     const tell = el("div", "tell", n.manipulation_tell);
     open.appendChild(tell);
