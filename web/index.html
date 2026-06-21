@@ -3,55 +3,59 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#f7f4ee" />
-  <title>Torii · QQQ</title>
+  <meta name="theme-color" content="#e9e8e4" />
+  <title>TORII · QQQ</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Shippori+Mincho:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Share+Tech+Mono&family=Dela+Gothic+One&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
 
 <canvas id="bg" class="bg-canvas" aria-hidden="true"></canvas>
+<div class="scanlines" aria-hidden="true"></div>
 
 <main id="app">
 
+  <!-- ── HUD TICKER ── -->
+  <div class="hud-ticker" id="hudTicker"><span></span></div>
+
   <!-- ── HEADER ── -->
-  <header class="topbar">
+  <header class="topbar panel">
     <div class="brand">
       <span class="brand-jp">鳥居</span>
       <div class="brand-text">
-        <span class="brand-en">Torii</span>
-        <span class="brand-sub">QQQ · dealer positioning</span>
+        <span class="brand-en" data-text="TORII">TORII</span>
+        <span class="brand-sub">QQQ // DEALER POSITIONING</span>
       </div>
     </div>
     <div class="status">
       <span class="status-dot" id="statusDot"></span>
-      <span class="status-text" id="statusText">loading</span>
+      <span class="status-text" id="statusText">BOOT</span>
     </div>
   </header>
 
-  <!-- ── SPOT ── -->
-  <section class="spot-block">
-    <div class="spot-line">
-      <span class="spotnum" id="heroSpot">—</span>
-      <span class="spotchg" id="heroChg"></span>
-    </div>
-    <span class="spotsrc" id="heroSrc"></span>
-  </section>
+  <!-- ── TOP GRID: spot + metrics ── -->
+  <div class="topgrid">
 
-  <!-- ── SPARKLINE ── -->
-  <div class="spark-panel">
-    <canvas id="sparkline" class="sparkline"></canvas>
-    <span class="spark-range" id="sparkRange"></span>
+    <section class="spot-block panel" data-label="現値 / SPOT">
+      <div class="spot-line">
+        <span class="spotnum" id="heroSpot">—</span>
+        <span class="spotchg" id="heroChg"></span>
+      </div>
+      <span class="spotsrc" id="heroSrc"></span>
+      <div class="spark-panel">
+        <canvas id="sparkline" class="sparkline"></canvas>
+        <span class="spark-range" id="sparkRange"></span>
+      </div>
+    </section>
+
+    <section class="metrics panel" id="metricsRow" data-label="読込 / FLOW"></section>
+
   </div>
 
-  <!-- ── METRICS ── -->
-  <div class="metrics" id="metricsRow"></div>
-
   <!-- ── READ ── -->
-  <div class="read-line" id="readWrap" hidden>
-    <span class="read-kw"><i class="kw-jp">読み</i>Read</span>
+  <div class="read-line panel" id="readWrap" data-label="読み / READ" hidden>
     <p id="heroRead"></p>
   </div>
 
@@ -60,24 +64,24 @@
 
   <!-- ── CHARTS (desktop) ── -->
   <div class="charts-section" id="chartsSection">
-    <div class="chart-panel">
+    <div class="chart-panel panel" data-label="GEX">
       <div class="chart-hdr">
-        <span class="chart-title">GEX Profile</span>
-        <span class="chart-sub" id="gexChartSub">resistance · support</span>
+        <span class="chart-title">GEX PROFILE</span>
+        <span class="chart-sub" id="gexChartSub">抵抗 / 支持</span>
       </div>
       <svg id="gexChart" class="chart-svg" viewBox="0 0 400 150" preserveAspectRatio="none"></svg>
     </div>
-    <div class="chart-panel">
+    <div class="chart-panel panel" data-label="価格">
       <div class="chart-hdr">
-        <span class="chart-title">Price · VWAP</span>
-        <span class="chart-sub" id="candleChartSub">5-min</span>
+        <span class="chart-title">PRICE · VWAP</span>
+        <span class="chart-sub" id="candleChartSub">5-MIN</span>
       </div>
       <svg id="candleChart" class="chart-svg" viewBox="0 0 400 150" preserveAspectRatio="none"></svg>
     </div>
   </div>
 
   <!-- ── MOBILE LEVEL MAP ── -->
-  <div class="level-map-wrap" id="levelMapWrap" hidden>
+  <div class="level-map-wrap panel" id="levelMapWrap" data-label="経路 / MAP" hidden>
     <svg id="levelMap" class="level-map"></svg>
     <span class="level-map-label" id="levelMapLabel"></span>
   </div>
@@ -85,10 +89,10 @@
   <!-- ── LADDER ── -->
   <div class="ladder" id="ladderGrid" aria-label="Price levels">
 
-    <div class="lane res-lane">
+    <div class="lane res-lane panel" data-label="抵抗 / RES">
       <div class="lane-hdr">
         <span class="lane-jp">抵抗</span>
-        <span class="lane-en">Resistance</span>
+        <span class="lane-en">RESISTANCE</span>
         <span class="lane-count" id="ceilCount"></span>
       </div>
       <div class="rungs" id="ceilings"></div>
@@ -100,10 +104,10 @@
       <span class="rail-line"></span>
     </div>
 
-    <div class="lane sup-lane">
+    <div class="lane sup-lane panel" data-label="支持 / SUP">
       <div class="lane-hdr">
         <span class="lane-jp">支持</span>
-        <span class="lane-en">Support</span>
+        <span class="lane-en">SUPPORT</span>
         <span class="lane-count" id="floorCount"></span>
       </div>
       <div class="rungs" id="floors"></div>
@@ -115,7 +119,7 @@
 
   <footer class="foot">
     <span id="asOf"></span>
-    <button id="refresh" type="button" aria-label="Refresh">↻</button>
+    <button id="refresh" type="button" aria-label="Refresh">↻ SYNC</button>
   </footer>
 
 </main>

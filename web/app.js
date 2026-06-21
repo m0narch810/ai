@@ -7,13 +7,13 @@ const CANDLES_URL = "/.netlify/functions/altaris-candles";
 
 // ── palette (kept in sync with styles.css) ──
 const C = {
-  ink:  "#18130f",
-  ink2: "#6f665b",
-  ink3: "#aaa093",
-  line: "#e7e0d3",
-  line2:"#d6cdbd",
-  red:  "#bc002d",
-  paper:"#f7f4ee",
+  ink:  "#0a0a0a",
+  ink2: "#565450",
+  ink3: "#97948c",
+  line: "#cdcabf",
+  line2:"#b3afa2",
+  red:  "#e60026",
+  paper:"#e7e6e1",
 };
 
 const $ = (s) => document.querySelector(s);
@@ -35,7 +35,7 @@ function svgEl(tag, attrs) {
   return e;
 }
 
-// ── INK-WASH BACKGROUND ────────────────────────────────────────────────────────
+// ── CYBERPUNK BACKGROUND (grid · data-rain · particles · glitch) ────────────────
 function initBackground() {
   const canvas = $("#bg");
   if (!canvas) return;
@@ -43,14 +43,27 @@ function initBackground() {
   const ctx = canvas.getContext("2d");
   let W = 0, H = 0, dpr = 1;
 
-  // soft drifting ink blooms — a couple red, rest warm grey — on washi paper
-  const blobs = [
-    { hue: "188,0,45",   a: .05, r: .55, sx: .18, sy: .12, px: .22, py: .30, fx: .00007, fy: .00009 },
-    { hue: "188,0,45",   a: .035, r: .45, sx: .72, sy: .68, px: .14, py: .20, fx: .00005, fy: .00011 },
-    { hue: "70,60,50",   a: .05, r: .60, sx: .45, sy: .35, px: .26, py: .24, fx: .00009, fy: .00006 },
-    { hue: "70,60,50",   a: .04, r: .50, sx: .85, sy: .82, px: .18, py: .16, fx: .00006, fy: .00008 },
-    { hue: "150,120,90", a: .03, r: .42, sx: .10, sy: .85, px: .20, py: .18, fx: .00008, fy: .00005 },
-  ];
+  const GRID = 46;          // grid cell size (px)
+  let drops = [];           // vertical data-rain streams
+  let dust  = [];           // drifting particles
+  let glitches = [];        // transient red dashes
+
+  function seed() {
+    drops = Array.from({ length: Math.round(W / 70) }, () => ({
+      x: Math.random() * W,
+      y: Math.random() * H,
+      len: 60 + Math.random() * 160,
+      sp: 40 + Math.random() * 120,
+      red: Math.random() < 0.22,
+    }));
+    dust = Array.from({ length: 46 }, () => ({
+      x: Math.random() * W, y: Math.random() * H,
+      vx: (Math.random() - 0.5) * 8,
+      vy: (Math.random() - 0.5) * 8,
+      r: 0.6 + Math.random() * 1.4,
+      red: Math.random() < 0.18,
+    }));
+  }
 
   function resize() {
     dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -58,27 +71,78 @@ function initBackground() {
     canvas.width = W * dpr; canvas.height = H * dpr;
     canvas.style.width = W + "px"; canvas.style.height = H + "px";
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    seed();
   }
 
-  function frame(t) {
+  let last = performance.now();
+  function frame(now) {
+    const dt = Math.min((now - last) / 1000, 0.05); last = now;
     ctx.clearRect(0, 0, W, H);
-    const base = Math.max(W, H);
-    for (const b of blobs) {
-      const cx = (b.sx + Math.sin(t * b.fx) * b.px) * W;
-      const cy = (b.sy + Math.cos(t * b.fy) * b.py) * H;
-      const rad = b.r * base;
-      const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, rad);
-      g.addColorStop(0, `rgba(${b.hue},${b.a})`);
-      g.addColorStop(1, `rgba(${b.hue},0)`);
-      ctx.fillStyle = g;
-      ctx.fillRect(0, 0, W, H);
+
+    // drifting grid
+    const off = (now * 0.012) % GRID;
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = "rgba(10,10,10,0.045)";
+    ctx.beginPath();
+    for (let x = -off; x <= W; x += GRID) { ctx.moveTo(x, 0); ctx.lineTo(x, H); }
+    for (let y = -off; y <= H; y += GRID) { ctx.moveTo(0, y); ctx.lineTo(W, y); }
+    ctx.stroke();
+    // grid intersections (faint nodes)
+    ctx.fillStyle = "rgba(10,10,10,0.06)";
+    for (let x = -off; x <= W; x += GRID)
+      for (let y = -off; y <= H; y += GRID) ctx.fillRect(x - 0.5, y - 0.5, 1, 1);
+
+    // data-rain streams
+    for (const d of drops) {
+      d.y += d.sp * dt;
+      if (d.y - d.len > H) { d.y = -Math.random() * 120; d.x = Math.random() * W; }
+      const g = ctx.createLinearGradient(d.x, d.y - d.len, d.x, d.y);
+      const col = d.red ? "230,0,38" : "10,10,10";
+      g.addColorStop(0, `rgba(${col},0)`);
+      g.addColorStop(1, `rgba(${col},${d.red ? 0.16 : 0.07})`);
+      ctx.strokeStyle = g;
+      ctx.lineWidth = d.red ? 1.4 : 1;
+      ctx.beginPath();
+      ctx.moveTo(d.x, d.y - d.len);
+      ctx.lineTo(d.x, d.y);
+      ctx.stroke();
     }
+
+    // particles
+    for (const p of dust) {
+      p.x += p.vx * dt; p.y += p.vy * dt;
+      if (p.x < 0) p.x = W; if (p.x > W) p.x = 0;
+      if (p.y < 0) p.y = H; if (p.y > H) p.y = 0;
+      ctx.fillStyle = p.red ? "rgba(230,0,38,0.35)" : "rgba(10,10,10,0.18)";
+      ctx.fillRect(p.x, p.y, p.r, p.r);
+    }
+
+    // occasional glitch dashes
+    if (Math.random() < 0.04) {
+      glitches.push({ x: Math.random() * W, y: Math.random() * H, w: 30 + Math.random() * 120, life: 1 });
+    }
+    glitches = glitches.filter(g => (g.life -= dt * 4) > 0);
+    for (const g of glitches) {
+      ctx.fillStyle = `rgba(230,0,38,${0.5 * g.life})`;
+      ctx.fillRect(g.x, g.y, g.w, 2);
+      ctx.fillStyle = `rgba(0,179,179,${0.4 * g.life})`;
+      ctx.fillRect(g.x + 3, g.y + 3, g.w * 0.6, 1);
+    }
+
     requestAnimationFrame(frame);
   }
 
   resize();
   window.addEventListener("resize", resize);
   requestAnimationFrame(frame);
+}
+
+// ── HUD ticker text ─────────────────────────────────────────────────────────────
+function setTicker() {
+  const t = $("#hudTicker span");
+  if (!t) return;
+  const line = "TORII // QQQ DEALER POSITIONING ENGINE  ◇  MNQ EXECUTION  ◇  LIMIT ORDERS AT LEVELS  ◇  抵抗 / 支持  ◇  SYS NOMINAL  ◇  ";
+  t.textContent = line.repeat(2);
 }
 
 // ── sparkline ────────────────────────────────────────────────────────────────
@@ -117,8 +181,8 @@ function drawSparkline() {
   ctx.lineTo(px(0), H);
   ctx.closePath();
   const grad = ctx.createLinearGradient(0, 0, 0, H);
-  grad.addColorStop(0, "rgba(188,0,45,.10)");
-  grad.addColorStop(1, "rgba(188,0,45,0)");
+  grad.addColorStop(0, "rgba(230,0,38,.12)");
+  grad.addColorStop(1, "rgba(230,0,38,0)");
   ctx.fillStyle = grad;
   ctx.fill();
 
@@ -176,7 +240,7 @@ function renderGexChart(gexProfile, spot) {
     }
   }
 
-  const axLbl = svgEl("text", { x: ML - 3, y: midY + 3.5, "text-anchor": "end", fill: C.ink3, "font-family": "Inter,sans-serif", "font-size": 8 });
+  const axLbl = svgEl("text", { x: ML - 3, y: midY + 3.5, "text-anchor": "end", fill: C.ink3, "font-family": "Share Tech Mono,monospace", "font-size": 8 });
   axLbl.textContent = "0";
   svg.appendChild(axLbl);
 }
@@ -245,7 +309,7 @@ function renderCandleChart(candles) {
     const v = lo + (prange * i) / 4;
     const y = py(v);
     svg.appendChild(svgEl("line", { x1: ML, y1: y, x2: W - MR, y2: y, stroke: C.line, "stroke-width": 0.5 }));
-    const lbl = svgEl("text", { x: ML - 3, y: y + 3.5, "text-anchor": "end", fill: C.ink3, "font-family": "Inter,sans-serif", "font-size": 8 });
+    const lbl = svgEl("text", { x: ML - 3, y: y + 3.5, "text-anchor": "end", fill: C.ink3, "font-family": "Share Tech Mono,monospace", "font-size": 8 });
     lbl.textContent = v.toFixed(1);
     svg.appendChild(lbl);
   }
@@ -281,7 +345,7 @@ function renderLevelMap(data, spot) {
     const y1 = isRes ? H / 2 - tkH : H / 2;
     const y2 = isRes ? H / 2 : H / 2 + tkH;
     svg.appendChild(svgEl("rect", { x: x - 1.5, y: y1, width: 3, height: y2 - y1, fill: col, opacity: 0.28 + prob * 0.6 }));
-    const lbl = svgEl("text", { x, y: isRes ? y1 - 3 : y2 + 8, "text-anchor": "middle", "font-family": "Inter,sans-serif", "font-size": 7, fill: col });
+    const lbl = svgEl("text", { x, y: isRes ? y1 - 3 : y2 + 8, "text-anchor": "middle", "font-family": "Share Tech Mono,monospace", "font-size": 7, fill: col });
     lbl.textContent = l.strike % 1 === 0 ? String(l.strike) : l.strike.toFixed(1);
     svg.appendChild(lbl);
   }
@@ -289,7 +353,7 @@ function renderLevelMap(data, spot) {
   if (typeof spot === "number") {
     const sx = ML + ((spot - pLo) / range) * (W - ML - MR);
     svg.appendChild(svgEl("line", { x1: sx, y1: 4, x2: sx, y2: H - 4, stroke: C.red, "stroke-width": 1.5, "stroke-dasharray": "3 2" }));
-    const sLbl = svgEl("text", { x: sx, y: H - 1, "text-anchor": "middle", "font-family": "Inter,sans-serif", "font-size": 7, fill: C.red, "font-weight": 600 });
+    const sLbl = svgEl("text", { x: sx, y: H - 1, "text-anchor": "middle", "font-family": "Share Tech Mono,monospace", "font-size": 7, fill: C.red, "font-weight": 600 });
     sLbl.textContent = spot.toFixed(2);
     svg.appendChild(sLbl);
   }
@@ -588,6 +652,7 @@ async function loadSpot() {
 
 // ── init ──────────────────────────────────────────────────────────────────────
 initBackground();
+setTicker();
 $("#refresh").addEventListener("click", () => { load(); loadSpot(); loadCandles(); });
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden) { load(); loadSpot(); loadCandles(); }
