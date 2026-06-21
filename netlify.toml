@@ -15,3 +15,19 @@
   for = "/dashboard.json"
   [headers.values]
     Cache-Control = "no-store, max-age=0"
+
+# The shell + assets must revalidate every load, or a redeploy shows the OLD UI
+# (browser keeps the cached styles.css/app.js). no-cache = use cache only after a
+# 304, so deploys appear immediately without bumping ?v= by hand.
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "no-cache"
+[[headers]]
+  for = "/styles.css"
+  [headers.values]
+    Cache-Control = "no-cache"
+[[headers]]
+  for = "/app.js"
+  [headers.values]
+    Cache-Control = "no-cache"
