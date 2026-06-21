@@ -37,6 +37,8 @@ export interface DashboardData {
   iv?: { current: number; direction: string };
   expected_move?: number;
   scoring_method?: "ai" | "rule";
+  /** Near-spot GEX distribution for the dashboard GEX bar chart. */
+  gex_profile?: { strike: number; gex_m: number }[];
   levels: DashboardLevel[];
 }
 
@@ -72,6 +74,7 @@ export function buildDashboard(board: Board, detected: DetectedLevel[], session?
     iv: board.iv,
     expected_move: board.expected_move,
     scoring_method: board.scoring_method,
+    gex_profile: board.gex_profile,
     levels: board.levels.map((l) => ({ ...l, ...outcomeFor(l.strike, l.side, detected) })),
   };
 }

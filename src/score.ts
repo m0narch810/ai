@@ -110,6 +110,14 @@ const strikesNear = (snap: DataSnapshot, spot: number) => {
     .sort((a, b) => a - b);
 };
 
+/** Build near-spot GEX distribution for the dashboard chart (GEX in $M per strike). */
+function buildGexProfile(snap: DataSnapshot, spot: number): { strike: number; gex_m: number }[] {
+  return strikesNear(snap, spot).map((k) => ({
+    strike: k,
+    gex_m: Math.round(((snap.gex_bar[k.toFixed(1)] ?? 0) / 1e6) * 10) / 10,
+  }));
+}
+
 /** Per-strike near-spot rows with deltas vs the oldest snapshot in the lookback window. */
 function buildStrikeRows(history: CaptureRecord[], spot: number) {
   const cur = history[history.length - 1]!.data;
@@ -262,6 +270,7 @@ export async function scoreBoard(
   board.iv = iv ? { current: iv.current_iv, direction: iv.direction } : undefined;
   board.expected_move = cur.expected_move;
   board.levels = (board.levels ?? []).sort((a, b) => b.reversal_prob - a.reversal_prob);
+  board.gex_profile = buildGexProfile(cur, spot);
   return board;
 }
 
@@ -428,5 +437,6 @@ export async function scoreBoardDeterministic(
     iv: iv ? { current: iv.current_iv, direction: iv.direction } : undefined,
     expected_move: cur.expected_move,
     scoring_method: "rule",
+    gex_profile: buildGexProfile(cur, spot),
   };
 }

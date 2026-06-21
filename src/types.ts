@@ -168,6 +168,8 @@ export interface Board {
   expected_move?: number;
   /** How this board was scored: "ai" = Claude, "rule" = deterministic fallback. */
   scoring_method?: "ai" | "rule";
+  /** Near-spot GEX distribution for the dashboard GEX chart. */
+  gex_profile?: { strike: number; gex_m: number }[];
 }
 
 /** Detector outcome for a level over the day's spot path. */
