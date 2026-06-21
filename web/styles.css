@@ -30,14 +30,17 @@ html, body {
 body { overflow-x: hidden; min-height: 100vh; }
 
 /* ── BACKGROUND ── */
+/* z-index:0 (not -1): a negative-z canvas is painted UNDER the body's own
+   background, which is opaque here, so it would never show. 0 keeps it above
+   the body bg; #app sits above the canvas via z-index:1. */
 .bg-canvas {
   position: fixed; inset: 0;
   width: 100%; height: 100%;
-  z-index: -1; pointer-events: none;
+  z-index: 0; pointer-events: none;
 }
 
 /* ── APP ── */
-#app { max-width: 1000px; margin: 0 auto; padding: 0 18px 64px; }
+#app { position: relative; z-index: 1; max-width: 1000px; margin: 0 auto; padding: 0 18px 64px; }
 
 /* entrance */
 @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
