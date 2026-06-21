@@ -281,6 +281,72 @@ export interface Narrative {
   macro?: MacroSnapshot;
 }
 
+// ── Market regime (topology + GARCH + dealer-gamma) ──────────────────────────────
+
+/** A topologically-persistent pivot (0-dim persistent homology of the price path). */
+export interface RegimePivot {
+  price: number;
+  side: Side;
+  /** Topographic prominence in QQQ points = persistence of the feature (robustness). */
+  persistence: number;
+  /** True when a scored board level sits on this pivot (structure × flow confluence). */
+  confluence?: boolean;
+}
+
+/** One labelled gauge for the Regime tab (reuses the prob-track meter visual). */
+export interface RegimeGauge {
+  label: string;
+  value: string;
+  /** 0-100 fill for the meter bar. */
+  pct: number;
+  tone?: "blue" | "amber" | "green" | "red" | "";
+}
+
+/**
+ * The always-updating market-regime read. Computed every tick from the price path
+ * (no AI call), so it refreshes overnight too. Combines:
+ *  - GARCH(1,1) conditional volatility (expanding vs contracting),
+ *  - 0-dim persistent homology of the close series (structural pivots + dispersion),
+ *  - Kaufman efficiency ratio + Hurst exponent (trend vs mean-reversion),
+ *  - the dealer-gamma regime from the options snapshot (amplifying vs suppressing).
+ */
+export interface Regime {
+  as_of: string;
+  generated_at: string;
+  scored_at: number;
+  spot: number;
+  /** Headline label, e.g. "RANGE · PINNED", "TREND · UNPINNED". */
+  state: string;
+  /** One plain-English line on how to trade it — no jargon. */
+  read: string;
+  bias: "up" | "down" | "neutral";
+  /** 0-100 agreement across the axes. */
+  confidence: number;
+  vol: {
+    /** Annualized GARCH conditional vol (%), next bar. */
+    ann: number;
+    /** Annualized long-run (unconditional) vol (%). */
+    longRun: number;
+    trend: "expanding" | "contracting" | "steady";
+    level: "low" | "normal" | "elevated" | "high";
+    /** GARCH persistence α+β — how sticky vol shocks are (0-1). */
+    persistence: number;
+  };
+  trend: {
+    /** Kaufman efficiency ratio 0-1 (1 = pure trend, 0 = pure chop). */
+    er: number;
+    /** Hurst exponent (>0.5 trending/persistent, <0.5 mean-reverting). */
+    hurst: number;
+    direction: "up" | "down" | "flat";
+  };
+  gamma: { regime: string; note: string };
+  gauges: RegimeGauge[];
+  /** Topological support + resistance pivots, persistence-ranked. */
+  pivots: RegimePivot[];
+  method: "topology+garch";
+  notes?: string[];
+}
+
 /** Detector outcome for a level over the day's spot path. */
 export type ReversalOutcome = "reversed" | "broke" | "pending" | "untouched";
 

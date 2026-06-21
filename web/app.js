@@ -798,7 +798,6 @@ function renderNarrative(n) {
     hero.querySelector(".narr-empty").innerHTML =
       'No narrative yet. It generates automatically before the open (≈09:00 ET), or run <code>npm run narrative</code>.';
     for (const id of ["#narrOpen", "#narrMacro", "#narrZones"]) $(id).replaceChildren();
-    $("#narrSummaryWrap").hidden = true;
     $("#narrFeedWrap").hidden = true;
     return;
   }
@@ -885,10 +884,6 @@ function renderNarrative(n) {
     zones.appendChild(row);
   }
 
-  // summary
-  if (n.summary) { $("#narrSummaryWrap").hidden = false; $("#narrSummary").textContent = n.summary; }
-  else $("#narrSummaryWrap").hidden = true;
-
   // macro feed (raw readings)
   const feedWrap = $("#narrFeedWrap"), feed = $("#narrFeed");
   feed.replaceChildren();
@@ -934,13 +929,98 @@ async function loadNarrative() {
   }
 }
 
+// ── regime tab ──────────────────────────────────────────────────────────────────
+let regData = null;
+const REGIME_URL = "regime.json";
+
+function regAgo(r) {
+  const t = typeof r?.scored_at === "number" ? r.scored_at : Date.parse(r?.generated_at ?? "");
+  return agoMs(t);
+}
+
+function renderRegime(r) {
+  const hero = $("#regHero");
+  if (!r || !r.state) {
+    hero.replaceChildren(el("div", "narr-empty", "No regime yet — run a capture to compute it."));
+    for (const id of ["#regGauges", "#regPivots"]) $(id).replaceChildren();
+    $("#regRead").textContent = "";
+    return;
+  }
+
+  // hero: state · bias · confidence
+  hero.replaceChildren();
+  const v = el("div", "verdict");
+  const cell = (k, val, cls, sub) => {
+    const c = el("div", "verdict-cell");
+    c.appendChild(el("span", "vk", k));
+    c.appendChild(el("div", `vv ${cls}`.trim(), val));
+    if (sub) c.appendChild(el("div", "vsub", sub));
+    return c;
+  };
+  const biasTone = r.bias === "up" ? "up bull" : r.bias === "down" ? "down bear" : "";
+  v.appendChild(cell("Regime", r.state, "reg-state", `scored ${regAgo(r)}`));
+  v.appendChild(cell("Bias", r.bias.toUpperCase(), biasTone, r.trend?.direction ? `tape ${r.trend.direction}` : ""));
+  v.appendChild(cell("Confidence", `${r.confidence}%`, "", "axis agreement"));
+  hero.appendChild(v);
+
+  $("#regRead").textContent = r.read || "";
+
+  // gauges — labelled meter bars
+  const gw = $("#regGauges");
+  gw.replaceChildren();
+  for (const g of (Array.isArray(r.gauges) ? r.gauges : [])) {
+    const row = el("div", "gauge");
+    const head = el("div", "gauge-head");
+    head.appendChild(el("span", "gk", g.label));
+    head.appendChild(el("span", `gv ${g.tone || ""}`.trim(), g.value));
+    row.appendChild(head);
+    const track = el("div", "prob-track");
+    const fill = el("span");
+    fill.dataset.tone = g.tone || "";
+    track.appendChild(fill);
+    row.appendChild(track);
+    gw.appendChild(row);
+    requestAnimationFrame(() => setTimeout(() => (fill.style.width = `${clamp(g.pct, 0, 100)}%`), 120));
+  }
+
+  // topology pivots — reuse the zone row visual
+  const pw = $("#regPivots");
+  pw.replaceChildren();
+  const pivots = Array.isArray(r.pivots) ? r.pivots : [];
+  if (!pivots.length) pw.appendChild(el("div", "narr-empty", "No persistent pivots in range."));
+  for (const p of pivots) {
+    const row = el("div", `zone ${p.side === "resistance" ? "resistance" : "support"}`);
+    row.appendChild(el("span", "zone-tick"));
+    row.appendChild(el("span", "zone-price", `$${fmtPrice(p.price)}`));
+    row.appendChild(el("span", "zone-side", p.side === "resistance" ? "抵抗 RES" : "支持 SUP"));
+    const note = el("span", "zone-note");
+    note.appendChild(el("span", "pivot-persist", `persistence ${fmtPrice(p.persistence)} pt`));
+    if (p.confluence) note.appendChild(el("span", "pivot-confl", "● board level"));
+    row.appendChild(note);
+    pw.appendChild(row);
+  }
+}
+
+async function loadRegime() {
+  try {
+    const res = await fetch(`${REGIME_URL}?t=${Date.now()}`, { cache: "no-store" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    regData = await res.json();
+    renderRegime(regData);
+  } catch {
+    renderRegime(null);
+  }
+}
+
 // ── tabs ──────────────────────────────────────────────────────────────────────
 function setView(view) {
   $("#viewBoard").hidden     = view !== "board";
+  $("#viewRegime").hidden    = view !== "regime";
   $("#viewNarrative").hidden = view !== "narrative";
   for (const t of document.querySelectorAll(".tab")) t.classList.toggle("active", t.dataset.view === view);
   try { localStorage.setItem("torii.view", view); } catch { /* ignore */ }
   if (view === "narrative") loadNarrative();
+  if (view === "regime")    loadRegime();
 }
 for (const t of document.querySelectorAll(".tab")) {
   t.addEventListener("click", () => setView(t.dataset.view));
@@ -973,9 +1053,9 @@ $("#themeToggle")?.addEventListener("click", () => {
 initBackground();
 tickClock(); tickOpenCountdown();
 setInterval(() => { tickClock(); tickOpenCountdown(); }, 1000);
-$("#refresh").addEventListener("click", () => { load(); loadSpot(); loadCandles(); loadNarrative(); });
+$("#refresh").addEventListener("click", () => { load(); loadSpot(); loadCandles(); loadNarrative(); loadRegime(); });
 document.addEventListener("visibilitychange", () => {
-  if (!document.hidden) { load(); loadSpot(); loadCandles(); loadNarrative(); }
+  if (!document.hidden) { load(); loadSpot(); loadCandles(); loadNarrative(); loadRegime(); }
 });
 
 let startView = "board";
@@ -986,7 +1066,9 @@ load();
 loadSpot();
 loadCandles();
 loadNarrative();
+loadRegime();
 setInterval(load,         POLL_MS);
 setInterval(loadSpot,     SPOT_MS);
 setInterval(loadCandles,  CANDLE_MS);
 setInterval(loadNarrative, NARR_MS);
+setInterval(loadRegime,   NARR_MS);

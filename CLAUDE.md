@@ -19,6 +19,7 @@ the output is a ranked set of strikes to rest limit orders at, not real-time sig
 
 ```bash
 npm run capture        # one full capture → detect → score → publish cycle, now
+npm run narrative      # one pre-open narrative pass (macro bias × open-type) → web/narrative.json
 npm start              # scheduled loop: every SCORE_INTERVAL_MIN during US + Asia windows
 npm run score:fixture  # score the bundled fixtures/ offline (no Altaris call) — smoke test
 npm run verify         # confirm the Altaris cookie is live + the detector runs (no scoring)
@@ -74,6 +75,28 @@ One cycle is orchestrated in `src/run.ts` (`scoreFromHistory`) and chains four s
    Netlify. The `--functions` flag is required in the deploy command or the live-spot function
    won't deploy.
 
+## Two side-passes off the same capture (also in `src/run.ts`)
+
+Both write their own JSON next to `dashboard.json` and ship on the next deploy; the web/ tabs
+poll them independently.
+
+- **Pre-open narrative** (`src/narrative.ts` ← `src/macro.ts`) — `npm run narrative`, or the
+  weekday `config.narrativeTime` (09:00 ET) cron. The dxrk *macro-bias × open-type* call: pulls
+  macro (yields, TGA/RRP liquidity, COT crowding, cross-asset basket, GDELT headlines, and —
+  gated by `narrativeWebSearch` — live WebSearch) and combines it through Claude into
+  `web/narrative.json` (Narrative tab). It **tilts the per-tick board scoring** via
+  `dayContextFromNarrative` (run.ts loads today's narrative and feeds it to `scoreBoard`).
+
+- **Market regime** (`src/regime.ts`) — recomputed on **every** tick, both the RTH score path
+  and the off-RTH refresh path, by `updateRegime()` in run.ts → `web/regime.json` (Regime tab).
+  Pure builder (mirrors `dashboard.ts`), **no AI and no Altaris** — bars come from
+  `market.ts` `fetchRegimeBars` (NQ=F 15-min × 10d → QQQ-equiv, so it updates overnight too).
+  Four classical, non-overfit pillars: GARCH(1,1) variance-targeted MLE (conditional vol,
+  expanding/contracting), 0-dim persistent homology via topographic prominence (support/
+  resistance pivots, flagged `confluence` when within 0.6pt of a scored board strike), Kaufman
+  efficiency ratio + Hurst (trend vs mean-reversion), and the dealer-gamma regime from the
+  snapshot. Best-effort: a Yahoo failure logs and is swallowed — it never blocks the board publish.
+
 ## Scheduler
 
 The live scoring loop runs as a **Windows Scheduled Task named `AltarisLevels`** (registered via
@@ -104,13 +127,25 @@ don't read `snapshot.spot` directly in Asia.
 ## Dashboard / hosting (hybrid model — settled)
 
 Scoring stays local on Max (free); boards auto-publish to `web/` (vanilla HTML/CSS/JS, polls
-`dashboard.json`). Live spot is served by a **Netlify serverless function**
-(`netlify/functions/spot.mjs`) that fetches from Yahoo server-side — the spot line stays live
-even when the scoring box is off. View on LAN (`npm run web`) or at the linked Netlify site
-(`PUBLISH_TARGET=netlify`, site: `aaravaltai`). **Do not re-pitch the cloud-native/API-key path**
-— it was considered and rejected on cost.
+`dashboard.json`). View on LAN (`npm run web`) or at the linked Netlify site
+(`PUBLISH_TARGET=netlify`, live at **`torii-ai.netlify.app`**). **Do not re-pitch the
+cloud-native/API-key path** — it was considered and rejected on cost.
 
-## Dashboard data fields (key additions this session)
+Three Netlify functions (`netlify/functions/`, bundled with each deploy) do the cloud-side work
+so the site keeps working when the scoring box is off:
+
+- **`spot.mjs`** — live spot from Yahoo server-side (Yahoo blocks browser CORS). Mirrors
+  `market.ts` session logic (QQQ in US; NQ→QQQ-equiv in Asia). The spot line stays live.
+- **`altaris-candles.mjs`** — the candle/VWAP feed for the board chart.
+- **`watchdog.mjs`** — a **scheduled** function (cron `*/15 * * * *` in `netlify.toml`
+  `[functions."watchdog"]`). During 09:50–16:00 ET Mon–Fri it reads the deployed
+  `dashboard.json`; if it hasn't scored in `WATCHDOG_STALE_MIN` (default 35) it pushes a phone
+  alert via **ntfy** (topic in env `NTFY_TOPIC`). State is held in **Netlify Blobs**
+  (`@netlify/blobs`) so it fires once on stall and once on recovery, not every tick. It lives in
+  the cloud on purpose — an in-loop alert can't fire if the PC/loop is dead. Off-hours staleness
+  is expected (board held), so it only watches RTH.
+
+## Dashboard data fields (the non-obvious ones)
 
 - `scored_at`: epoch ms — use for staleness, not `as_of` (ET wall-clock, breaks in non-ET browsers)
 - `read`: one-line plain-English directional call — no jargon
@@ -127,6 +162,12 @@ even when the scoring box is off. View on LAN (`npm run web`) or at the linked N
 - **Windows:** `netlify` is a `.cmd` shim — spawn with `shell: true` (handled in `publish.ts`).
 - **Netlify deploy must include `--functions netlify/functions`** or the live-spot function won't
   deploy. Both `[functions]` in `netlify.toml` and the flag in `publish.ts` are required.
+- **`nqToQqqRatio` uses a 96h lookback** (not 36h): over a weekend the most recent overlapping
+  QQQ+NQ minute can be 50h+ back, so a short window finds no overlap and throws. Don't shrink it.
+- **Watchdog needs `NTFY_TOPIC` set in the Netlify env** (not `.env` — it runs in the cloud).
+  Tunables: `WATCHDOG_STALE_MIN`, `NTFY_SERVER`. The scheduled function is invoked by cron, not HTTP.
+- **Regime recomputes every tick, incl. off-RTH** — it has no AI cost; if it stops updating while
+  the board does, look at `fetchRegimeBars`/Yahoo, not the scorer.
 - **`[hidden]` in CSS:** always keep `[hidden] { display: none !important }` before any
   `display: flex/grid` rules — flex display overrides the hidden attribute otherwise.
 - After CSS/JS changes: `npm run publish` re-deploys without re-scoring.

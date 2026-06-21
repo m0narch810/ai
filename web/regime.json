@@ -1,0 +1,109 @@
+{
+  "as_of": "2026-06-21T15:48:23",
+  "generated_at": "2026-06-21T19:48:23.438Z",
+  "scored_at": 1782071303438,
+  "spot": 739.8,
+  "state": "RANGE · PINNED",
+  "read": "Positive dealer gamma is suppressing the range and vol is compressed — fade the edges. Rest limit orders at the persistent pivots; breakouts tend to fail.",
+  "bias": "up",
+  "confidence": 68,
+  "vol": {
+    "ann": 19.7,
+    "longRun": 25.9,
+    "trend": "contracting",
+    "level": "normal",
+    "persistence": 0.764
+  },
+  "trend": {
+    "er": 0.152,
+    "hurst": 0.576,
+    "direction": "up"
+  },
+  "gamma": {
+    "regime": "positive",
+    "note": "suppresses moves (mean-revert)"
+  },
+  "gauges": [
+    {
+      "label": "Vol · GARCH",
+      "value": "20% ann · contracting",
+      "pct": 49.36084438370938,
+      "tone": "blue"
+    },
+    {
+      "label": "Trend · ER",
+      "value": "0.15 · range",
+      "pct": 15.238322590912507,
+      "tone": "blue"
+    },
+    {
+      "label": "Persistence · Hurst",
+      "value": "0.58 · trending",
+      "pct": 57.55537101192193,
+      "tone": "green"
+    },
+    {
+      "label": "Dealer Gamma",
+      "value": "Positive · suppressing",
+      "pct": 30,
+      "tone": "blue"
+    },
+    {
+      "label": "Vol Shock Memory",
+      "value": "α+β 0.76 · fast decay",
+      "pct": 76.4,
+      "tone": ""
+    }
+  ],
+  "pivots": [
+    {
+      "price": 746.2,
+      "side": "resistance",
+      "persistence": 24.07,
+      "confluence": false
+    },
+    {
+      "price": 722.13,
+      "side": "support",
+      "persistence": 18.96,
+      "confluence": false
+    },
+    {
+      "price": 714.51,
+      "side": "resistance",
+      "persistence": 8.79,
+      "confluence": false
+    },
+    {
+      "price": 705.72,
+      "side": "support",
+      "persistence": 8.79,
+      "confluence": false
+    },
+    {
+      "price": 716.95,
+      "side": "resistance",
+      "persistence": 7.36,
+      "confluence": false
+    },
+    {
+      "price": 709.59,
+      "side": "support",
+      "persistence": 7.36,
+      "confluence": false
+    },
+    {
+      "price": 736.96,
+      "side": "resistance",
+      "persistence": 6.63,
+      "confluence": false
+    },
+    {
+      "price": 730.33,
+      "side": "support",
+      "persistence": 6.63,
+      "confluence": true
+    }
+  ],
+  "method": "topology+garch"
+}

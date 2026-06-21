@@ -45,7 +45,9 @@ async function fetchRaw(symbol: string, lookbackHours: number): Promise<RawBar[]
  * both QQQ and NQ have a print — i.e. the most recent US-hours overlap. QQQ-equiv = NQ / ratio.
  */
 export async function nqToQqqRatio(): Promise<number> {
-  const [qqq, nq] = await Promise.all([fetchRaw("QQQ", 36), fetchRaw("NQ=F", 36)]);
+  // 96h, not 36h: over a weekend (or any multi-day market gap) the most recent overlapping
+  // QQQ+NQ minute can be 50h+ back (Fri RTH seen from Sun), so a 36h window finds no overlap.
+  const [qqq, nq] = await Promise.all([fetchRaw("QQQ", 96), fetchRaw("NQ=F", 96)]);
   const bucket = (d: Date) => Math.floor(d.getTime() / 60000);
   const qmap = new Map<number, number>();
   for (const r of qqq) qmap.set(bucket(r.date), r.close);
@@ -65,6 +67,41 @@ export async function liveQqqEquivSpot(): Promise<number> {
   const last = nq[nq.length - 1];
   if (!last) throw new Error("No recent NQ bars.");
   return last.close / ratio;
+}
+
+/**
+ * Longer, coarser bar series for regime stats (GARCH / topology / Hurst). Always built from
+ * NQ=F (≈24h futures coverage, converted to QQQ-equiv) so the regime keeps updating overnight,
+ * not just during RTH. ~10 trading days of 15-min bars ≈ a few hundred samples — enough for a
+ * stable GARCH fit without drowning the recent structure.
+ */
+export async function fetchRegimeBars(): Promise<Bar[]> {
+  const now = new Date();
+  const start = new Date(now.getTime() - 10 * 24 * 3600 * 1000);
+  const [res, ratio] = await Promise.all([
+    yf.chart("NQ=F", { period1: start, period2: now, interval: "15m" as "1m" }),
+    nqToQqqRatio(),
+  ]);
+  return res.quotes
+    .filter((r) => r.high != null && r.low != null && r.open != null && r.close != null)
+    .map((r) => ({
+      ts: etIso(r.date),
+      open: r.open! / ratio, high: r.high! / ratio, low: r.low! / ratio, close: r.close! / ratio,
+      volume: r.volume ?? 0,
+    }));
+}
+
+/** Median minutes between consecutive bars — used to annualize GARCH/realized vol honestly. */
+export function medianBarMinutes(bars: Bar[]): number {
+  const gaps: number[] = [];
+  for (let i = 1; i < bars.length; i++) {
+    const a = Date.parse(bars[i - 1]!.ts), b = Date.parse(bars[i]!.ts);
+    const dt = (b - a) / 60000;
+    if (dt > 0 && dt < 24 * 60) gaps.push(dt);
+  }
+  if (!gaps.length) return 15;
+  gaps.sort((a, b) => a - b);
+  return gaps[Math.floor(gaps.length / 2)]!;
 }
 
 /**

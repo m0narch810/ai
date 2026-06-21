@@ -10,6 +10,12 @@
   directory = "netlify/functions"
   node_bundler = "esbuild"
 
+# Cloud watchdog: every 15 min it reads dashboard.json and pushes an ntfy alert if the board
+# has gone stale during market hours (catches PC-off / loop-crash / publish-stuck). The function
+# self-gates to the 09:50–16:00 ET window, so off-hours runs are cheap no-ops. See watchdog.mjs.
+[functions."watchdog"]
+  schedule = "*/15 * * * *"
+
 # The board JSON must never be cached by the CDN, or the phone shows a stale board.
 [[headers]]
   for = "/dashboard.json"

@@ -1,90 +1,265 @@
 {
-  "as_of": "2026-06-19T14:02:54",
-  "scored_at": 1781892500969,
-  "generated_at": "2026-06-21T15:37:36.360Z",
+  "as_of": "2026-06-21T15:42:49",
+  "scored_at": 1782071303212,
+  "generated_at": "2026-06-21T19:57:23.366Z",
   "session": null,
-  "spot": 729.585,
-  "regime": "negative",
-  "read": "Spot sitting just below the $730 zero-gamma ceiling with the $720 major put wall as the primary structural floor — expect a 720-730 range, with $715 the 0DTE backstop if 720 fails.",
+  "spot": 739.8,
+  "regime": "positive",
+  "read": "Spot (739.8) trapped between 750 call-wall resistance and 730 put-floor support; 742 is the confirmed intraday ceiling (rejected with -6.1M delta) — 18 minutes to OPEX close with price most likely pinning near 740 into the bell.",
   "hard_stop_pts": 0.48,
   "clean_reversal_pts": 0.1,
-  "expected_move": 14.86,
+  "iv": {
+    "current": 14.54,
+    "direction": "STABLE"
+  },
+  "expected_move": 6.82,
+  "scoring_method": "ai",
+  "gex_profile": [
+    {
+      "strike": 722,
+      "gex_m": -34.4
+    },
+    {
+      "strike": 722.5,
+      "gex_m": 1.2
+    },
+    {
+      "strike": 723,
+      "gex_m": 3.1
+    },
+    {
+      "strike": 724,
+      "gex_m": -49.8
+    },
+    {
+      "strike": 725,
+      "gex_m": -73.2
+    },
+    {
+      "strike": 726,
+      "gex_m": -95.2
+    },
+    {
+      "strike": 727,
+      "gex_m": 5.5
+    },
+    {
+      "strike": 727.5,
+      "gex_m": -0.1
+    },
+    {
+      "strike": 728,
+      "gex_m": -126.9
+    },
+    {
+      "strike": 729,
+      "gex_m": 2.2
+    },
+    {
+      "strike": 730,
+      "gex_m": 10.8
+    },
+    {
+      "strike": 731,
+      "gex_m": 8.3
+    },
+    {
+      "strike": 732,
+      "gex_m": -111.2
+    },
+    {
+      "strike": 732.5,
+      "gex_m": -0.2
+    },
+    {
+      "strike": 733,
+      "gex_m": 47.3
+    },
+    {
+      "strike": 734,
+      "gex_m": 7.8
+    },
+    {
+      "strike": 735,
+      "gex_m": 110.5
+    },
+    {
+      "strike": 736,
+      "gex_m": 16.1
+    },
+    {
+      "strike": 737,
+      "gex_m": 24.7
+    },
+    {
+      "strike": 737.5,
+      "gex_m": -0.2
+    },
+    {
+      "strike": 738,
+      "gex_m": 22.9
+    },
+    {
+      "strike": 739,
+      "gex_m": 47.4
+    },
+    {
+      "strike": 740,
+      "gex_m": 115
+    },
+    {
+      "strike": 741,
+      "gex_m": 14.4
+    },
+    {
+      "strike": 742,
+      "gex_m": 35.3
+    },
+    {
+      "strike": 742.5,
+      "gex_m": 0.2
+    },
+    {
+      "strike": 743,
+      "gex_m": 27.8
+    },
+    {
+      "strike": 744,
+      "gex_m": 54.9
+    },
+    {
+      "strike": 745,
+      "gex_m": 142.5
+    },
+    {
+      "strike": 746,
+      "gex_m": 31.6
+    },
+    {
+      "strike": 747,
+      "gex_m": 65
+    },
+    {
+      "strike": 748,
+      "gex_m": 49.5
+    },
+    {
+      "strike": 749,
+      "gex_m": 24.7
+    },
+    {
+      "strike": 750,
+      "gex_m": 238.5
+    },
+    {
+      "strike": 751,
+      "gex_m": 18.3
+    },
+    {
+      "strike": 752,
+      "gex_m": 25.8
+    },
+    {
+      "strike": 753,
+      "gex_m": 21.9
+    },
+    {
+      "strike": 754,
+      "gex_m": 16.8
+    },
+    {
+      "strike": 755,
+      "gex_m": 155.1
+    },
+    {
+      "strike": 756,
+      "gex_m": 16.4
+    },
+    {
+      "strike": 757,
+      "gex_m": 45.8
+    },
+    {
+      "strike": 758,
+      "gex_m": 17.6
+    }
+  ],
   "levels": [
     {
-      "strike": 720,
-      "reversal_prob": 55,
+      "strike": 750,
+      "reversal_prob": 63,
+      "side": "resistance",
+      "reaction": "clean",
+      "tags": [
+        "Call Wall",
+        "Major Wall",
+        "GEX 238.5M",
+        "Charm -13k"
+      ],
+      "why": "Named call wall and major wall with the session's dominant GEX (238.5M); charm -13,016 into OPEX close creates maximum mechanical dealer-sell force the tick price arrives — the primary structural ceiling of the full range; vanna 1,751 adds secondary pressure.",
+      "target_strike": 730,
+      "outcome": "untouched",
+      "touched": false
+    },
+    {
+      "strike": 742,
+      "reversal_prob": 58,
+      "side": "resistance",
+      "reaction": "clean",
+      "tags": [
+        "Session High",
+        "Tape Confirm",
+        "Charm -1492",
+        "Vol 299%"
+      ],
+      "why": "Confirmed intraday ceiling: 741.79 high rejected with the session's largest sell delta (-6.1M) in the final bar; call-heavy gex (+35.3M) and charm -1,492 reinforce; vol_calls 299% of OI means participants fought here all day — any push toward 742 in final 18 minutes gets sold to the tick.",
+      "target_strike": 730,
+      "outcome": "untouched",
+      "touched": false
+    },
+    {
+      "strike": 732,
+      "reversal_prob": 44,
       "side": "support",
       "reaction": "mixed",
       "tags": [
         "Put Wall",
-        "Major Wall",
-        "OI 87k",
-        "Charm"
+        "Charm -21934",
+        "GEX -111M",
+        "OI 17k puts"
       ],
-      "why": "Dominant structural put wall: 87k put OI, -444M GEX, and -40.6k charm creating massive dealer buy-back as put delta decays into close; 104% put vol/OI confirms this is a live battleground today, not standing inventory — highest-conviction floor in the data, but negative-gamma amplification keeps the bounce character mixed rather than clean.",
-      "target_strike": 730,
+      "why": "Largest charm reading in the entire put range (-21,934) stacked on -111.2M negative gex; at OPEX close, dealer buy-hedge rebalancing force here is at its session maximum; today's low reached 732.53 (held), confirming real structural support — heavy vol (150-152% both sides) makes it a grind rather than a snap.",
+      "target_strike": 742,
+      "outcome": "untouched",
+      "touched": false
+    },
+    {
+      "strike": 728,
+      "reversal_prob": 40,
+      "side": "support",
+      "reaction": "mixed",
+      "tags": [
+        "Named Put Wall",
+        "Charm -18754",
+        "GEX -127M"
+      ],
+      "why": "Named put wall with the strongest negative GEX in the lower chain (-126.9M) and charm -18,754 (second only to 750 on the board); 100% put vol/OI confirms active dealer hedging today; mechanical buy-back into OPEX close is real but 11.8 pts below spot limits reachability in 18 minutes.",
+      "target_strike": 742,
       "outcome": "untouched",
       "touched": false
     },
     {
       "strike": 730,
-      "reversal_prob": 40,
-      "side": "resistance",
+      "reversal_prob": 35,
+      "side": "support",
       "reaction": "chop",
       "tags": [
-        "Zero Gamma",
-        "Vol Trigger",
-        "OI 89k",
-        "Regime Flip"
+        "OI 51k",
+        "Put Vol 259%",
+        "DEX +699M"
       ],
-      "why": "Dual named ceiling — zero_gamma (730.24) AND vol_trigger (730.20) — where the regime flips to positive dealer gamma and amplification shuts off; 89k combined OI is the largest ATM mass, making it the mechanical cap for any bounce off 720, but price is already oscillating through this zone so tick entry is a grind not a snap.",
-      "target_strike": 720,
-      "outcome": "none",
-      "touched": false
-    },
-    {
-      "strike": 715,
-      "reversal_prob": 33,
-      "side": "support",
-      "reaction": "clean",
-      "tags": [
-        "Put Wall",
-        "0DTE",
-        "Charm",
-        "Major Wall"
-      ],
-      "why": "Named 0DTE major put wall with the single largest charm reading in the entire dataset (-56.4k), surpassing even 720; the 0DTE charm pressure on dealers is at maximum with 118 mins left — if 720 fails in negative-gamma cascade, this level produces a faster, cleaner snap than 720 itself because dealer buy-back is mechanically forced and concentrated.",
-      "target_strike": 730,
-      "outcome": "untouched",
-      "touched": false
-    },
-    {
-      "strike": 733,
-      "reversal_prob": 28,
-      "side": "resistance",
-      "reaction": "mixed",
-      "tags": [
-        "GEX +66M",
-        "Vol Battleground",
-        "Charm",
-        "OI 16k"
-      ],
-      "why": "The single most actively contested strike today — 615% call vol/OI and 690% put vol/OI, the highest ratios in the data — with positive GEX and -7.4k charm reinforcing a ceiling; secondary resistance above 730 if a bounce overpowers the gamma-flip level, but 3.4 pts above spot in a downtrend keeps the probability low.",
-      "target_strike": 720,
-      "outcome": "none",
-      "touched": false
-    },
-    {
-      "strike": 750,
-      "reversal_prob": 22,
-      "side": "resistance",
-      "reaction": "clean",
-      "tags": [
-        "Call Wall",
-        "Named Wall"
-      ],
-      "why": "Primary named call wall, locked stable at 750 across all six today's wall-drift readings; 20+ pts from current spot makes it conditional on a full trend reversal — prior 67% score gutted by today's 740/735 breaks and expanded distance — but IF reached, concentrated OI creates a clean snap.",
-      "target_strike": 720,
+      "why": "Enormous contested zone — 62,465 puts traded (259% of OI) and dex +699.5M marks it as a bounce floor, but positive per-strike gex (+10.8M) gives it call-wall rather than pure put-wall character, producing mixed signals; likely to grind and oscillate rather than snap if reached into the OPEX close.",
+      "target_strike": 742,
       "outcome": "untouched",
       "touched": false
     }

@@ -655,9 +655,58 @@ body { overflow-x: hidden; min-height: 100vh; }
 }
 .zone-note { font-size: 12px; color: var(--ink2); line-height: 1.45; flex: 1; }
 
-#narrSummary {
+/* ── REGIME ── */
+.reg-hero { margin-bottom: 12px; }
+.vv.reg-state {
+  font-size: 19px;
+  letter-spacing: .02em;
+  line-height: 1.15;
+}
+#regRead {
   font-family: var(--disp);
-  font-size: 15px; line-height: 1.65; color: var(--ink);
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.6;
+  color: var(--ink);
+}
+
+.gauge { padding: 11px 0; border-bottom: 1px solid var(--line); }
+.gauge:last-child { border-bottom: none; }
+.gauge-head {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+  margin-bottom: 7px;
+}
+.gk {
+  font-family: var(--mono);
+  font-size: 10px; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--ink3);
+}
+.gv {
+  font-family: var(--mono);
+  font-size: 13px; font-variant-numeric: tabular-nums;
+  color: var(--ink); text-align: right;
+}
+.gv.amber { color: var(--amber); }
+.gv.blue  { color: var(--blue); }
+.gv.green { color: var(--green); }
+.gv.red   { color: var(--red); }
+.gauge .prob-track { height: 4px; }
+.gauge .prob-track > span { background: var(--ink2); }
+.gauge .prob-track > span[data-tone="amber"] { background: var(--amber); }
+.gauge .prob-track > span[data-tone="blue"]  { background: var(--blue); }
+.gauge .prob-track > span[data-tone="green"] { background: var(--green); }
+.gauge .prob-track > span[data-tone="red"]   { background: var(--red); }
+
+.pivot-persist {
+  font-family: var(--mono);
+  font-size: 10px; letter-spacing: .06em;
+  color: var(--ink3);
+}
+.pivot-confl {
+  font-family: var(--mono);
+  font-size: 9px; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--blue);
+  margin-left: 10px;
 }
 
 /* ── RESPONSIVE ── */
