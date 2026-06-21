@@ -7,7 +7,7 @@
 // narrative scorer simply weights the rest. Nothing here throws.
 import YahooFinance from "yahoo-finance2";
 import { config } from "./config.js";
-import type { MacroReading, MacroSnapshot } from "./types.js";
+import type { CrossAssetSnapshot, MacroReading, MacroSnapshot, NewsEvent } from "./types.js";
 
 const yf = new YahooFinance();
 
@@ -117,18 +117,90 @@ async function cotReading(): Promise<MacroSnapshot["cot"]> {
   }
 }
 
+/**
+ * A cross-asset reading. Same Yahoo fetch as a yield, but `dir` is recomputed on a *percentage*
+ * threshold (0.2% pre-open move = meaningful) so oil, VIX, the dollar and BTC — wildly different
+ * price scales — are all judged on the same "did it actually move" bar.
+ */
+async function crossReading(symbol: string): Promise<MacroReading | undefined> {
+  const r = await yahooReading(symbol, 0); // raw fetch; dir overridden below
+  if (!r) return undefined;
+  const pct = r.prev ? (r.chg / r.prev) * 100 : 0;
+  return { ...r, dir: dirOf(pct, 0.2) };
+}
+
+/** The keyless cross-asset / commodity basket (oil, gold, copper, dollar, VIX, BTC, credit). */
+async function fetchCrossAssets(): Promise<{ cross: CrossAssetSnapshot; missing: string[] }> {
+  const symbols: [keyof CrossAssetSnapshot, string][] = [
+    ["brent", "BZ=F"], ["wti", "CL=F"], ["gold", "GC=F"], ["copper", "HG=F"],
+    ["dxy", "DX-Y.NYB"], ["vix", "^VIX"], ["btc", "BTC-USD"], ["hyg", "HYG"],
+  ];
+  const results = await Promise.all(symbols.map(([, sym]) => crossReading(sym)));
+  const cross: CrossAssetSnapshot = {};
+  const missing: string[] = [];
+  symbols.forEach(([key], i) => {
+    const r = results[i];
+    if (r) cross[key] = r;
+    else missing.push(key);
+  });
+  return { cross, missing };
+}
+
+/**
+ * Recent market-moving headlines via GDELT DOC 2.0 — keyless, no rate limit. This is the
+ * deterministic geopolitics/event backstop: it works even when the AI's live web search is
+ * flaky, and surfaces things like an oil-supply / Strait-of-Hormuz story as a real headline.
+ * Best-effort: returns [] on any hiccup.
+ */
+async function fetchNews(): Promise<NewsEvent[]> {
+  try {
+    // Market-moving macro + geopolitics, last 24h, freshest first, English news sources.
+    const query =
+      '("stock market" OR "Federal Reserve" OR "interest rate" OR "oil price" OR inflation '
+      + 'OR sanctions OR tariffs OR "Strait of Hormuz" OR geopolitical) sourcelang:english';
+    const url = "https://api.gdeltproject.org/api/v2/doc/doc"
+      + `?query=${encodeURIComponent(query)}`
+      + "&mode=ArtList&format=json&maxrecords=25&timespan=24H&sort=DateDesc";
+    const res = await fetch(url, { headers: { "user-agent": "Mozilla/5.0", accept: "application/json" } });
+    if (!res.ok) return []; // includes GDELT's 429 rate-limit ("1 request / 5s")
+    // Sniff the body, not the content-type header: GDELT returns plain-text errors (rate-limit
+    // notice) or HTML on a malformed query, but a real result is a JSON object starting with "{".
+    const text = (await res.text()).trim();
+    if (!text.startsWith("{")) return [];
+    const body = JSON.parse(text) as { articles?: { title?: string; domain?: string; seendate?: string; url?: string }[] };
+    const arts = Array.isArray(body?.articles) ? body.articles : [];
+
+    const seen = new Set<string>();
+    const events: NewsEvent[] = [];
+    for (const a of arts) {
+      const title = (a.title || "").trim();
+      if (!title) continue;
+      const key = title.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      events.push({ title, source: a.domain || "", when: a.seendate || "", url: a.url });
+      if (events.length >= 12) break;
+    }
+    return events;
+  } catch {
+    return [];
+  }
+}
+
 /** Pull every macro input concurrently. Never throws; failures land in notes[]. */
 export async function fetchMacro(): Promise<MacroSnapshot> {
   const notes: string[] = [];
   // 2Y is the lead signal; try Yahoo (intraday) first, fall back to FRED DGS2 (daily, no velocity).
   let us2y = await yahooReading("2YY=F", 0.01);
   if (!us2y) us2y = await fredReading("DGS2", 0.01);
-  const [us10y, usdjpy, tga, rrp, cot] = await Promise.all([
+  const [us10y, usdjpy, tga, rrp, cot, crossResult, headlines] = await Promise.all([
     yahooReading("^TNX", 0.01),
     yahooReading("JPY=X", 0.05),
     fredReading("WTREGEN", 1),    // Treasury General Account (weekly)
     fredReading("RRPONTSYD", 1),  // Overnight reverse repo (daily)
     cotReading(),
+    fetchCrossAssets(),
+    fetchNews(),
   ]);
 
   if (!us2y) notes.push("2Y yield unavailable");
@@ -137,8 +209,10 @@ export async function fetchMacro(): Promise<MacroSnapshot> {
   if (!tga) notes.push("TGA (FRED) unavailable");
   if (!rrp) notes.push("RRP (FRED) unavailable");
   if (!cot) notes.push("COT (CFTC) unavailable");
+  if (crossResult.missing.length) notes.push(`cross-asset unavailable: ${crossResult.missing.join(", ")}`);
+  if (!headlines.length) notes.push("news (GDELT) unavailable");
 
   const curve = us10y && us2y ? round(us10y.last - us2y.last, 3) : undefined;
 
-  return { asOf: etIso(), us2y, us10y, curve2s10s: curve, usdjpy, tga, rrp, cot, notes };
+  return { asOf: etIso(), us2y, us10y, curve2s10s: curve, usdjpy, tga, rrp, cot, cross: crossResult.cross, headlines, notes };
 }

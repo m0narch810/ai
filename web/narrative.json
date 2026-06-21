@@ -1,5 +1,217 @@
 {
-  "scoring_method": "unavailable",
-  "generated_at": "",
-  "note": "Pre-open narrative not generated yet. Runs automatically ~09:00 ET on weekdays, or via `npm run narrative`."
+  "as_of": "2026-06-21T11:59:39",
+  "generated_at": "2026-06-21T16:06:01.365Z",
+  "scored_at": 1782057961365,
+  "spot": 739.8,
+  "macro_bias": "bullish",
+  "macro_bias_score": 52,
+  "macro_drivers": [
+    {
+      "label": "2Y Yield",
+      "reading": "3.80%, falling -2bps vs prior 3.82%; 10Y flat at 4.451% — bull steepener, 2Y relief supports NQ",
+      "lean": "bull"
+    },
+    {
+      "label": "Net Liquidity (TGA/RRP)",
+      "reading": "TGA +$52.5B this week (bearish drain); RRP -$6.58B draining (bullish, but near-zero already). TGA rise is the dominant headwind.",
+      "lean": "bear"
+    },
+    {
+      "label": "COT Speculator Positioning",
+      "reading": "NQ speculator net% = -33, 5th percentile — extreme historically-short inside a parabolic bullrun; enormous short-squeeze fuel remaining",
+      "lean": "bull"
+    },
+    {
+      "label": "Fed / Inflation",
+      "reading": "Fed held 3.5–3.75% June 2026 FOMC unanimous; dot plot median raised to 3.8% year-end; CPI 4.2% YoY (3yr high driven by energy). Stagflationary but structurally priced-in by the bullrun.",
+      "lean": "bear"
+    },
+    {
+      "label": "USD/JPY (Carry Risk)",
+      "reading": "161.275, -0.073 — effectively flat; yen remains structurally weak, no carry unwind risk at current levels",
+      "lean": "neutral"
+    },
+    {
+      "label": "Oil (Cross-Asset)",
+      "reading": "Brent $80.59 +$0.74, WTI $76.54 +$0.69 — modest bounce within a declining trend from Hormuz-shock peak of ~$95; not a new escalation",
+      "lean": "neutral"
+    },
+    {
+      "label": "Gold (Cross-Asset)",
+      "reading": "$4172.9, -$73 (-1.72%) — sharp haven demand fade; no new geopolitical bid forming; bullish for equities",
+      "lean": "bull"
+    },
+    {
+      "label": "HYG Credit (Cross-Asset)",
+      "reading": "$80.01 +0.28 (+0.35%) — credit risk-on confirmation; spreads tightening into equity bid",
+      "lean": "bull"
+    },
+    {
+      "label": "VIX (Cross-Asset)",
+      "reading": "16.78, +0.38 (+2.3%) — slightly elevated but sub-17 low-vol regime; clean trending day still viable",
+      "lean": "neutral"
+    }
+  ],
+  "open_type": "real_pump",
+  "open_type_label": "Real pump off the open",
+  "expansion_direction": "up",
+  "targeted_level": 750,
+  "move_extent": "~10.2 pts from 739.8 to 750 call wall (1.38%); GEX 238.5M at 750 is the session's gravitational magnet",
+  "completion_signal": "Price tags 750 call wall; fresh intraday call buying dries up across 740–749 strikes; dealer short-delta rehedging flips GEX into resistance; post-14:00 ET charm decay accelerates against calls",
+  "next_target": 755,
+  "clean_or_choppy": "clean",
+  "manipulation_tell": "Fresh call buying spans 27 strikes from 731 to 758 — real multi-player conviction, not a single-trader event. Put buying at 738–739 (1049%/1006% vol/OI near spot) reads as long-stock protective hedge ahead of the push, not bearish positioning. Opening move up AGREES with positive DEX (+7552.2) — no manipulation signal present.",
+  "reversal_zones": [
+    {
+      "price": 750,
+      "side": "resistance",
+      "note": "Call wall and major wall with GEX 238.5M and DEX 944.6M — primary fade zone; dealers aggressively rehedge short delta on any penetration here"
+    },
+    {
+      "price": 733,
+      "side": "support",
+      "note": "Heavy fresh flow both sides (puts 474%, calls 137%) plus GEX node +47.3M; morning friction point on pre-pump dip and first landing zone on reversal down from 750"
+    },
+    {
+      "price": 730,
+      "side": "support",
+      "note": "DEX support +699.5M; balanced call/put OI; reversal_prob 40% on board — firm bounce zone if early dip materializes before the pump"
+    },
+    {
+      "price": 720,
+      "side": "support",
+      "note": "Put wall with reversal_prob 55% (highest on board); GEX negative (-34.4M) means put dealers provide maximum hedging support — structural session floor"
+    }
+  ],
+  "summary": "Macro is firmly bullish: the 2Y yield is falling 2bps to 3.80% while 10Y holds flat at 4.451% (bull steepener), HYG is rising +0.35% (credit is risk-on), and gold is down a sharp -$73 / -1.72% — that haven-demand fade is the key cross-asset tell confirming no new geopolitical shock is forming today despite Brent's +$0.74 bounce to $80.59 (that is a fading-Hormuz recovery from the ~$95 peak, not a new escalation). The dominant macro force is COT at the 5th percentile: speculators are at a historically extreme short in NQ futures while the market has been in a parabolic bullrun (+5.83% past month, +39.71% YoY), creating enormous short-squeeze potential as the primary engine. Fed headwinds are real — held 3.5–3.75% unanimous at the June FOMC, dot plot raised to 3.8% median, and CPI at 4.2% (3yr high) is stagflationary — but these are structurally priced-in and the market has ignored them for months. TGA +$52.5B is the only live liquidity drag that carries weight today. Open type is REAL_PUMP: spot 739.8 sits above gamma flip 737.5, net DEX is robustly positive at +7552.2 (dealers buy all dips and fuel the rally), the call wall at 750 holds 238.5M GEX with clean air through 740–749, and fresh call flow spans 27 strikes from 731 to 758 across multiple expiries — this is broad multi-player conviction, not a single-strike event. ATM IV at 14.54 is low, VIX at 16.78 is sub-17, and charm at strikes above spot is negative (drift supports upside) — all point to a clean trending grind. True expansion direction is UP toward 750 (call wall / major wall), a 10.2-pt / 1.38% move from 739.8; completion signal is price tagging 750 with intraday call buying drying up and dealer short-delta rehedging activating, particularly post-14:00 ET as charm decay accelerates; next target is 755 (GEX 155.1M). Reversal zones from the board: 750 resistance (primary fade target), 733 support (heavy fresh flow friction, intraday anchor), 730 support (DEX +699.5M bounce floor), 720 support (put wall, reversal_prob 55%, ultimate session floor). No manipulation signal — 27-strike broad call buying CONFIRMS the directional bias, not fades it.",
+  "news_events": [
+    {
+      "headline": "Strait of Hormuz partial closure (US-Israel-Iran conflict) drove Brent to ~$95 peak in 2026; oil now at $80.59 — active geopolitical background but risk fading, not escalating today",
+      "impact": "neutral",
+      "source": "oilprice.com"
+    },
+    {
+      "headline": "Fed held rates at 3.5–3.75% at June 2026 FOMC (12-0 unanimous); dot plot median year-end 2026 raised to 3.8%; no cuts priced",
+      "impact": "bearish",
+      "source": "cmegroup.com"
+    },
+    {
+      "headline": "US CPI rose 4.2% YoY in May 2026 — 3-year high driven by energy prices; stagflation narrative elevated but priced-in by the ongoing bullrun",
+      "impact": "bearish",
+      "source": "rateprobability.com"
+    },
+    {
+      "headline": "QQQ in parabolic bullrun since April 2026; +5.83% past month, +39.71% YoY; retesting resistance trendline near 739–744 with COT at extreme 5th-percentile short",
+      "impact": "bullish",
+      "source": "stockinvest.us"
+    }
+  ],
+  "scoring_method": "ai",
+  "macro": {
+    "asOf": "2026-06-21T11:59:59",
+    "us2y": {
+      "last": 3.8,
+      "prev": 3.82,
+      "chg": -0.02,
+      "dir": "falling",
+      "asOf": "2026-06-21T11:59:55"
+    },
+    "us10y": {
+      "last": 4.451,
+      "prev": 4.451,
+      "chg": 0,
+      "dir": "flat",
+      "asOf": "2026-06-21T11:59:55"
+    },
+    "curve2s10s": 0.651,
+    "usdjpy": {
+      "last": 161.275,
+      "prev": 161.348,
+      "chg": -0.073,
+      "dir": "falling",
+      "asOf": "2026-06-21T11:59:55"
+    },
+    "tga": {
+      "last": 880713,
+      "prev": 828122,
+      "chg": 52591,
+      "dir": "rising",
+      "asOf": "2026-06-17"
+    },
+    "rrp": {
+      "last": 0.25,
+      "prev": 6.83,
+      "chg": -6.58,
+      "dir": "falling",
+      "asOf": "2026-06-18"
+    },
+    "cot": {
+      "netPct": -33,
+      "percentile": 5,
+      "market": "MICRO E-MINI NASDAQ-100 INDEX"
+    },
+    "cross": {
+      "brent": {
+        "last": 80.59,
+        "prev": 79.85,
+        "chg": 0.74,
+        "dir": "rising",
+        "asOf": "2026-06-21T11:59:55"
+      },
+      "wti": {
+        "last": 76.54,
+        "prev": 75.85,
+        "chg": 0.69,
+        "dir": "rising",
+        "asOf": "2026-06-21T11:59:55"
+      },
+      "gold": {
+        "last": 4172.9,
+        "prev": 4245.9,
+        "chg": -73,
+        "dir": "falling",
+        "asOf": "2026-06-21T11:59:55"
+      },
+      "copper": {
+        "last": 6.337,
+        "prev": 6.3855,
+        "chg": -0.0485,
+        "dir": "falling",
+        "asOf": "2026-06-21T11:59:55"
+      },
+      "dxy": {
+        "last": 100.76,
+        "prev": 100.849,
+        "chg": -0.089,
+        "dir": "flat",
+        "asOf": "2026-06-21T11:59:55"
+      },
+      "vix": {
+        "last": 16.78,
+        "prev": 16.4,
+        "chg": 0.38,
+        "dir": "rising",
+        "asOf": "2026-06-21T11:59:55"
+      },
+      "btc": {
+        "last": 64136.4,
+        "prev": 64240.906,
+        "chg": -104.506,
+        "velocity": -36.4492,
+        "dir": "flat",
+        "asOf": "2026-06-21T11:59:55"
+      },
+      "hyg": {
+        "last": 80.01,
+        "prev": 79.73,
+        "chg": 0.28,
+        "dir": "rising",
+        "asOf": "2026-06-21T11:59:55"
+      }
+    },
+    "headlines": [],
+    "notes": [
+      "news (GDELT) unavailable"
+    ]
+  }
 }

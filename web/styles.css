@@ -1,19 +1,43 @@
-:root {
-  --bg:     #f1f1ee;
-  --panel:  #ffffff;
+:root, :root[data-theme="light"] {
+  --bg:       #f1f1ee;
+  --panel:    #ffffff;
+  --panel-bg: rgba(255,255,255,.72);
+  --row-hover: #f7f7f4;
   --ink:    #111210;
   --ink2:   #5c5b56;
   --ink3:   #9b9a93;
   --line:   #e3e2dc;
   --line2:  #cdccc4;
   --red:    #e60023;
+  --red-soft: rgba(230,0,38,.08);
   --blue:   #1f5fd0;
   --amber:  #c07c00;
   --green:  #1c7a52;
+  color-scheme: light;
   --disp: "Space Grotesk", system-ui, sans-serif;
   --mono: "JetBrains Mono", ui-monospace, monospace;
   --jp:   "Noto Sans JP", sans-serif;
   --ease: cubic-bezier(.2,.7,.3,1);
+}
+
+:root[data-theme="dark"] {
+  /* Ink-wash charcoal: warm near-black "dark paper", lifted near-opaque panels (so they
+     read against the grid), warm off-white ink, and disciplined desaturated accents. */
+  --bg:       #16140f;
+  --panel:    #1e1b15;
+  --panel-bg: rgba(30,27,21,.82);
+  --row-hover: rgba(236,233,224,.05);
+  --ink:    #ece9e0;
+  --ink2:   #a39c8d;
+  --ink3:   #6b6557;
+  --line:   #2c2820;
+  --line2:  #3a352b;
+  --red:    #ff3b52;
+  --red-soft: rgba(255,59,82,.10);
+  --blue:   #6f9fd8;
+  --amber:  #d4a24a;
+  --green:  #4fb286;
+  color-scheme: dark;
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -55,7 +79,7 @@ body { overflow-x: hidden; min-height: 100vh; }
 
 /* ── SECTION (systematic frame) ── */
 .sec {
-  background: rgba(255,255,255,.72);
+  background: var(--panel-bg);
   -webkit-backdrop-filter: blur(2px);
   backdrop-filter: blur(2px);
   border: 1px solid var(--line2);
@@ -142,6 +166,20 @@ body { overflow-x: hidden; min-height: 100vh; }
   text-transform: uppercase;
   color: var(--ink2);
 }
+.theme-btn {
+  background: transparent;
+  border: 1px solid var(--line2);
+  color: var(--ink2);
+  width: 26px; height: 26px;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color .18s, color .18s;
+}
+.theme-btn:hover { border-color: var(--red); color: var(--red); }
 
 /* ── SPEC BAR ── */
 .specbar {
@@ -321,7 +359,7 @@ body { overflow-x: hidden; min-height: 100vh; }
 }
 .rung.res::before { background: var(--red); }
 .rung.sup::before { background: var(--ink); }
-.rung:hover, .rung.open { background: #f7f7f4; }
+.rung:hover, .rung.open { background: var(--row-hover); }
 
 /* top row: strike | meter | prob | badge */
 .rung-top { display: flex; align-items: center; gap: 14px; }

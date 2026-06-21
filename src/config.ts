@@ -55,6 +55,11 @@ export const config = {
   // model is a CLI alias ("opus"/"sonnet") or a full id.
   model: process.env.ANTHROPIC_MODEL?.trim() || "sonnet",
 
+  // Let the (once-per-day, pre-open) narrative pass use WebSearch/WebFetch to read live
+  // breaking macro/geopolitics (Fed commentary, oil shocks). The per-tick scorer stays
+  // fully tool-locked. Set NARRATIVE_WEBSEARCH=false to force the deterministic path.
+  narrativeWebSearch: (process.env.NARRATIVE_WEBSEARCH?.trim() ?? "true") !== "false",
+
   // Min take-profit floor: ~100 NQ points at current QQQ/NQ ratio (~41.5:1) ≈ 2.5 QQQ pts ≈ 0.34% of spot.
   // Used in AI prompt as min_reversal_move_pts; only levels with a far structural target this far away score high.
   tpMinPct: num("TP_MIN_PCT", 0.0034),

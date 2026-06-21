@@ -185,6 +185,31 @@ export interface MacroReading {
   asOf?: string;
 }
 
+/**
+ * Cross-asset / commodity readings for the correlation + event overlay. All keyless via
+ * Yahoo; `dir` here is computed on a % threshold (not absolute), so it's comparable across
+ * very different price scales. A fast move in oil/VIX/dollar is the "geopolitics-as-a-number"
+ * signal — e.g. a Strait-of-Hormuz oil spike shows up as brent rising fast.
+ */
+export interface CrossAssetSnapshot {
+  brent?: MacroReading;   // BZ=F  — oil (Brent); energy/geopolitics shock detector
+  wti?: MacroReading;     // CL=F  — oil (WTI)
+  gold?: MacroReading;    // GC=F  — haven bid
+  copper?: MacroReading;  // HG=F  — global-growth proxy
+  dxy?: MacroReading;     // DX-Y.NYB — US dollar (up = risk-off / tightening)
+  vix?: MacroReading;     // ^VIX  — equity fear gauge
+  btc?: MacroReading;     // BTC-USD — risk appetite
+  hyg?: MacroReading;     // HYG   — high-yield credit (down = risk-off)
+}
+
+/** One recent market-moving headline (GDELT keyless news feed). */
+export interface NewsEvent {
+  title: string;
+  source: string;     // publishing domain, e.g. "reuters.com"
+  when: string;       // GDELT seendate (UTC), human-ish
+  url?: string;
+}
+
 /** The macro inputs behind dxrk's RTH bias (yields, liquidity, carry, crowding). */
 export interface MacroSnapshot {
   asOf: string;
@@ -199,6 +224,10 @@ export interface MacroSnapshot {
   rrp?: MacroReading;
   /** COT speculator crowding for Nasdaq-100, as a 0–100 percentile of net positioning. */
   cot?: { netPct: number; percentile: number; market: string } | null;
+  /** Cross-asset / commodity basket — correlation + event (geopolitics) overlay. */
+  cross?: CrossAssetSnapshot;
+  /** Recent market-moving headlines (GDELT, keyless) — the deterministic event backstop. */
+  headlines?: NewsEvent[];
   /** Any source that failed to load, for honest display. */
   notes: string[];
 }
@@ -246,6 +275,8 @@ export interface Narrative {
   reversal_zones: NarrativeZone[];
   /** One-paragraph day story. */
   summary: string;
+  /** Breaking macro/geopolitical events the AI weighed (web search + GDELT), with impact. */
+  news_events?: { headline: string; impact: "bullish" | "bearish" | "neutral"; source?: string }[];
   scoring_method: "ai" | "unavailable";
   macro?: MacroSnapshot;
 }

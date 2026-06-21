@@ -20,7 +20,24 @@ const C = {
   paper:"#f1f1ee",
 };
 
+// Canvas ink (grid/ticks/glyphs/telemetry) as an "r,g,b" string — flips with the theme.
+let bgInkRGB = "17,18,16";
+let bgRedRGB = "230,0,35";
+
 const $ = (s) => document.querySelector(s);
+
+/** Re-read the live CSS custom properties into C + bgInkRGB (called on theme change). */
+function readPalette() {
+  const s = getComputedStyle(document.documentElement);
+  const g = (n, fb) => (s.getPropertyValue(n).trim() || fb);
+  C.ink = g("--ink", C.ink); C.ink2 = g("--ink2", C.ink2); C.ink3 = g("--ink3", C.ink3);
+  C.line = g("--line", C.line); C.line2 = g("--line2", C.line2);
+  C.red = g("--red", C.red); C.blue = g("--blue", C.blue); C.green = g("--green", C.green);
+  C.paper = g("--bg", C.paper);
+  const dark = document.documentElement.dataset.theme === "dark";
+  bgInkRGB = dark ? "190,180,158" : "17,18,16";  // warm dim gray ink on charcoal / black ink on paper
+  bgRedRGB = dark ? "255,59,82"   : "230,0,35";   // red accent flips with theme (matches --red)
+}
 const el = (tag, cls, text) => {
   const n = document.createElement(tag);
   if (cls)          n.className = cls;
@@ -83,12 +100,12 @@ function initBackground() {
     // ── grid: minor + major lines, slow vertical drift ──
     const off = (now * 0.006) % GRID;
     ctx.lineWidth = 1;
-    ctx.strokeStyle = "rgba(17,18,16,0.08)";
+    ctx.strokeStyle = `rgba(${bgInkRGB},0.08)`;
     ctx.beginPath();
     for (let x = 0; x <= W; x += GRID) { ctx.moveTo(x + 0.5, 0); ctx.lineTo(x + 0.5, H); }
     for (let y = -off; y <= H; y += GRID) { ctx.moveTo(0, y + 0.5); ctx.lineTo(W, y + 0.5); }
     ctx.stroke();
-    ctx.strokeStyle = "rgba(17,18,16,0.13)";
+    ctx.strokeStyle = `rgba(${bgInkRGB},0.13)`;
     ctx.beginPath();
     for (let x = 0, i = 0; x <= W; x += GRID, i++) if (i % 4 === 0) { ctx.moveTo(x + 0.5, 0); ctx.lineTo(x + 0.5, H); }
     for (let y = -off, j = 0; y <= H; y += GRID, j++) if (j % 4 === 0) { ctx.moveTo(0, y + 0.5); ctx.lineTo(W, y + 0.5); }
@@ -96,7 +113,7 @@ function initBackground() {
 
     // ── big vertical 鳥居 watermark on the right gutter ──
     ctx.save();
-    ctx.fillStyle = "rgba(17,18,16,0.06)";
+    ctx.fillStyle = `rgba(${bgInkRGB},0.06)`;
     const wm = Math.min(W, H) * 0.34;
     ctx.font = `700 ${wm}px "Noto Sans JP", sans-serif`;
     ctx.textAlign = "center"; ctx.textBaseline = "middle";
@@ -106,8 +123,8 @@ function initBackground() {
     ctx.restore();
 
     // ── left-edge ruler ──
-    ctx.strokeStyle = "rgba(17,18,16,0.16)";
-    ctx.fillStyle   = "rgba(17,18,16,0.28)";
+    ctx.strokeStyle = `rgba(${bgInkRGB},0.16)`;
+    ctx.fillStyle   = `rgba(${bgInkRGB},0.28)`;
     ctx.font = '8px "JetBrains Mono", monospace';
     ctx.textAlign = "left"; ctx.textBaseline = "middle";
     ctx.lineWidth = 1;
@@ -122,32 +139,32 @@ function initBackground() {
     // ── radar sweep, top-right ──
     const rcx = W > 760 ? W - 96 : W - 60;
     const rcy = 110, rr = W > 760 ? 60 : 40;
-    ctx.strokeStyle = "rgba(230,0,35,0.16)";
+    ctx.strokeStyle = `rgba(${bgRedRGB},0.16)`;
     ctx.lineWidth = 1;
     for (const f of [0.4, 0.7, 1]) { ctx.beginPath(); ctx.arc(rcx, rcy, rr * f, 0, Math.PI * 2); ctx.stroke(); }
     ctx.beginPath(); ctx.moveTo(rcx - rr, rcy); ctx.lineTo(rcx + rr, rcy);
     ctx.moveTo(rcx, rcy - rr); ctx.lineTo(rcx, rcy + rr); ctx.stroke();
     const ang = (now * 0.0009) % (Math.PI * 2);
     const sweep = ctx.createLinearGradient(rcx, rcy, rcx + Math.cos(ang) * rr, rcy + Math.sin(ang) * rr);
-    sweep.addColorStop(0, "rgba(230,0,35,0.34)");
-    sweep.addColorStop(1, "rgba(230,0,35,0)");
+    sweep.addColorStop(0, `rgba(${bgRedRGB},0.34)`);
+    sweep.addColorStop(1, `rgba(${bgRedRGB},0)`);
     ctx.strokeStyle = sweep; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.moveTo(rcx, rcy); ctx.lineTo(rcx + Math.cos(ang) * rr, rcy + Math.sin(ang) * rr); ctx.stroke();
 
     // ── horizontal scan beam ──
     const beamY = ((now * 0.02) % (H + 240)) - 120;
     const bg = ctx.createLinearGradient(0, beamY - 110, 0, beamY + 110);
-    bg.addColorStop(0,   "rgba(230,0,35,0)");
-    bg.addColorStop(0.5, "rgba(230,0,35,0.06)");
-    bg.addColorStop(1,   "rgba(230,0,35,0)");
+    bg.addColorStop(0,   `rgba(${bgRedRGB},0)`);
+    bg.addColorStop(0.5, `rgba(${bgRedRGB},0.06)`);
+    bg.addColorStop(1,   `rgba(${bgRedRGB},0)`);
     ctx.fillStyle = bg;
     ctx.fillRect(0, beamY - 110, W, 220);
-    ctx.fillStyle = "rgba(230,0,35,0.14)";
+    ctx.fillStyle = `rgba(${bgRedRGB},0.14)`;
     ctx.fillRect(0, beamY, W, 1);
 
     // ── floating hex/binary glyphs ──
     ctx.font = '10px "JetBrains Mono", monospace';
-    ctx.fillStyle = "rgba(17,18,16,0.12)";
+    ctx.fillStyle = `rgba(${bgInkRGB},0.12)`;
     ctx.textAlign = "left"; ctx.textBaseline = "middle";
     for (const b of bits) {
       b.y += b.vy * dt;
@@ -160,7 +177,7 @@ function initBackground() {
     for (const t of ticks) {
       t.y += t.vy * dt;
       if (t.y > H + 8) { t.y = -8; t.x = Math.random() * W; }
-      ctx.strokeStyle = t.red ? "rgba(230,0,35,0.26)" : "rgba(17,18,16,0.16)";
+      ctx.strokeStyle = t.red ? `rgba(${bgRedRGB},0.26)` : `rgba(${bgInkRGB},0.16)`;
       ctx.beginPath();
       ctx.moveTo(t.x - t.s, t.y); ctx.lineTo(t.x + t.s, t.y);
       ctx.moveTo(t.x, t.y - t.s); ctx.lineTo(t.x, t.y + t.s);
@@ -169,7 +186,7 @@ function initBackground() {
 
     // ── viewport corner brackets + telemetry ──
     const m = 14, L = 16;
-    ctx.strokeStyle = "rgba(230,0,35,0.4)";
+    ctx.strokeStyle = `rgba(${bgRedRGB},0.4)`;
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     ctx.moveTo(m, m + L); ctx.lineTo(m, m); ctx.lineTo(m + L, m);
@@ -179,7 +196,7 @@ function initBackground() {
     ctx.stroke();
 
     ctx.font = '9px "JetBrains Mono", monospace';
-    ctx.fillStyle = "rgba(17,18,16,0.3)";
+    ctx.fillStyle = `rgba(${bgInkRGB},0.3)`;
     const t10 = Math.floor(now / 100);
     ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
     ctx.fillText(`SYS ${pad(t10 % 100000, 5)}`, m + L + 8, m + 4);
@@ -244,8 +261,8 @@ function drawSparkline() {
   ctx.lineTo(px(0), H);
   ctx.closePath();
   const grad = ctx.createLinearGradient(0, 0, 0, H);
-  grad.addColorStop(0, "rgba(230,0,35,.12)");
-  grad.addColorStop(1, "rgba(230,0,35,0)");
+  grad.addColorStop(0, `rgba(${bgRedRGB},.12)`);
+  grad.addColorStop(1, `rgba(${bgRedRGB},0)`);
   ctx.fillStyle = grad;
   ctx.fill();
 
@@ -798,6 +815,16 @@ function renderNarrative(n) {
     row.appendChild(el("span", `lean ${d.lean === "bull" ? "bull" : d.lean === "bear" ? "bear" : ""}`.trim(), d.lean || "—"));
     macro.appendChild(row);
   }
+  // live news/events (web search + GDELT), rendered as driver rows keyed by source
+  for (const ev of (Array.isArray(n.news_events) ? n.news_events : [])) {
+    if (!ev?.headline) continue;
+    const row = el("div", "driver");
+    row.appendChild(el("span", "dk", ev.source || "news"));
+    row.appendChild(el("span", "dv", ev.headline));
+    const tone = ev.impact === "bullish" ? "bull" : ev.impact === "bearish" ? "bear" : "";
+    row.appendChild(el("span", `lean ${tone}`.trim(), ev.impact || "—"));
+    macro.appendChild(row);
+  }
 
   // reversal zones
   const zones = $("#narrZones");
@@ -829,6 +856,11 @@ function renderNarrative(n) {
   if (m?.tga)    fEntries.push(["TGA", `${m.tga.dir}`]);
   if (m?.rrp)    fEntries.push(["RRP", `${m.rrp.dir}`]);
   if (m?.cot)    fEntries.push(["COT", `${m.cot.percentile}th pct`]);
+  const c = m?.cross;
+  if (c?.brent)  fEntries.push(["Oil", `${c.brent.last} ${c.brent.dir}`]);
+  if (c?.vix)    fEntries.push(["VIX", `${c.vix.last} ${c.vix.dir}`]);
+  if (c?.dxy)    fEntries.push(["DXY", `${c.dxy.last} ${c.dxy.dir}`]);
+  if (c?.gold)   fEntries.push(["Gold", `${c.gold.last} ${c.gold.dir}`]);
   if (fEntries.length) {
     feedWrap.hidden = false;
     for (const [k, val] of fEntries) {
@@ -868,6 +900,29 @@ function setView(view) {
 for (const t of document.querySelectorAll(".tab")) {
   t.addEventListener("click", () => setView(t.dataset.view));
 }
+
+// ── theme (light / dark) ────────────────────────────────────────────────────
+function applyTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  const btn = $("#themeToggle");
+  if (btn) {
+    btn.textContent = theme === "dark" ? "☀" : "☾";
+    btn.setAttribute("aria-label", theme === "dark" ? "Switch to light mode" : "Switch to dark mode");
+  }
+  readPalette();
+}
+let theme = "light";
+try {
+  theme = localStorage.getItem("torii.theme")
+    || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+} catch { /* ignore */ }
+applyTheme(theme);
+$("#themeToggle")?.addEventListener("click", () => {
+  const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+  try { localStorage.setItem("torii.theme", next); } catch { /* ignore */ }
+  applyTheme(next);
+  if (lastData) render(lastData);  // repaint canvas/SVG charts with the new palette
+});
 
 // ── init ──────────────────────────────────────────────────────────────────────
 initBackground();

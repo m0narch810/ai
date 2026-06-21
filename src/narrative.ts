@@ -40,6 +40,19 @@ METHOD 2 — RTH MACRO BIAS:
 - Crowding/COT: speculators at extremes (>80 = crowded long, no buyers left, reversal risk; <20 = crowded short). Below 50 = room for buyers.
 BIAS RULE: bullish when 2Y stable/falling AND liquidity flowing in (TGA down / RRP draining) AND COT < 50. Bearish when 2Y rising fast (esp. without 10Y) AND liquidity tightening AND COT > 80. Otherwise neutral, and say which factors conflict.
 
+METHOD 2.5 — CROSS-ASSET & EVENT OVERLAY (macro.cross):
+Read the cross-asset basket as the market pricing geopolitics/commodities in real time — a fast move here can OVERRIDE the yield-curve bias toward risk-off. Each reading has dir computed on a 0.2% threshold, so "rising"/"falling" already means a real move.
+- Oil (brent/wti) spiking = energy/geopolitics shock (e.g. supply disruption). Sharp oil up → inflation + growth fear → RISK-OFF, bearish NQ, regardless of yields. This is the Strait-of-Hormuz / Middle-East-flare case: oil leads, equities follow down.
+- VIX rising fast = fear bid → bearish, expect chop/sharp reversals (raise VEX weighting). VIX falling = calm → supports clean trend.
+- DXY (dollar) rising fast = tightening / haven flight → bearish NQ. Falling dollar = bullish.
+- Gold rising WITH oil/VIX = haven rotation confirming risk-off. Gold rising alone (dollar flat) = softer read.
+- Copper falling = global-growth fear (bearish); rising = reflation (bullish).
+- HYG (credit) falling = risk-off confirmation; BTC falling = risk appetite draining (bearish), both corroborate equity direction.
+- CONFLUENCE: when oil↑ + VIX↑ + dollar↑ + gold↑ all align, that is a strong risk-off event regime — let it dominate the bias and call clean_or_choppy "choppy". When the basket is quiet, lean on Methods 1–2. Name the specific cross-asset tell in macro_drivers and the summary; if a basket member is missing (macro.notes), weight what's present.
+
+METHOD 2.6 — LIVE NEWS & EVENTS (macro.headlines + web search):
+You have macro.headlines: recent market-moving headlines (keyless GDELT feed). You ALSO have WebSearch/WebFetch — USE them to verify and deepen the picture before deciding the bias. Specifically: search for today's pre-open macro drivers — breaking geopolitics (oil/energy supply, conflict, sanctions), the latest Fed/FOMC commentary and rate-cut/hike odds, and any major overnight headline moving equity futures. Cross-check the headlines and the cross-asset basket: e.g. if oil is spiking AND a Strait-of-Hormuz / supply story is live, that's a confirmed risk-off catalyst — weight it heavily and say so. Ignore stale or non-market noise. Treat one unconfirmed headline cautiously; multiple corroborating sources = real. If web search is unavailable, fall back to macro.headlines alone. Record what you actually used in news_events with a per-item impact (bullish/bearish/neutral for NQ) and reflect it in macro_bias and the summary. Do NOT invent events — only report what the feed or your searches actually returned.
+
 SYNTHESIS:
 - Combine: the macro bias is the day's gravity; the open-type is the mechanics of the first move. State the TRUE EXPANSION DIRECTION at the open (where price actually goes once the open-type resolves), the exact level targeted, how far it runs, what confirms the move is complete, and the next target.
 - reversal_zones: pick from the provided board levels (real scored strikes) the 2–4 where a major reversal is most likely given today's open-type + bias; each with a one-line reason. Use those strike prices; do not invent.
@@ -47,7 +60,7 @@ SYNTHESIS:
 - If macro inputs are missing (see macro.notes), weight what is present and say so; never fabricate readings.
 
 OUTPUT — CRITICAL: respond with ONLY one raw JSON object, no prose/markdown. Shape:
-{"macro_bias":"bullish"|"bearish"|"neutral","macro_bias_score":<-100..100 int>,"macro_drivers":[{"label":"2Y Yield","reading":"<short factual>","lean":"bull"|"bear"|"neutral"}],"open_type":"manip_down_real_up"|"manip_up_real_down"|"real_pump"|"real_dump"|"unclear","expansion_direction":"up"|"down"|"two-sided","targeted_level":<number>,"move_extent":"<short>","completion_signal":"<short>","next_target":<number>,"clean_or_choppy":"clean"|"choppy","manipulation_tell":"<short or empty>","reversal_zones":[{"price":<number>,"side":"support"|"resistance","note":"<short>"}],"summary":"<one paragraph: bias, open type, expansion direction, key levels, main flow tell, clean/choppy. Exact price levels only.>"}`;
+{"macro_bias":"bullish"|"bearish"|"neutral","macro_bias_score":<-100..100 int>,"macro_drivers":[{"label":"2Y Yield","reading":"<short factual>","lean":"bull"|"bear"|"neutral"}],"open_type":"manip_down_real_up"|"manip_up_real_down"|"real_pump"|"real_dump"|"unclear","expansion_direction":"up"|"down"|"two-sided","targeted_level":<number>,"move_extent":"<short>","completion_signal":"<short>","next_target":<number>,"clean_or_choppy":"clean"|"choppy","manipulation_tell":"<short or empty>","reversal_zones":[{"price":<number>,"side":"support"|"resistance","note":"<short>"}],"news_events":[{"headline":"<short factual>","impact":"bullish"|"bearish"|"neutral","source":"<domain or empty>"}],"summary":"<one paragraph: bias, open type, expansion direction, key levels, main flow tell, clean/choppy, and any live event catalyst. Exact price levels only.>"}`;
 
 const strikesNear = (snap: DataSnapshot, spot: number) => {
   const band = config.nearSpotBandPct * spot;
@@ -93,7 +106,13 @@ function buildFlowInput(snap: DataSnapshot, spot: number) {
 
 function runClaude(userPrompt: string): Promise<string> {
   return new Promise((resolve, reject) => {
-    const args = ["-p", "--output-format", "json", "--model", config.model, "--system-prompt", SYSTEM, "--disallowed-tools", "*"];
+    // The narrative pass MAY read live news (web search) — the per-tick scorer never does.
+    // Whitelisting only WebSearch/WebFetch leaves everything else (Bash/Edit/Write) denied:
+    // in headless `-p` mode an un-allowlisted tool can't prompt, so it simply can't run.
+    const toolArgs = config.narrativeWebSearch
+      ? ["--allowed-tools", "WebSearch WebFetch"]
+      : ["--disallowed-tools", "*"];
+    const args = ["-p", "--output-format", "json", "--model", config.model, "--system-prompt", SYSTEM, ...toolArgs];
     const child = spawn(CLAUDE_BIN, args, { stdio: ["pipe", "pipe", "pipe"] });
     let out = "", err = "";
     child.stdout.on("data", (d) => (out += d));
@@ -165,6 +184,7 @@ export async function buildNarrative(
     manipulation_tell: parsed.manipulation_tell,
     reversal_zones: parsed.reversal_zones ?? [],
     summary: parsed.summary ?? "Narrative unavailable.",
+    news_events: parsed.news_events ?? [],
     scoring_method: method,
     macro,
   };
@@ -194,6 +214,11 @@ function fallbackNarrative(
   if (macro.tga) { const bull = macro.tga.dir === "falling"; score += bull ? 15 : -10; drivers.push({ label: "TGA", reading: `${macro.tga.last} (${macro.tga.dir})`, lean: bull ? "bull" : "bear" }); }
   if (macro.rrp) { const bull = macro.rrp.dir === "falling"; score += bull ? 15 : -10; drivers.push({ label: "RRP", reading: `${macro.rrp.last} (${macro.rrp.dir})`, lean: bull ? "bull" : "bear" }); }
   if (macro.cot) { const bear = macro.cot.percentile > 80; score += bear ? -15 : macro.cot.percentile < 50 ? 10 : 0; drivers.push({ label: "COT", reading: `${macro.cot.percentile}th pct`, lean: bear ? "bear" : "neutral" }); }
+  // Cross-asset risk-off overlay: a fast oil/VIX/dollar move is bearish NQ even if yields are calm.
+  const oil = macro.cross?.brent ?? macro.cross?.wti;
+  if (oil?.dir === "rising") { score -= 15; drivers.push({ label: "Oil", reading: `${oil.last} (rising)`, lean: "bear" }); }
+  if (macro.cross?.vix) { const bear = macro.cross.vix.dir === "rising"; score += bear ? -15 : macro.cross.vix.dir === "falling" ? 8 : 0; drivers.push({ label: "VIX", reading: `${macro.cross.vix.last} (${macro.cross.vix.dir})`, lean: bear ? "bear" : "neutral" }); }
+  if (macro.cross?.dxy?.dir === "rising") { score -= 10; drivers.push({ label: "Dollar", reading: `${macro.cross.dxy.last} (rising)`, lean: "bear" }); }
 
   const negRegime = (flow.net_gex_regime || "").toLowerCase().includes("neg");
   const open_type: Narrative["open_type"] = negRegime ? "real_dump" : flow.price_vs_flip === "above" ? "real_pump" : "unclear";
