@@ -56,7 +56,7 @@ function drawSparkline() {
   ctx.beginPath();
   ctx.moveTo(px(0), py(pts[0].v));
   for (let i = 1; i < pts.length; i++) ctx.lineTo(px(i), py(pts[i].v));
-  ctx.strokeStyle = "#00b4d8";
+  ctx.strokeStyle = "#00aee0";
   ctx.lineWidth   = 1.5;
   ctx.lineJoin    = "round";
   ctx.stroke();
@@ -68,15 +68,15 @@ function drawSparkline() {
   ctx.lineTo(px(0), H);
   ctx.closePath();
   const grad = ctx.createLinearGradient(0, 0, 0, H);
-  grad.addColorStop(0, "rgba(0,180,216,.18)");
-  grad.addColorStop(1, "rgba(0,180,216,0)");
+  grad.addColorStop(0, "rgba(0,174,224,.15)");
+  grad.addColorStop(1, "rgba(0,174,224,0)");
   ctx.fillStyle = grad;
   ctx.fill();
 
   const last = pts[pts.length - 1];
   ctx.beginPath();
   ctx.arc(px(pts.length - 1), py(last.v), 2.5, 0, Math.PI * 2);
-  ctx.fillStyle = "#00b4d8";
+  ctx.fillStyle = "#00aee0";
   ctx.fill();
 
   const rangeEl = $("#sparkRange");
@@ -97,16 +97,16 @@ function renderGexChart(gexProfile, spot) {
   const barW   = Math.max(2, Math.floor(IW / n) - 1);
   const midY   = MT + IH / 2;
 
-  svg.appendChild(svgEl("line", { x1: ML, y1: midY, x2: W - MR, y2: midY, stroke: "#252d3d", "stroke-width": 1 }));
+  svg.appendChild(svgEl("line", { x1: ML, y1: midY, x2: W - MR, y2: midY, stroke: "#1d2b3e", "stroke-width": 1 }));
 
   gexProfile.forEach((p, i) => {
     const x    = ML + (i / n) * IW + (IW / n - barW) / 2;
     const frac = p.gex_m / maxAbs;
     const barH = Math.abs(frac) * (IH / 2 - 2);
     const isPos = p.gex_m >= 0;
-    const color = isPos ? "#ff4d5a" : "#00c97d";
+    const color = isPos ? "#e03333" : "#00cc78";
     const y = isPos ? midY - barH : midY;
-    svg.appendChild(svgEl("rect", { x, y, width: barW, height: Math.max(1, barH), fill: color, opacity: 0.65 }));
+    svg.appendChild(svgEl("rect", { x, y, width: barW, height: Math.max(1, barH), fill: color, opacity: 0.6 }));
   });
 
   if (typeof spot === "number" && gexProfile.length > 1) {
@@ -114,11 +114,11 @@ function renderGexChart(gexProfile, spot) {
     const slo = strikes[0], shi = strikes[strikes.length - 1], sr = shi - slo || 1;
     const sx = ML + ((spot - slo) / sr) * IW;
     if (sx >= ML && sx <= W - MR) {
-      svg.appendChild(svgEl("line", { x1: sx, y1: MT, x2: sx, y2: H - MB, stroke: "#00b4d8", "stroke-width": 1.5, "stroke-dasharray": "4 2" }));
+      svg.appendChild(svgEl("line", { x1: sx, y1: MT, x2: sx, y2: H - MB, stroke: "#00aee0", "stroke-width": 1.5, "stroke-dasharray": "4 2" }));
     }
   }
 
-  const axLbl = svgEl("text", { x: ML - 3, y: midY + 3.5, "text-anchor": "end", fill: "#394558", "font-family": "JetBrains Mono,monospace", "font-size": 8 });
+  const axLbl = svgEl("text", { x: ML - 3, y: midY + 3.5, "text-anchor": "end", fill: "#1c2940", "font-family": "JetBrains Mono,monospace", "font-size": 8 });
   axLbl.textContent = "0";
   svg.appendChild(axLbl);
 }
@@ -171,7 +171,7 @@ function renderCandleChart(candles) {
     const l = b.l ?? b.low   ?? 0;
     const x    = ML + i * bw;
     const bull  = c >= o;
-    const color = bull ? "#00c97d" : "#ff4d5a";
+    const color = bull ? "#00cc78" : "#e03333";
     const bodyTop = py(Math.max(o, c));
     const bodyBot = py(Math.min(o, c));
     const bodyH   = Math.max(1, bodyBot - bodyTop);
@@ -181,13 +181,13 @@ function renderCandleChart(candles) {
   });
 
   const vwapD = vwapPts.map((v, i) => `${i === 0 ? "M" : "L"}${(ML + i * bw + bw / 2).toFixed(1)},${py(v).toFixed(1)}`).join(" ");
-  svg.appendChild(svgEl("path", { d: vwapD, fill: "none", stroke: "#ffaa00", "stroke-width": 1.5, opacity: 0.85 }));
+  svg.appendChild(svgEl("path", { d: vwapD, fill: "none", stroke: "#f0a623", "stroke-width": 1.5, opacity: 0.85 }));
 
   for (let i = 0; i <= 4; i++) {
     const v = lo + (prange * i) / 4;
     const y = py(v);
-    svg.appendChild(svgEl("line", { x1: ML, y1: y, x2: W - MR, y2: y, stroke: "#252d3d", "stroke-width": 0.5 }));
-    const lbl = svgEl("text", { x: ML - 3, y: y + 3.5, "text-anchor": "end", fill: "#394558", "font-family": "JetBrains Mono,monospace", "font-size": 8 });
+    svg.appendChild(svgEl("line", { x1: ML, y1: y, x2: W - MR, y2: y, stroke: "#1d2b3e", "stroke-width": 0.5 }));
+    const lbl = svgEl("text", { x: ML - 3, y: y + 3.5, "text-anchor": "end", fill: "#1c2940", "font-family": "JetBrains Mono,monospace", "font-size": 8 });
     lbl.textContent = v.toFixed(1);
     svg.appendChild(lbl);
   }
@@ -212,12 +212,12 @@ function renderLevelMap(data, spot) {
   const W = 420, H = 72, ML = 40, MR = 40;
 
   svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
-  svg.appendChild(svgEl("line", { x1: ML, y1: H / 2, x2: W - MR, y2: H / 2, stroke: "#252d3d", "stroke-width": 1 }));
+  svg.appendChild(svgEl("line", { x1: ML, y1: H / 2, x2: W - MR, y2: H / 2, stroke: "#1d2b3e", "stroke-width": 1 }));
 
   for (const l of levels) {
     const x = ML + ((l.strike - pLo) / range) * (W - ML - MR);
     const isRes = l.side === "resistance";
-    const col  = isRes ? "#ff4d5a" : "#00c97d";
+    const col  = isRes ? "#e03333" : "#00cc78";
     const prob = l.reversal_prob / 100;
     const tkH  = 8 + prob * 18;
     const y1 = isRes ? H / 2 - tkH : H / 2;
@@ -230,8 +230,8 @@ function renderLevelMap(data, spot) {
 
   if (typeof spot === "number") {
     const sx = ML + ((spot - pLo) / range) * (W - ML - MR);
-    svg.appendChild(svgEl("line", { x1: sx, y1: 4, x2: sx, y2: H - 4, stroke: "#00b4d8", "stroke-width": 1.5, "stroke-dasharray": "3 2" }));
-    const sLbl = svgEl("text", { x: sx, y: H - 1, "text-anchor": "middle", "font-family": "JetBrains Mono,monospace", "font-size": 7, fill: "#00b4d8" });
+    svg.appendChild(svgEl("line", { x1: sx, y1: 4, x2: sx, y2: H - 4, stroke: "#00aee0", "stroke-width": 1.5, "stroke-dasharray": "3 2" }));
+    const sLbl = svgEl("text", { x: sx, y: H - 1, "text-anchor": "middle", "font-family": "JetBrains Mono,monospace", "font-size": 7, fill: "#00aee0" });
     sLbl.textContent = spot.toFixed(2);
     svg.appendChild(sLbl);
   }
@@ -291,40 +291,54 @@ function outcomeView(level) {
 
 // ── rung ──────────────────────────────────────────────────────────────────────
 function buildRung(level) {
-  const row = el("div", `rung ${level.side === "resistance" ? "res" : "sup"}`);
+  const isRes = level.side === "resistance";
+  const row   = el("div", `rung ${isRes ? "res" : "sup"}`);
+
+  // col 1: color stripe
   row.appendChild(el("div", "rung-stripe"));
 
-  const body = el("div", "rung-body");
-  const head = el("div", "rung-head");
-  head.appendChild(el("span", "strike", `$${fmtPrice(level.strike)}`));
+  // col 2: strike + distance
+  const colS  = el("div", "col-strike");
+  colS.appendChild(el("span", "strike", `$${fmtPrice(level.strike)}`));
   const distEl = el("span", "dist");
-  head.appendChild(distEl);
-  body.appendChild(head);
+  colS.appendChild(distEl);
+  row.appendChild(colS);
 
-  const tags = Array.isArray(level.tags) ? level.tags.slice(0, 4) : [];
-  if (level.reaction || tags.length) {
-    const chips = el("div", "chips");
-    if (level.reaction) chips.appendChild(el("span", `chip react ${level.reaction}`, level.reaction));
-    for (const t of tags) chips.appendChild(el("span", "chip", t));
-    body.appendChild(chips);
-  }
-  if (level.why)             body.appendChild(el("div", "why",    level.why));
-  if (level.target_strike != null) body.appendChild(el("div", "target", `→ $${fmtPrice(level.target_strike)}`));
-  row.appendChild(body);
-
-  const meter  = el("div", "rung-meter");
-  const tier   = level.reversal_prob >= 60 ? "hi" : level.reversal_prob >= 45 ? "mid" : "lo";
-  const prob   = el("div", `prob ${tier}`);
+  // col 3: probability + heat bar
+  const colP = el("div", "col-prob");
+  const tier = level.reversal_prob >= 60 ? "hi" : level.reversal_prob >= 45 ? "mid" : "lo";
+  const prob = el("div", `prob ${tier}`);
   prob.appendChild(el("span", "pnum", String(level.reversal_prob)));
   prob.appendChild(el("span", "ppct", "%"));
-  meter.appendChild(prob);
+  colP.appendChild(prob);
   const heat = el("div", "heat");
   const fill = el("span");
   heat.appendChild(fill);
-  meter.appendChild(heat);
+  colP.appendChild(heat);
+  row.appendChild(colP);
+
+  // col 4: reaction (hidden on narrow screens via 0px column width)
+  const react = level.reaction || "";
+  row.appendChild(el("div", `col-react ${react || "mixed"}`, react ? react.toUpperCase() : "—"));
+
+  // col 5: tags + why + optional target
+  const colC = el("div", "col-content");
+  const tags = Array.isArray(level.tags) ? level.tags.slice(0, 4) : [];
+  if (tags.length) colC.appendChild(el("div", "tag-row", tags.join(" · ")));
+  if (level.why) {
+    const whyEl = el("div", "why-text", level.why);
+    if (level.target_strike != null) {
+      whyEl.appendChild(el("span", "target-inline", ` → $${fmtPrice(level.target_strike)}`));
+    }
+    colC.appendChild(whyEl);
+  }
+  row.appendChild(colC);
+
+  // col 6: outcome badge (hidden on narrow screens via 0px column width)
   const badgeEl = el("span", "badge");
-  meter.appendChild(badgeEl);
-  row.appendChild(meter);
+  const colB    = el("div", "col-badge");
+  colB.appendChild(badgeEl);
+  row.appendChild(colB);
 
   row.addEventListener("click", () => row.classList.toggle("open"));
   return { el: row, level, distEl, badgeEl, fill };
@@ -346,21 +360,20 @@ function paintDist(entry, spot) {
   entry.distEl.textContent = `${signed(d, 1)} · ${signed(pct, 1)}%`;
 }
 
-// ── hero metrics ──────────────────────────────────────────────────────────────
+// ── metrics strip ─────────────────────────────────────────────────────────────
 function renderHeroMetrics(data) {
   const m = $("#heroMetrics");
   m.replaceChildren();
-  const reg   = data.regime || "—";
-  const cells = [
-    { k: "Gamma",    v: reg === "positive" ? "Positive" : reg === "negative" ? "Negative" : reg, cls: reg === "positive" ? "pos" : reg === "negative" ? "neg" : "" },
-  ];
+  const reg = data.regime || "";
+  const cells = [];
+  if (reg) cells.push({ k: "GEX", v: reg === "positive" ? "POS" : reg === "negative" ? "NEG" : reg.toUpperCase(), cls: reg === "positive" ? "pos" : reg === "negative" ? "neg" : "" });
   if (typeof data.expected_move === "number") cells.push({ k: "Exp Move", v: `±${data.expected_move.toFixed(1)}`, cls: "" });
-  cells.push({ k: "Session", v: data.session || "—", cls: "" });
+  if (data.session) cells.push({ k: "Session", v: data.session, cls: "" });
   for (const c of cells) {
-    const row = el("div", "metric-row");
-    row.appendChild(el("span", "mk", c.k));
-    row.appendChild(el("span", `mv ${c.cls}`.trim(), c.v));
-    m.appendChild(row);
+    const item = el("div", "mitem");
+    item.appendChild(el("span", "mk", c.k));
+    item.appendChild(el("span", `mv ${c.cls}`.trim(), c.v));
+    m.appendChild(item);
   }
 }
 
@@ -370,11 +383,15 @@ function renderHeroIv(data) {
   if (data.iv && typeof data.iv.current === "number") {
     const dir   = (data.iv.direction || "").toUpperCase();
     const arrow = dir.startsWith("RIS") ? "▲" : dir.startsWith("FALL") ? "▼" : "→";
-    iv.appendChild(el("span", "iv-label", "IV"));
-    iv.appendChild(el("span", dir.startsWith("RIS") ? "iv-val warn" : "iv-val", `${data.iv.current.toFixed(1)} ${arrow}`));
+    const item  = el("div", "mitem");
+    item.appendChild(el("span", "mk", "IV"));
+    item.appendChild(el("span", dir.startsWith("RIS") ? "mv warn" : "mv", `${data.iv.current.toFixed(1)} ${arrow}`));
+    iv.appendChild(item);
   }
   const method = data.scoring_method === "rule" ? "rule" : "ai";
-  iv.appendChild(el("span", `method-tag${method === "rule" ? " rule" : ""}`, method === "rule" ? "manual scored" : "ai scored"));
+  const mitem  = el("div", "mitem");
+  mitem.appendChild(el("span", `method-tag${method === "rule" ? " rule" : ""}`, method === "rule" ? "manual" : "ai scored"));
+  iv.appendChild(mitem);
 }
 
 // ── repaint ───────────────────────────────────────────────────────────────────

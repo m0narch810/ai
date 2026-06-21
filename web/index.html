@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#0f1117" />
+  <meta name="theme-color" content="#080a10" />
   <title>Mesa · QQQ</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -11,114 +11,104 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-<main id="app">
+<div id="app">
 
+  <!-- TOPBAR -->
   <header class="topbar">
     <div class="brand">
       <span class="ticker">QQQ</span>
-      <div class="brandtext">
-        <span class="title">Mesa</span>
-        <span class="eyebrow">dealer positioning · QQQ / MNQ</span>
-      </div>
+      <span class="title">Mesa</span>
+    </div>
+    <div class="topspot">
+      <span class="spotnum" id="heroSpot">—</span>
+      <span class="spotchg" id="heroChg"></span>
+      <span class="spotsrc" id="heroSrc"></span>
     </div>
     <div class="status">
       <span class="status-dot" id="statusDot"></span>
       <span class="status-text" id="statusText">loading</span>
     </div>
+    <button id="refresh" type="button" aria-label="Refresh">↻</button>
   </header>
 
-  <!-- ── HERO ── -->
-  <div class="hero">
-    <div class="hero-spot">
-      <span class="lbl">Spot</span>
-      <span class="spotnum" id="heroSpot">—</span>
-      <span class="spotchg" id="heroChg"></span>
-      <span class="spotsrc" id="heroSrc"></span>
-    </div>
-    <div class="hero-spark">
-      <span class="lbl">Session</span>
-      <canvas id="sparkline" class="sparkline" width="200" height="48"></canvas>
-      <span class="spark-range" id="sparkRange"></span>
-    </div>
-    <div class="hero-metrics" id="heroMetrics"></div>
-    <div class="hero-iv" id="heroIv"></div>
+  <!-- METRICS STRIP -->
+  <div class="mstrip">
+    <div id="heroMetrics"></div>
+    <div id="heroIv"></div>
   </div>
 
-  <!-- ── READ LINE ── -->
-  <div class="read-wrap" id="readWrap" hidden>
-    <span class="read-label">READ</span>
-    <p id="heroRead"></p>
+  <!-- SPARKLINE -->
+  <div class="spark-panel">
+    <canvas id="sparkline" class="sparkline" width="600" height="48"></canvas>
+    <span class="spark-range" id="sparkRange"></span>
   </div>
 
+  <!-- READ -->
+  <div class="read-line" id="readWrap" hidden>
+    <span class="read-kw">Read</span>
+    <span id="heroRead"></span>
+  </div>
+
+  <!-- BANNER -->
   <div class="banner" id="banner" hidden></div>
 
-  <!-- ── CHARTS (desktop only) ── -->
+  <!-- CHARTS (desktop only) -->
   <div class="charts-section" id="chartsSection">
     <div class="chart-panel">
       <div class="chart-hdr">
         <span class="chart-title">GEX Profile</span>
-        <span class="chart-sub" id="gexChartSub">+red=resistance · −green=support</span>
+        <span class="chart-sub" id="gexChartSub">pos = resistance · neg = support</span>
       </div>
-      <svg id="gexChart" class="chart-svg" viewBox="0 0 400 160" preserveAspectRatio="none"></svg>
+      <svg id="gexChart" class="chart-svg" viewBox="0 0 400 140" preserveAspectRatio="none"></svg>
     </div>
     <div class="chart-panel">
       <div class="chart-hdr">
         <span class="chart-title">Price · VWAP</span>
         <span class="chart-sub" id="candleChartSub">5-min candles</span>
       </div>
-      <svg id="candleChart" class="chart-svg" viewBox="0 0 400 160" preserveAspectRatio="none"></svg>
+      <svg id="candleChart" class="chart-svg" viewBox="0 0 400 140" preserveAspectRatio="none"></svg>
     </div>
   </div>
 
-  <!-- ── MOBILE LEVEL MAP ── -->
+  <!-- MOBILE LEVEL MAP -->
   <div class="level-map-wrap" id="levelMapWrap" hidden>
-    <div class="level-map-hdr">
-      <span class="level-map-title">Level Map</span>
-      <span class="spark-range" id="levelMapLabel"></span>
-    </div>
     <svg id="levelMap" class="level-map"></svg>
   </div>
 
-  <!-- ── LADDER ── -->
-  <div class="ladder-grid" id="ladderGrid" aria-label="Price levels">
-    <div class="ladder-col" id="colCeil">
-      <div class="section-hdr">
-        <span class="section-icon res"></span>
-        <span class="section-title">Ceilings</span>
-        <span class="section-count" id="ceilCount"></span>
-      </div>
-      <div class="rungs" id="ceilings"></div>
+  <!-- LEVELS TABLE -->
+  <div class="level-table" id="ladderGrid" aria-label="Price levels">
+    <div class="table-head">
+      <div></div>
+      <div class="th">Strike</div>
+      <div class="th">Prob</div>
+      <div class="th">React</div>
+      <div class="th">Level</div>
+      <div class="th">Status</div>
     </div>
-    <div class="ladder-col" id="colFloor">
-      <div class="section-hdr">
-        <span class="section-icon sup"></span>
-        <span class="section-title">Floors</span>
-        <span class="section-count" id="floorCount"></span>
-      </div>
-      <div class="rungs" id="floors"></div>
-      <div class="spotrail" id="spotrail" hidden>
-        <span class="rail-line"></span>
-        <span class="rail-tag" id="railTag"></span>
-        <span class="rail-line"></span>
-      </div>
+
+    <div class="section-hdr res-hdr">
+      <span class="sh-label">Ceilings <span class="sh-count" id="ceilCount"></span></span>
     </div>
+    <div class="rungs" id="ceilings"></div>
+
+    <div class="spotrail" id="spotrail" hidden>
+      <span class="rail-marker">◆</span>
+      <span class="rail-tag" id="railTag"></span>
+    </div>
+
+    <div class="section-hdr sup-hdr">
+      <span class="sh-label">Floors <span class="sh-count" id="floorCount"></span></span>
+    </div>
+    <div class="rungs" id="floors"></div>
   </div>
 
   <div class="empty" id="empty" hidden></div>
 
   <footer class="foot">
-    <ul class="legend">
-      <li><span class="swatch sup"></span>floor</li>
-      <li><span class="swatch res"></span>ceiling</li>
-      <li><span class="swatch spot"></span>spot</li>
-    </ul>
-    <div class="foot-right">
-      <span id="asOf"></span>
-      <button id="refresh" type="button" aria-label="Refresh">↻</button>
-    </div>
+    <span id="asOf"></span>
   </footer>
 
-</main>
+</div>
 <script src="app.js"></script>
 </body>
 </html>
