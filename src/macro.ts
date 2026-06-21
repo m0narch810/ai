@@ -77,6 +77,36 @@ async function fredReading(seriesId: string, eps: number): Promise<MacroReading 
 }
 
 /**
+ * Daily Treasury General Account closing balance from the Treasury DTS (keyless, daily) — the
+ * ACTUAL TGA, not the FRED WTREGEN weekly average (which lags and can show the opposite direction:
+ * seen live, WTREGEN $880.7B "rising" vs the real daily $956.5B *falling*). For this table the
+ * "TGA Closing Balance" account_type carries the value in `open_today_bal`, in $millions.
+ */
+async function treasuryTgaReading(): Promise<MacroReading | undefined> {
+  try {
+    const url = "https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v1/accounting/dts/operating_cash_balance"
+      + "?filter=account_type:eq:Treasury%20General%20Account%20(TGA)%20Closing%20Balance"
+      + "&sort=-record_date&page%5Bsize%5D=2&fields=record_date,open_today_bal";
+    const res = await fetch(url, { headers: { accept: "application/json" } });
+    if (!res.ok) return undefined;
+    const body = (await res.json()) as { data?: { record_date: string; open_today_bal: string }[] };
+    const data = body?.data ?? [];
+    if (data.length < 2) return undefined;
+    const last = Number(data[0]!.open_today_bal), prev = Number(data[1]!.open_today_bal);
+    if (!Number.isFinite(last) || !Number.isFinite(prev)) return undefined;
+    const chg = round(last - prev, 2);
+    return { last: round(last, 2), prev: round(prev, 2), chg, dir: dirOf(chg, 1), asOf: data[0]!.record_date };
+  } catch {
+    return undefined;
+  }
+}
+
+/** Daily TGA from the Treasury DTS, falling back to the FRED weekly-average proxy. */
+async function tgaReading(): Promise<MacroReading | undefined> {
+  return (await treasuryTgaReading()) ?? (await fredReading("WTREGEN", 1));
+}
+
+/**
  * COT speculator crowding for Nasdaq-100 (CFTC legacy futures-only). Returns the latest
  * net non-commercial position as a percentile of its own ~3-year history — dxrk's >80 / <20
  * extreme-crowding read. Best-effort: returns null on any hiccup.
@@ -92,15 +122,21 @@ async function cotReading(): Promise<MacroSnapshot["cot"]> {
     const rows = (await res.json()) as Record<string, string>[];
     if (!Array.isArray(rows) || !rows.length) return null;
 
-    // Prefer the E-mini Nasdaq-100; fall back to any Nasdaq-100 contract.
+    // Pick a representative NQ contract, NEVER the MICRO (MNQ) book: micro speculator positioning
+    // runs wildly different from the E-mini and misreports "NQ" crowding (seen live: micro −33% of
+    // OI vs the E-mini's −0.4% and Consolidated's −3.3%). Prefer Nasdaq-100 Consolidated, then the
+    // E-mini ("NASDAQ MINI").
     const pick = (pred: (n: string) => boolean) =>
-      rows.filter((r) => pred((r.contract_market_name || "").toUpperCase()));
-    let series = pick((n) => n.includes("NASDAQ-100") && (n.includes("MINI") || n.includes("E-MINI")));
+      rows.filter((r) => { const n = (r.contract_market_name || "").toUpperCase(); return !n.includes("MICRO") && pred(n); });
+    let series = pick((n) => n.includes("NASDAQ-100") && n.includes("CONSOLIDATED"));
+    if (!series.length) series = pick((n) => n.includes("NASDAQ") && n.includes("MINI"));
     if (!series.length) series = pick((n) => n.includes("NASDAQ-100"));
     if (!series.length) series = pick((n) => n.includes("NASDAQ"));
     if (!series.length) return null;
 
+    // Lock to that one contract so the percentile is its own history, not a mix of contracts.
     const market = series[0]!.contract_market_name || "Nasdaq-100";
+    series = series.filter((r) => (r.contract_market_name || "") === market);
     const net = series
       .map((r) => Number(r.noncomm_positions_long_all) - Number(r.noncomm_positions_short_all))
       .filter((n) => Number.isFinite(n));
@@ -196,7 +232,7 @@ export async function fetchMacro(): Promise<MacroSnapshot> {
   const [us10y, usdjpy, tga, rrp, cot, crossResult, headlines] = await Promise.all([
     yahooReading("^TNX", 0.01),
     yahooReading("JPY=X", 0.05),
-    fredReading("WTREGEN", 1),    // Treasury General Account (weekly)
+    tgaReading(),                 // Treasury General Account — daily (DTS), weekly FRED fallback
     fredReading("RRPONTSYD", 1),  // Overnight reverse repo (daily)
     cotReading(),
     fetchCrossAssets(),

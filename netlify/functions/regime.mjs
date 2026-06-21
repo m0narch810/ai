@@ -26,17 +26,27 @@ function closeSeries(j) {
   const c = j?.chart?.result?.[0]?.indicators?.quote?.[0]?.close ?? [];
   return c.filter((x) => x != null && Number.isFinite(x));
 }
-/** Aligned daily OHLC (drops any row with a null leg) — for the Yang-Zhang vol estimator. */
-function ohlcSeries(j) {
-  const q = j?.chart?.result?.[0]?.indicators?.quote?.[0] ?? {};
+/** Dated daily OHLC (filtered together so the dates stay aligned to the bars). */
+function datedOhlc(j) {
+  const r = j?.chart?.result?.[0] ?? {};
+  const ts = r.timestamp ?? [], q = r.indicators?.quote?.[0] ?? {};
   const o = q.open ?? [], h = q.high ?? [], l = q.low ?? [], c = q.close ?? [];
-  const O = [], H = [], L = [], C = [];
+  const dates = [], O = [], H = [], L = [], C = [];
   for (let i = 0; i < c.length; i++) {
-    if ([o[i], h[i], l[i], c[i]].every((x) => x != null && Number.isFinite(x) && x > 0)) {
+    if (ts[i] != null && [o[i], h[i], l[i], c[i]].every((x) => x != null && Number.isFinite(x) && x > 0)) {
+      dates.push(new Date(ts[i] * 1000).toISOString().slice(0, 10));
       O.push(o[i]); H.push(h[i]); L.push(l[i]); C.push(c[i]);
     }
   }
-  return { o: O, h: H, l: L, c: C };
+  return { dates, o: O, h: H, l: L, c: C };
+}
+/** Dated daily closes (e.g. VXN), for date-joining against the realized-vol series. */
+function datedClose(j) {
+  const r = j?.chart?.result?.[0] ?? {};
+  const ts = r.timestamp ?? [], c = r.indicators?.quote?.[0]?.close ?? [];
+  const out = [];
+  for (let i = 0; i < c.length; i++) if (ts[i] != null && c[i] != null && Number.isFinite(c[i])) out.push({ date: new Date(ts[i] * 1000).toISOString().slice(0, 10), close: c[i] });
+  return out;
 }
 function etIso() {
   const p = new Intl.DateTimeFormat("en-CA", {
@@ -155,7 +165,7 @@ function topoPivots(c, boardStrikes) {
 }
 const volLevel = (p) => (p >= 80 ? "high" : p >= 55 ? "elevated" : p >= 25 ? "normal" : "low");
 
-function buildRegime({ spot, intraday, daily, vxn, gammaRegime, boardStrikes }) {
+function buildRegime({ spot, intraday, daily, dailyDates, vxn, gammaRegime, boardStrikes }) {
   const now = Date.now();
   const series = intraday.filter((c) => Number.isFinite(c) && c > 0).slice(-480);
   const returns = logReturns(series);
@@ -192,10 +202,17 @@ function buildRegime({ spot, intraday, daily, vxn, gammaRegime, boardStrikes }) 
   let impliedVol = null, vrpNote = "";
   if (vxn && vxn.length > 30) {
     const rv21s = yangZhangSeries(daily.o, daily.h, daily.l, daily.c, 21); // ~30 calendar days
-    const L = Math.min(vxn.length, rv21s.length);
-    const vxnT = vxn.slice(-L), rvT = rv21s.slice(-L);
-    const vrpSeries = vxnT.map((iv, i) => iv - rvT[i]);
-    const iv = vxn[vxn.length - 1], rv21 = rv21s[rv21s.length - 1] ?? 0, vrp = iv - rv21;
+    // Join implied (VXN) to realized BY DATE, not by tail index: the two Yahoo series can drop
+    // different bars (half-days, a null leg), so zipping the tails would mispair days. rv21s[k]
+    // ends on dailyDates[21 + k].
+    const rvByDate = new Map();
+    for (let k = 0; k < rv21s.length; k++) { const d = dailyDates[21 + k]; if (d) rvByDate.set(d, rv21s[k]); }
+    const pairs = [];
+    for (const { date, close } of vxn) { const rvd = rvByDate.get(date); if (rvd != null) pairs.push([close, rvd]); }
+    if (pairs.length > 20) {
+    const vrpSeries = pairs.map(([iv, rvd]) => iv - rvd);
+    const [iv, rv21] = pairs[pairs.length - 1];
+    const vrp = iv - rv21;
     const vrpPercentile = percentileRank(vrpSeries, vrp);
     const cheap = vrpPercentile <= 30, rich = vrpPercentile >= 70;
     impliedVol = { vxn: Math.round(iv * 10) / 10, rv21: Math.round(rv21 * 10) / 10, vrp: Math.round(vrp * 10) / 10, vrpPercentile, premium: cheap ? "cheap" : rich ? "rich" : "fair" };
@@ -204,6 +221,7 @@ function buildRegime({ spot, intraday, daily, vxn, gammaRegime, boardStrikes }) 
       : rich
         ? ` Implied vol (VXN ${iv.toFixed(0)}) is rich vs realized — protection is overpriced; fades and premium-selling are favored.`
         : ` Implied (VXN ${iv.toFixed(0)}) ≈ realized — vol is roughly fairly priced.`;
+    }
   }
 
   const er = efficiencyRatio(series), h = hurst(returns);
@@ -257,7 +275,8 @@ function buildRegime({ spot, intraday, daily, vxn, gammaRegime, boardStrikes }) 
   ];
 
   return {
-    as_of: etIso(), generated_at: new Date(now).toISOString(), scored_at: now, spot: Math.round(spot * 100) / 100,
+    as_of: etIso(), generated_at: new Date(now).toISOString(), scored_at: now,
+    spot: typeof spot === "number" && spot > 0 ? Math.round(spot * 100) / 100 : null,
     state, read, bias, confidence,
     vol: { rv: Math.round(rv * 10) / 10, rvPercentile, garchAnn: Math.round(garchAnn * 10) / 10, persistence: Math.round(persistence * 1000) / 1000, trend: volTrend, level, sticky },
     impliedVol,
@@ -296,9 +315,10 @@ export const handler = async (event) => {
       yahoo("QQQ", "3y", "1d"),
       yahoo("^VXN", "3y", "1d").catch(() => null), // implied vol — tolerate a miss
     ]);
-    const intraday = closeSeries(intraJ), daily = ohlcSeries(dailyJ);
-    const vxn = vxnJ ? closeSeries(vxnJ) : [];
-    const regime = buildRegime({ spot: intraday[intraday.length - 1] ?? 0, intraday, daily, vxn, gammaRegime, boardStrikes });
+    const intraday = closeSeries(intraJ), dailyD = datedOhlc(dailyJ);
+    const daily = { o: dailyD.o, h: dailyD.h, l: dailyD.l, c: dailyD.c };
+    const vxn = vxnJ ? datedClose(vxnJ) : [];
+    const regime = buildRegime({ spot: intraday[intraday.length - 1] ?? null, intraday, daily, dailyDates: dailyD.dates, vxn, gammaRegime, boardStrikes });
     await store.setJSON("latest", regime);
     return json(200, regime);
   } catch (err) {

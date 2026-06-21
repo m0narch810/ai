@@ -1,141 +1,146 @@
 {
-  "as_of": "2026-06-21T11:59:39",
-  "generated_at": "2026-06-21T16:06:01.365Z",
-  "scored_at": 1782057961365,
+  "as_of": "2026-06-21T16:55:14",
+  "generated_at": "2026-06-21T21:04:01.110Z",
+  "scored_at": 1782075841110,
   "spot": 739.8,
   "macro_bias": "bullish",
-  "macro_bias_score": 52,
+  "macro_bias_score": 68,
   "macro_drivers": [
     {
       "label": "2Y Yield",
-      "reading": "3.80%, falling -2bps vs prior 3.82%; 10Y flat at 4.451% — bull steepener, 2Y relief supports NQ",
+      "reading": "3.80, -0.02 from 3.82; 10Y flat at 4.451; bull steepener; Fed held 3.5-3.75% June 17 (Warsh first meeting, dots pushed to 2027-28) — market ignoring hawkish tilt, 2Y barely above upper bound",
       "lean": "bull"
     },
     {
-      "label": "Net Liquidity (TGA/RRP)",
-      "reading": "TGA +$52.5B this week (bearish drain); RRP -$6.58B draining (bullish, but near-zero already). TGA rise is the dominant headwind.",
+      "label": "Net Liquidity (TGA + RRP)",
+      "reading": "TGA -$24.6B this week (Treasury spending, cash injected); RRP drained to $0.25B from $6.83B — effectively zero, full depletion; dual liquidity flush into system",
+      "lean": "bull"
+    },
+    {
+      "label": "COT Crowding",
+      "reading": "Nasdaq spec net -3.3%, 2nd percentile — extreme crowded short; entire spec book was war-positioned short for Iran conflict; ceasefire deal catches every short wrong-footed; maximum forced-cover fuel",
+      "lean": "bull"
+    },
+    {
+      "label": "Iran War / Ceasefire Catalyst",
+      "reading": "US-Iran interim MOU signed June 15-17; Strait of Hormuz reopened (12.5M bbl/night per Vance June 20); Vance in Switzerland June 21 finalizing deal details; $6B frozen Qatar assets to be released; Trump threats to 'hit Iran very hard' create deal-collapse tail risk",
+      "lean": "bull"
+    },
+    {
+      "label": "BOJ / Carry Trade",
+      "reading": "BOJ hiked to 1.0% at June meeting; headline flags two more possible hikes; ~$500B yen carry outstanding (Morgan Stanley); USD/JPY 161.23 with mild yen bid (-0.118); systemic unwind risk is week-level, not a Monday catalyst",
       "lean": "bear"
     },
     {
-      "label": "COT Speculator Positioning",
-      "reading": "NQ speculator net% = -33, 5th percentile — extreme historically-short inside a parabolic bullrun; enormous short-squeeze fuel remaining",
-      "lean": "bull"
-    },
-    {
-      "label": "Fed / Inflation",
-      "reading": "Fed held 3.5–3.75% June 2026 FOMC unanimous; dot plot median raised to 3.8% year-end; CPI 4.2% YoY (3yr high driven by energy). Stagflationary but structurally priced-in by the bullrun.",
-      "lean": "bear"
-    },
-    {
-      "label": "USD/JPY (Carry Risk)",
-      "reading": "161.275, -0.073 — effectively flat; yen remains structurally weak, no carry unwind risk at current levels",
+      "label": "FOMC / Warsh",
+      "reading": "Held unanimously at 3.5-3.75% June 17; dot plot removed 2026 cut, pushed to 2027-28 citing Iran-war inflation spike; Warsh nod to possible future hikes; but 2Y at 3.80 shows market not pricing additional moves",
       "lean": "neutral"
     },
     {
-      "label": "Oil (Cross-Asset)",
-      "reading": "Brent $80.59 +$0.74, WTI $76.54 +$0.69 — modest bounce within a declining trend from Hormuz-shock peak of ~$95; not a new escalation",
-      "lean": "neutral"
-    },
-    {
-      "label": "Gold (Cross-Asset)",
-      "reading": "$4172.9, -$73 (-1.72%) — sharp haven demand fade; no new geopolitical bid forming; bullish for equities",
+      "label": "Cross-Asset Overlay",
+      "reading": "Gold -$73 (no haven bid — risk-on confirmation); HYG +$0.28 (credit market risk-on); Brent +$0.74 to $80.59 = Trump-threat deal-fragility premium NOT a new supply disruption (Strait is open); VIX +0.38 to 16.78 (low); copper -0.76%, BTC -0.74% (mild growth caution)",
       "lean": "bull"
-    },
-    {
-      "label": "HYG Credit (Cross-Asset)",
-      "reading": "$80.01 +0.28 (+0.35%) — credit risk-on confirmation; spreads tightening into equity bid",
-      "lean": "bull"
-    },
-    {
-      "label": "VIX (Cross-Asset)",
-      "reading": "16.78, +0.38 (+2.3%) — slightly elevated but sub-17 low-vol regime; clean trending day still viable",
-      "lean": "neutral"
     }
   ],
   "open_type": "real_pump",
   "open_type_label": "Real pump off the open",
   "expansion_direction": "up",
   "targeted_level": 750,
-  "move_extent": "~10.2 pts from 739.8 to 750 call wall (1.38%); GEX 238.5M at 750 is the session's gravitational magnet",
-  "completion_signal": "Price tags 750 call wall; fresh intraday call buying dries up across 740–749 strikes; dealer short-delta rehedging flips GEX into resistance; post-14:00 ET charm decay accelerates against calls",
+  "move_extent": "~10.2 pts (1.37%) from 739.8 to 750 call wall; above market's own 6.82-pt implied expected move — consistent with short-squeeze regime",
+  "completion_signal": "750 tag with call vol/OI ratios collapsing; fresh puts appearing AT 750; negative charm -13,017 at 750 triggers dealer delta-selling as 0DTE calls decay; price chops/stalls above 750 on first touch",
   "next_target": 755,
   "clean_or_choppy": "clean",
-  "manipulation_tell": "Fresh call buying spans 27 strikes from 731 to 758 — real multi-player conviction, not a single-trader event. Put buying at 738–739 (1049%/1006% vol/OI near spot) reads as long-stock protective hedge ahead of the push, not bearish positioning. Opening move up AGREES with positive DEX (+7552.2) — no manipulation signal present.",
+  "manipulation_tell": "Massive put concentration at 738 (1049% vol/OI) and 739 (1006%) right at spot may script an opening stop-flush sweep to gamma flip 737.5; call buying INTO that sub-738 dip is the real_pump confirmation — do not short the flush",
   "reversal_zones": [
     {
       "price": 750,
       "side": "resistance",
-      "note": "Call wall and major wall with GEX 238.5M and DEX 944.6M — primary fade zone; dealers aggressively rehedge short delta on any penetration here"
+      "note": "Primary call wall; GEX 238.5M + charm -13,017; board 63% reversal prob; main stall and fade zone — expect heavy put buying and call selling at first touch"
     },
     {
-      "price": 733,
-      "side": "support",
-      "note": "Heavy fresh flow both sides (puts 474%, calls 137%) plus GEX node +47.3M; morning friction point on pre-pump dip and first landing zone on reversal down from 750"
+      "price": 745,
+      "side": "resistance",
+      "note": "Board 42% reversal prob; large negative charm cluster -9,113; interim test on the run to 750 — consolidation zone if squeeze loses steam early"
     },
     {
-      "price": 730,
+      "price": 732,
       "side": "support",
-      "note": "DEX support +699.5M; balanced call/put OI; reversal_prob 40% on board — firm bounce zone if early dip materializes before the pump"
+      "note": "Board 55% reversal prob; positive charm +3,759 at 733; fresh call flow 150% vol/OI; strong dealer DEX buy zone on any intraday dip — highest-probability bounce below spot"
     },
     {
-      "price": 720,
+      "price": 728,
       "side": "support",
-      "note": "Put wall with reversal_prob 55% (highest on board); GEX negative (-34.4M) means put dealers provide maximum hedging support — structural session floor"
+      "note": "Board 40% reversal prob; GEX -126.9M (large negative = dealers buy aggressively); downside anchor if 732 fails under a Trump/Iran escalation headline shock"
     }
   ],
-  "summary": "Macro is firmly bullish: the 2Y yield is falling 2bps to 3.80% while 10Y holds flat at 4.451% (bull steepener), HYG is rising +0.35% (credit is risk-on), and gold is down a sharp -$73 / -1.72% — that haven-demand fade is the key cross-asset tell confirming no new geopolitical shock is forming today despite Brent's +$0.74 bounce to $80.59 (that is a fading-Hormuz recovery from the ~$95 peak, not a new escalation). The dominant macro force is COT at the 5th percentile: speculators are at a historically extreme short in NQ futures while the market has been in a parabolic bullrun (+5.83% past month, +39.71% YoY), creating enormous short-squeeze potential as the primary engine. Fed headwinds are real — held 3.5–3.75% unanimous at the June FOMC, dot plot raised to 3.8% median, and CPI at 4.2% (3yr high) is stagflationary — but these are structurally priced-in and the market has ignored them for months. TGA +$52.5B is the only live liquidity drag that carries weight today. Open type is REAL_PUMP: spot 739.8 sits above gamma flip 737.5, net DEX is robustly positive at +7552.2 (dealers buy all dips and fuel the rally), the call wall at 750 holds 238.5M GEX with clean air through 740–749, and fresh call flow spans 27 strikes from 731 to 758 across multiple expiries — this is broad multi-player conviction, not a single-strike event. ATM IV at 14.54 is low, VIX at 16.78 is sub-17, and charm at strikes above spot is negative (drift supports upside) — all point to a clean trending grind. True expansion direction is UP toward 750 (call wall / major wall), a 10.2-pt / 1.38% move from 739.8; completion signal is price tagging 750 with intraday call buying drying up and dealer short-delta rehedging activating, particularly post-14:00 ET as charm decay accelerates; next target is 755 (GEX 155.1M). Reversal zones from the board: 750 resistance (primary fade target), 733 support (heavy fresh flow friction, intraday anchor), 730 support (DEX +699.5M bounce floor), 720 support (put wall, reversal_prob 55%, ultimate session floor). No manipulation signal — 27-strike broad call buying CONFIRMS the directional bias, not fades it.",
+  "summary": "Macro gravity is firmly bullish into Monday June 22: the 2-year yield eased 2bp to 3.80 (10-year flat at 4.451, clean bull steepener), the TGA shed $24.6B this week injecting cash while the RRP drained to near-zero at $0.25B — full liquidity depletion — and NASDAQ speculative positioning sits at the 2nd COT percentile, the most crowded short read in years; critically, that short book was positioned for the ongoing Iran war, and the June 15-17 interim MOU (Strait reopened, Iran selling oil again, $6B frozen assets releasing) catches every war-short wrong-footed at once — Vance is in Switzerland right now working on deal details, which is the forced-cover catalyst. Monday has zero scheduled data releases (PCE not until Thursday June 25), making it a clean tape day for flow mechanics to dominate. The options structure confirms real_pump: spot 739.8 is 2.3 pts above the gamma flip at 737.5, DEX is strongly positive at +7,552 (dealers buy every dip), GEX is positive (cushions drops), and fresh call flow spans 31 strikes from 731 to 758 with monster vol/OI ratios concentrated at 737.5 (858%), 741 (468%), 737 (489%), and 738 (469%) — too broad and too coordinated for one trader, this is institutional squeeze positioning. ATM IV of 14.54 and VIX at 16.78 (low, slight uptick) point to a clean trending day. True expansion is up to 750 (board 63% reversal, GEX 238.5M, charm -13,017 — the primary stall and fade zone) from 739.8 = 10.2 pts (1.37%), above the 6.82-pt implied expected move, with 745 (42% reversal, charm -9,113) as the interim resistance test; above 750 the next cluster is 755. Opening tell: the enormous put concentration at 738 (1049% vol/OI) and 739 (1006%) right at spot may engineer a brief stop-flush sweep to the 737.5 gamma flip at the open — call buying into that sub-738 dip is the real_pump confirmation signal and the key tell for the day. Reversal support below: 732 (board 55%, positive charm, strong fresh call flow) then 728 (40%, GEX -126.9M = hard dealer buy). Cross-asset confirms risk-on: gold is falling $73 (no haven bid), HYG is firming, and the Brent rise to $80.59 (+$0.74) is Trump-threat deal-fragility premium — NOT a new supply disruption (the Strait is physically open) — so if Switzerland talks deliver any progress today, oil fades and the squeeze accelerates. Primary tail risks: Trump escalates publicly and deal collapses (Strait re-closes, oil spikes above $85, fast reversal from 750); BOJ double-hike risk (USD/JPY 161.23) is the week-level systemic overhang but has no Monday meeting catalyst.",
   "news_events": [
     {
-      "headline": "Strait of Hormuz partial closure (US-Israel-Iran conflict) drove Brent to ~$95 peak in 2026; oil now at $80.59 — active geopolitical background but risk fading, not escalating today",
-      "impact": "neutral",
-      "source": "oilprice.com"
-    },
-    {
-      "headline": "Fed held rates at 3.5–3.75% at June 2026 FOMC (12-0 unanimous); dot plot median year-end 2026 raised to 3.8%; no cuts priced",
+      "headline": "BOJ hiked to 1.0% at June meeting (highest since 1995); headline warns two more possible hikes; ~$500B yen carry positions at systemic risk",
       "impact": "bearish",
-      "source": "cmegroup.com"
+      "source": "asiabulletin.com"
     },
     {
-      "headline": "US CPI rose 4.2% YoY in May 2026 — 3-year high driven by energy prices; stagflation narrative elevated but priced-in by the ongoing bullrun",
-      "impact": "bearish",
-      "source": "rateprobability.com"
-    },
-    {
-      "headline": "QQQ in parabolic bullrun since April 2026; +5.83% past month, +39.71% YoY; retesting resistance trendline near 739–744 with COT at extreme 5th-percentile short",
+      "headline": "US-Iran interim MOU signed June 15-17; Strait of Hormuz reopened; Iran oil sales resumed; 12.5M bbl/night transiting per Vance June 20",
       "impact": "bullish",
-      "source": "stockinvest.us"
+      "source": "cnbc.com"
+    },
+    {
+      "headline": "Vance in Switzerland June 21 meeting Iranian officials on deal details; $6B frozen Qatar assets to be released — ceasefire framework advancing",
+      "impact": "bullish",
+      "source": "abcnews.com"
+    },
+    {
+      "headline": "Trump threatens to 'hit Iran very hard again' while Vance negotiates; Iran negotiating team protests, cites MOU violation — deal fragility risk",
+      "impact": "bearish",
+      "source": "news.wfsu.org"
+    },
+    {
+      "headline": "Fed held 3.5-3.75% June 17 (Warsh debut); dot plot erased 2026 cuts; next reductions 2027-28 on Iran-war inflation spike (PCE est. +4.1% YoY due Thursday June 25)",
+      "impact": "neutral",
+      "source": "cnbc.com"
+    },
+    {
+      "headline": "Monday June 22 carries zero major US economic data releases — clean tape day for flow to dominate",
+      "impact": "bullish",
+      "source": "kiplinger.com"
+    },
+    {
+      "headline": "OPEC cut 2026 demand growth to 970,000 bpd; May production 190,000 bpd below April partly from Strait closure disruptions — supply picture still adjusting to reopening",
+      "impact": "neutral",
+      "source": "inspenet.com"
     }
   ],
   "scoring_method": "ai",
   "macro": {
-    "asOf": "2026-06-21T11:59:59",
+    "asOf": "2026-06-21T16:55:28",
     "us2y": {
       "last": 3.8,
       "prev": 3.82,
       "chg": -0.02,
       "dir": "falling",
-      "asOf": "2026-06-21T11:59:55"
+      "asOf": "2026-06-21T16:55:16"
     },
     "us10y": {
       "last": 4.451,
       "prev": 4.451,
       "chg": 0,
       "dir": "flat",
-      "asOf": "2026-06-21T11:59:55"
+      "asOf": "2026-06-21T16:55:16"
     },
     "curve2s10s": 0.651,
     "usdjpy": {
-      "last": 161.275,
+      "last": 161.23,
       "prev": 161.348,
-      "chg": -0.073,
+      "chg": -0.118,
       "dir": "falling",
-      "asOf": "2026-06-21T11:59:55"
+      "asOf": "2026-06-21T16:55:16"
     },
     "tga": {
-      "last": 880713,
-      "prev": 828122,
-      "chg": 52591,
-      "dir": "rising",
+      "last": 956502,
+      "prev": 981113,
+      "chg": -24611,
+      "dir": "falling",
       "asOf": "2026-06-17"
     },
     "rrp": {
@@ -146,9 +151,9 @@
       "asOf": "2026-06-18"
     },
     "cot": {
-      "netPct": -33,
-      "percentile": 5,
-      "market": "MICRO E-MINI NASDAQ-100 INDEX"
+      "netPct": -3.3,
+      "percentile": 2,
+      "market": "NASDAQ-100 Consolidated"
     },
     "cross": {
       "brent": {
@@ -156,62 +161,133 @@
         "prev": 79.85,
         "chg": 0.74,
         "dir": "rising",
-        "asOf": "2026-06-21T11:59:55"
+        "asOf": "2026-06-21T16:55:16"
       },
       "wti": {
         "last": 76.54,
         "prev": 75.85,
         "chg": 0.69,
         "dir": "rising",
-        "asOf": "2026-06-21T11:59:55"
+        "asOf": "2026-06-21T16:55:16"
       },
       "gold": {
         "last": 4172.9,
         "prev": 4245.9,
         "chg": -73,
         "dir": "falling",
-        "asOf": "2026-06-21T11:59:55"
+        "asOf": "2026-06-21T16:55:16"
       },
       "copper": {
         "last": 6.337,
         "prev": 6.3855,
         "chg": -0.0485,
         "dir": "falling",
-        "asOf": "2026-06-21T11:59:55"
+        "asOf": "2026-06-21T16:55:16"
       },
       "dxy": {
         "last": 100.76,
         "prev": 100.849,
         "chg": -0.089,
         "dir": "flat",
-        "asOf": "2026-06-21T11:59:55"
+        "asOf": "2026-06-21T16:55:16"
       },
       "vix": {
         "last": 16.78,
         "prev": 16.4,
         "chg": 0.38,
         "dir": "rising",
-        "asOf": "2026-06-21T11:59:55"
+        "asOf": "2026-06-21T16:55:16"
       },
       "btc": {
-        "last": 64136.4,
+        "last": 63766.13,
         "prev": 64240.906,
-        "chg": -104.506,
-        "velocity": -36.4492,
-        "dir": "flat",
-        "asOf": "2026-06-21T11:59:55"
+        "chg": -474.776,
+        "velocity": -272.332,
+        "dir": "falling",
+        "asOf": "2026-06-21T16:55:16"
       },
       "hyg": {
         "last": 80.01,
         "prev": 79.73,
         "chg": 0.28,
         "dir": "rising",
-        "asOf": "2026-06-21T11:59:55"
+        "asOf": "2026-06-21T16:55:16"
       }
     },
-    "headlines": [],
-    "notes": [
-      "news (GDELT) unavailable"
-    ]
+    "headlines": [
+      {
+        "title": "BOJ may raise rates twice more as inflation risks grow",
+        "source": "asiabulletin.com",
+        "when": "20260621T203000Z",
+        "url": "http://www.asiabulletin.com/news/279134402/boj-may-raise-rates-twice-more-as-inflation-risks-grow"
+      },
+      {
+        "title": "2 Reasons to Wait Before Buying SpaceX Shares , and 1 Reason to Buy Right Now",
+        "source": "finance.yahoo.com",
+        "when": "20260621T203000Z",
+        "url": "https://finance.yahoo.com/markets/stocks/articles/2-reasons-wait-buying-spacex-195900079.html"
+      },
+      {
+        "title": "Vance meets top Iranian officials as US urges Iran to  turn over a new leaf",
+        "source": "borehamwoodtimes.co.uk",
+        "when": "20260621T203000Z",
+        "url": "https://www.borehamwoodtimes.co.uk/news/national/26214502.vance-meets-top-iranian-officials-us-urges-iran-turn-new-leaf/"
+      },
+      {
+        "title": "Iran says Switzerland talks with US focus on ending war , easing sanctions , releasing frozen assets",
+        "source": "aa.com.tr",
+        "when": "20260621T203000Z",
+        "url": "https://aa.com.tr/en/middle-east/iran-says-switzerland-talks-with-us-focus-on-ending-war-easing-sanctions-releasing-frozen-assets/3973911"
+      },
+      {
+        "title": "Labor reform outlook cools before long winter break",
+        "source": "southcoastregister.com.au",
+        "when": "20260621T203000Z",
+        "url": "https://www.southcoastregister.com.au/story/9296313/labors-reform-outlook-cools-before-long-winter-break/"
+      },
+      {
+        "title": "Full transcript of  Face the Nation with Margaret Brennan , June 21 , 2026",
+        "source": "yahoo.com",
+        "when": "20260621T203000Z",
+        "url": "https://www.yahoo.com/news/politics/articles/full-transcript-face-nation-margaret-190332117.html"
+      },
+      {
+        "title": "Iranian President Pezeshkian says USD 6 billion frozen in Qatar to be released",
+        "source": "asiabulletin.com",
+        "when": "20260621T203000Z",
+        "url": "http://www.asiabulletin.com/news/279137872/iranian-president-pezeshkian-says-usd-6-billion-frozen-in-qatar-to-be-released"
+      },
+      {
+        "title": "Iran chief negotiator urges US to be  cautiou after Trump threats",
+        "source": "aa.com.tr",
+        "when": "20260621T203000Z",
+        "url": "https://aa.com.tr/en/middle-east/iran-s-chief-negotiator-urges-us-to-be-cautious-after-trump-threats/3973893"
+      },
+      {
+        "title": "As Vance meets top Iranian officials in Switzerland , Trump threatens Tehran from afar",
+        "source": "kake.com",
+        "when": "20260621T203000Z",
+        "url": "https://www.kake.com/news/national/as-vance-meets-top-iranian-officials-in-switzerland-trump-threatens-tehran-from-afar/article_755fc282-211f-4d1a-bfec-d5d3f736ec01.html"
+      },
+      {
+        "title": "US willing to",
+        "source": "malaysiasun.com",
+        "when": "20260621T203000Z",
+        "url": "http://www.malaysiasun.com/news/279137905/us-willing-to-fundamentally-transform-relations-with-iran-jd-vance"
+      },
+      {
+        "title": "Iran negotiating team protests Trump  threats , says they violate memorandum of understanding",
+        "source": "aa.com.tr",
+        "when": "20260621T203000Z",
+        "url": "https://aa.com.tr/en/world/irans-negotiating-team-protests-trump-threats-says-they-violate-memorandum-of-understanding/3973863"
+      },
+      {
+        "title": "Trump threatens to  hit Iran very hard again  while Vance in Switzerland for talks",
+        "source": "news.wfsu.org",
+        "when": "20260621T203000Z",
+        "url": "https://news.wfsu.org/npr-news/2026-06-21/trump-threatens-to-hit-iran-very-hard-again-while-vance-in-switzerland-for-talks"
+      }
+    ],
+    "notes": []
   }
 }

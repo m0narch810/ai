@@ -48,6 +48,7 @@ const clamp    = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const fmtPrice = (n) => (typeof n === "number" ? (Number.isInteger(n) ? String(n) : n.toFixed(2)) : "—");
 const fmtSpot  = (n) => (typeof n === "number" ? n.toFixed(2) : "—");
 const signed   = (n, d = 2) => `${n >= 0 ? "+" : "−"}${Math.abs(n).toFixed(d)}`;
+const ordinal  = (n) => { const v = n % 100; return n + (["th","st","nd","rd"][(v - 20) % 10] || ["th","st","nd","rd"][v] || "th"); };
 
 const NS = "http://www.w3.org/2000/svg";
 function svgEl(tag, attrs) {
@@ -376,11 +377,15 @@ function renderGexChart(gexProfile, spot) {
   txt(ML - 3, MT + 8, "+", C.ink3, "end");
   txt(ML - 3, H - MB - 2, "−", C.ink3, "end");
 
-  // spot marker + its value
+  // spot marker + its value — positioned on the SAME index scale as the bars (bars are
+  // index-spaced, not value-spaced), so it lines up even when strikes aren't evenly spaced.
   if (typeof spot === "number" && gexProfile.length > 1) {
     const strikes = gexProfile.map(p => p.strike);
-    const slo = strikes[0], shi = strikes[strikes.length - 1], sr = shi - slo || 1;
-    const sx = ML + ((spot - slo) / sr) * IW;
+    let idxF;
+    if (spot <= strikes[0]) idxF = 0;
+    else if (spot >= strikes[n - 1]) idxF = n - 1;
+    else { let i = 0; while (i < n - 1 && strikes[i + 1] < spot) i++; const span = strikes[i + 1] - strikes[i] || 1; idxF = i + (spot - strikes[i]) / span; }
+    const sx = ML + (idxF / n) * IW + (IW / n) / 2;
     if (sx >= ML && sx <= W - MR) {
       svg.appendChild(svgEl("line", { x1: sx, y1: MT, x2: sx, y2: H - MB, stroke: C.red, "stroke-width": 1.5, "stroke-dasharray": "4 2" }));
       txt(clamp(sx, ML + 14, W - MR - 14), MT + 7, spot.toFixed(2), C.red, "middle", 600);
@@ -411,12 +416,15 @@ function renderCandleChart(candles) {
   if (!svg || !candles?.length) return;
   svg.innerHTML = "";
 
-  const bars = candles.slice(-48);
+  // Drop malformed bars: a single missing leg falling back to 0 would collapse the price axis.
+  const fin = (x) => typeof x === "number" && Number.isFinite(x);
+  const bars = candles.slice(-48).filter(b => fin(b.o ?? b.open) && fin(b.h ?? b.high) && fin(b.l ?? b.low) && fin(b.c ?? b.close));
+  if (!bars.length) return;
   const W = 400, H = 150, MT = 8, MB = 20, ML = 42, MR = 6;
   const IW = W - ML - MR, IH = H - MT - MB;
 
-  const highs = bars.map(b => b.h ?? b.high  ?? 0);
-  const lows  = bars.map(b => b.l ?? b.low   ?? 0);
+  const highs = bars.map(b => b.h ?? b.high);
+  const lows  = bars.map(b => b.l ?? b.low);
   let lo = Math.min(...lows), hi = Math.max(...highs);
   const pad = (hi - lo) * 0.08 || 1;
   lo -= pad; hi += pad;
@@ -527,7 +535,8 @@ let liveSpotAt = null;
 let rungEls    = [];
 
 const currentSpot = () => (typeof liveSpot === "number" ? liveSpot : lastData?.spot);
-const boardStale  = () => lastData && scoredAt() < Date.now() - STALE_MS;
+// A board with no/invalid timestamp must count as STALE (not silently fresh).
+const boardStale  = () => { if (!lastData) return false; const t = scoredAt(); return !Number.isFinite(t) || t < Date.now() - STALE_MS; };
 
 function isRthNow() {
   const p   = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(new Date());
@@ -917,7 +926,7 @@ function renderNarrative(n) {
   if (m?.usdjpy) fEntries.push(["USD/JPY", `${m.usdjpy.last} ${m.usdjpy.dir}`]);
   if (m?.tga)    fEntries.push(["TGA", `${m.tga.dir}`]);
   if (m?.rrp)    fEntries.push(["RRP", `${m.rrp.dir}`]);
-  if (m?.cot)    fEntries.push(["COT", `${m.cot.percentile}th pct`]);
+  if (m?.cot)    fEntries.push(["COT", `${ordinal(m.cot.percentile)} pct`]);
   const c = m?.cross;
   if (c?.brent)  fEntries.push(["Oil", `${c.brent.last} ${c.brent.dir}`]);
   if (c?.vix)    fEntries.push(["VIX", `${c.vix.last} ${c.vix.dir}`]);

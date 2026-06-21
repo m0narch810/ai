@@ -39,8 +39,13 @@ export function detectLevel(bars: Bar[], strike: number): DetectedLevel {
   for (let i = 0; i < bars.length; i++) {
     const b = bars[i]!;
     const prevClose = i > 0 ? bars[i - 1]!.close : b.open;
-    if (prevClose <= strike && b.high >= strike - fillTol) { ti = i; side = "resistance"; break; } // up into it
-    if (prevClose >= strike && b.low <= strike + fillTol) { ti = i; side = "support"; break; }     // down into it
+    // Side = which way price came from. Strict inequalities so an open exactly ON the level isn't
+    // double-counted as both; an at-level open is tie-broken by the bar's own close direction.
+    const upInto = prevClose < strike && b.high >= strike - fillTol;
+    const downInto = prevClose > strike && b.low <= strike + fillTol;
+    const onLevel = prevClose === strike;
+    if (upInto || (onLevel && b.close >= strike && b.high >= strike - fillTol)) { ti = i; side = "resistance"; break; } // up into it
+    if (downInto || (onLevel && b.close < strike && b.low <= strike + fillTol)) { ti = i; side = "support"; break; }    // down into it
   }
   if (ti === -1) {
     return { strike, side: strike >= lastClose ? "resistance" : "support", touched: false, outcome: "untouched" };

@@ -174,6 +174,7 @@ function buildStrikeRows(history: CaptureRecord[], spot: number) {
 /** Wall drift + per-strike dex_flow from the greek timeseries. */
 function buildGreekContext(greek: GreekTimeseries, spot: number) {
   const h = greek.history;
+  if (h.length === 0) return { wall_drift: [], strike_dex_flow: [] }; // empty history → no h[-1] deref
   const step = Math.max(1, Math.floor(h.length / 6));
   const indices = [...Array(6).keys()].map((i) => Math.min(h.length - 1, i * step));
   indices[5] = h.length - 1;
