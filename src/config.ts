@@ -48,6 +48,8 @@ export const config = {
   // last RTH board's levels but still refreshes spot + reversal outcomes — no AI call.
   aiScoreStart: process.env.AI_SCORE_START?.trim() || "09:15",
   aiScoreEnd: process.env.AI_SCORE_END?.trim() || "16:00",
+  // Pre-open day-narrative pass (dxrk macro bias + open-type), once per weekday at this ET time.
+  narrativeTime: process.env.NARRATIVE_TIME?.trim() || "09:00",
 
   // Scoring runs through Claude Code headless on the Max subscription — no API key.
   // model is a CLI alias ("opus"/"sonnet") or a full id.

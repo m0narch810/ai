@@ -172,6 +172,84 @@ export interface Board {
   gex_profile?: { strike: number; gex_m: number }[];
 }
 
+// ── Pre-open narrative (dxrk: market-open prediction + RTH macro bias) ────────────
+
+/** One macro series reading with direction vs its prior value. */
+export interface MacroReading {
+  last: number;
+  prev: number;
+  chg: number;
+  /** Short-term velocity (recent move), when an intraday series is available. */
+  velocity?: number;
+  dir: "rising" | "falling" | "flat";
+  asOf?: string;
+}
+
+/** The macro inputs behind dxrk's RTH bias (yields, liquidity, carry, crowding). */
+export interface MacroSnapshot {
+  asOf: string;
+  us2y?: MacroReading;
+  us10y?: MacroReading;
+  /** 10y − 2y, in basis-point-style points (same units as the yield series). */
+  curve2s10s?: number;
+  usdjpy?: MacroReading;
+  /** Treasury General Account level (FRED WTREGEN) — falling = liquidity in = bullish. */
+  tga?: MacroReading;
+  /** Overnight reverse repo (FRED RRPONTSYD) — draining = liquidity in = bullish. */
+  rrp?: MacroReading;
+  /** COT speculator crowding for Nasdaq-100, as a 0–100 percentile of net positioning. */
+  cot?: { netPct: number; percentile: number; market: string } | null;
+  /** Any source that failed to load, for honest display. */
+  notes: string[];
+}
+
+export type OpenType =
+  | "manip_down_real_up"
+  | "manip_up_real_down"
+  | "real_pump"
+  | "real_dump"
+  | "unclear";
+
+export interface NarrativeZone {
+  price: number;
+  side: Side;
+  note: string;
+}
+
+export interface NarrativeDriver {
+  label: string;
+  reading: string;
+  lean: "bull" | "bear" | "neutral";
+}
+
+/** The full pre-open day narrative the Narrative tab renders. */
+export interface Narrative {
+  as_of: string;
+  generated_at: string;
+  scored_at: number;
+  spot: number;
+  /** RTH macro bias (dxrk PDF 2). */
+  macro_bias: "bullish" | "bearish" | "neutral";
+  macro_bias_score?: number; // -100..100
+  macro_drivers: NarrativeDriver[];
+  /** Open-type verdict (dxrk PDF 1). */
+  open_type: OpenType;
+  open_type_label: string;
+  expansion_direction: "up" | "down" | "two-sided";
+  targeted_level?: number;
+  move_extent?: string;
+  completion_signal?: string;
+  next_target?: number;
+  clean_or_choppy: "clean" | "choppy";
+  manipulation_tell?: string;
+  /** Where major reversal(s) can happen — tied to the board's scored strikes. */
+  reversal_zones: NarrativeZone[];
+  /** One-paragraph day story. */
+  summary: string;
+  scoring_method: "ai" | "unavailable";
+  macro?: MacroSnapshot;
+}
+
 /** Detector outcome for a level over the day's spot path. */
 export type ReversalOutcome = "reversed" | "broke" | "pending" | "untouched";
 

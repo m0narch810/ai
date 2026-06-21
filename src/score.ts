@@ -1,7 +1,28 @@
 import { spawn } from "node:child_process";
 import { fetchCandles } from "./altaris.js";
 import { config, type SessionDef } from "./config.js";
-import type { AltarisCandlesResponse, Board, CaptureRecord, DataSnapshot, DetectedLevel, GreekTimeseries, ScoredLevel } from "./types.js";
+import type { AltarisCandlesResponse, Board, CaptureRecord, DataSnapshot, DetectedLevel, GreekTimeseries, Narrative, ScoredLevel } from "./types.js";
+
+/** Compact pre-open call fed into the board scorer to tilt probabilities (see SYSTEM). */
+export interface DayContext {
+  macro_bias: Narrative["macro_bias"];
+  open_type: Narrative["open_type"];
+  open_type_label: string;
+  expansion_direction: Narrative["expansion_direction"];
+  summary: string;
+}
+
+/** Distil a Narrative into the tilt context the board scorer consumes. */
+export function dayContextFromNarrative(n: Narrative | null): DayContext | undefined {
+  if (!n || n.scoring_method === "unavailable") return undefined;
+  return {
+    macro_bias: n.macro_bias,
+    open_type: n.open_type,
+    open_type_label: n.open_type_label,
+    expansion_direction: n.expansion_direction,
+    summary: n.summary,
+  };
+}
 
 const SESSION_NOTES: Record<SessionDef["name"], string> = {
   US: "US regular session: options are trading, so OI/GEX/charm/vanna and flows are LIVE and updating. Spot is QQQ.",
@@ -69,6 +90,7 @@ Definitions and rules — follow exactly:
 - The "greek_context" block (when present) gives session-level flow signals:
   - "wall_drift": the last ~6 readings of call_wall, put_wall, and net_gex_b ($B). A wall that shifted mid-session is more significant than the current snapshot alone — a call_wall jumping from 741 to 750 means a new dominant ceiling formed. A net_gex_b collapsing (e.g. 5.9 → 0.8) means the positive gamma regime is deteriorating fast; treat all levels more conservatively.
   - "strike_dex_flow": cumulative net delta traded at each strike near spot today (negative = net selling/put-buying; positive = net call-buying). A strike with large negative dex_flow AND high vol/OI in puts = this is where participants have been actively positioning for downside. Combined with the greek snapshot, this separates "standing OI" from "where money moved today."
+- DAY NARRATIVE TILT (when a "day_narrative" block is present — the pre-open macro + open-type call): treat it as a SECONDARY modifier on top of the greek structure, never an override. Modestly RAISE the probability of reversal levels that align with the day's expansion_direction / macro_bias (e.g. in a bullish/up day, support levels that catch dips and become launch points deserve a small lift; the resistance the open-type targets is a more reliable fade). Modestly LOWER counter-trend levels likely to be run through (e.g. a support in a "real_dump" day). Keep the tilt small (a few points) — clean structural confluence still rules, and if the structure contradicts the narrative, trust the structure and say so in the "why". Do not invent levels to fit the narrative.
 - Also output a top-level "read": ONE plain, factual line naming BOTH the resistance and support endpoint of the highest-conviction range — e.g. "Trapped between $750 resistance and $735 support; expect ping-pong between them." No jargon, no "desk/fade/primary order."
 
 OUTPUT FORMAT — CRITICAL:
@@ -175,10 +197,11 @@ function buildGreekContext(greek: GreekTimeseries, spot: number) {
   return { wall_drift, strike_dex_flow };
 }
 
-function buildInput(history: CaptureRecord[], prior: Board | null, detected: DetectedLevel[], session: SessionDef, spot: number, candles?: AltarisCandlesResponse, greek?: GreekTimeseries) {
+function buildInput(history: CaptureRecord[], prior: Board | null, detected: DetectedLevel[], session: SessionDef, spot: number, candles?: AltarisCandlesResponse, greek?: GreekTimeseries, dayContext?: DayContext) {
   const cur = history[history.length - 1]!.data;
   return {
     as_of: history[history.length - 1]!.capturedAt,
+    day_narrative: dayContext ?? null,
     session: { name: session.name, note: SESSION_NOTES[session.name] },
     lookback_snapshots: history.length,
     spot,
@@ -251,13 +274,14 @@ export async function scoreBoard(
   session: SessionDef,
   spot: number,
   greek?: GreekTimeseries,
+  dayContext?: DayContext,
 ): Promise<Board> {
   // Fetch Altaris candle context for US session; fail gracefully for fixture runs / Asia.
   let candles: AltarisCandlesResponse | undefined;
   if (session.source === "QQQ") {
     try { candles = await fetchCandles(1); } catch { /* non-fatal */ }
   }
-  const input = buildInput(history, prior, detected, session, spot, candles, greek);
+  const input = buildInput(history, prior, detected, session, spot, candles, greek, dayContext);
   const board = parseBoard(await runClaude(JSON.stringify(input)));
 
   const cur = history[history.length - 1]!.data;

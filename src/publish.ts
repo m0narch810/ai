@@ -18,7 +18,7 @@ import type { Board, DetectedLevel } from "./types.js";
 const NETLIFY_BIN = process.env.NETLIFY_BIN?.trim() || "netlify";
 
 /** Deploy web/ as pre-built static files (no build step → no Netlify build minutes). */
-function netlifyDeploy(): Promise<void> {
+export function netlifyDeploy(): Promise<void> {
   const siteId = process.env.NETLIFY_SITE_ID?.trim();
   // Run via a shell: on Windows the CLI is netlify.cmd, which Node can't spawn
   // directly (EINVAL) — shell:true resolves it through PATHEXT. Quote the dir for spaces.
@@ -56,6 +56,16 @@ export async function publish(board: Board, detected: DetectedLevel[], session?:
     console.log("  dashboard → web/dashboard.json");
   }
   return data;
+}
+
+/** Deploy web/ (incl. narrative.json) when a target is configured — for the narrative pass. */
+export async function deploySite(): Promise<void> {
+  if (process.env.PUBLISH_TARGET?.trim() === "netlify") {
+    await netlifyDeploy();
+    console.log("  narrative → Netlify");
+  } else {
+    console.log("  narrative → web/narrative.json");
+  }
 }
 
 /** Standalone: re-publish from the last persisted board + calibration (no re-scoring). */

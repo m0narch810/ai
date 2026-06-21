@@ -5,9 +5,10 @@ import { activeSession, config, isAiScoreTime, nowInSessionTz, RTH_MIN, type Ses
 import { captureTick, compactSnapshot, loadDayGreek, loadDaySnapshots } from "./capture.js";
 import { detectMany } from "./detect.js";
 import { fetchSessionBars, liveQqqEquivSpot } from "./market.js";
-import { publish } from "./publish.js";
-import { scoreBoard, scoreBoardDeterministic } from "./score.js";
-import type { Board, CaptureRecord, DataSnapshot, DetectedLevel } from "./types.js";
+import { buildNarrative, narrativeJsonPath, writeNarrative } from "./narrative.js";
+import { deploySite, publish } from "./publish.js";
+import { dayContextFromNarrative, scoreBoard, scoreBoardDeterministic } from "./score.js";
+import type { Board, CaptureRecord, DataSnapshot, DetectedLevel, Narrative } from "./types.js";
 
 /** ~90 min of context at a 15-min cadence — enough to read trend without diluting deltas. */
 const LOOKBACK = 6;
@@ -46,6 +47,16 @@ async function loadLatestBoard(date: string): Promise<Board | null> {
 async function loadLatestBoardAny(): Promise<Board | null> {
   try {
     return JSON.parse(await fs.readFile(path.join(config.paths.scored, "latest.json"), "utf8")) as Board;
+  } catch {
+    return null;
+  }
+}
+
+/** Today's pre-open narrative, if one was generated for this date (used to tilt scoring). */
+async function loadTodayNarrative(date: string): Promise<Narrative | null> {
+  try {
+    const n = JSON.parse(await fs.readFile(narrativeJsonPath, "utf8")) as Narrative;
+    return n.as_of.startsWith(date) ? n : null;
   } catch {
     return null;
   }
@@ -101,15 +112,17 @@ async function scoreFromHistory(date: string, history: CaptureRecord[], session:
   const prior = await loadLatestBoard(date);
 
   const candidateStrikes = [...named(cur), ...(prior?.levels.map((l) => l.strike) ?? [])];
-  const [detected, spot, greek] = await Promise.all([
+  const [detected, spot, greek, narrative] = await Promise.all([
     detectForSession(session, candidateStrikes),
     effectiveSpot(session, cur.spot),
     loadDayGreek(date),
+    loadTodayNarrative(date),
   ]);
+  const dayContext = dayContextFromNarrative(narrative); // tilt scoring toward the pre-open call
 
   let board: Board;
   try {
-    board = await scoreBoard(history.slice(-LOOKBACK), prior, detected, session, spot, greek ?? undefined);
+    board = await scoreBoard(history.slice(-LOOKBACK), prior, detected, session, spot, greek ?? undefined, dayContext);
   } catch (err) {
     console.warn("AI scoring failed, falling back to rule-based scorer:", err instanceof Error ? err.message : err);
     board = await scoreBoardDeterministic(history.slice(-LOOKBACK), prior, detected, session, spot);
@@ -185,15 +198,39 @@ async function fixtureRun() {
   await scoreFromHistory(nowInSessionTz().date, [record], activeSession() ?? US_SESSION);
 }
 
+/**
+ * Pre-open day narrative (dxrk PDF 1 + PDF 2). Captures a fresh snapshot, pulls macro,
+ * combines them through Claude into one narrative, writes web/narrative.json, deploys.
+ * Runs once ~09:00 ET (before the 09:15 AI score window) so the board can then tilt to it.
+ */
+async function narrativeTick(session: SessionDef) {
+  const { date, iso } = nowInSessionTz();
+  console.log(`[${new Date().toISOString()}] [${session.name}] building pre-open narrative...`);
+  await captureTick();
+  const history = await loadDaySnapshots(date);
+  const cur = history[history.length - 1]?.data;
+  if (!cur) { console.warn("narrative skipped — no snapshot captured."); return; }
+  const [spot, board] = await Promise.all([effectiveSpot(session, cur.spot), loadLatestBoardAny()]);
+  const narrative = await buildNarrative(cur, spot, board, iso);
+  await writeNarrative(narrative);
+  console.log(`  narrative: ${narrative.macro_bias} bias · ${narrative.open_type_label} · expansion ${narrative.expansion_direction}`);
+  try {
+    await deploySite();
+  } catch (err) {
+    console.warn("narrative publish failed (saved locally):", err instanceof Error ? err.message : err);
+  }
+}
+
 async function main() {
   const arg = process.argv[2];
 
   if (arg === "--fixture") return fixtureRun();
   if (arg === "--once") return liveTick(activeSession() ?? US_SESSION, true); // manual run always scores
+  if (arg === "--narrative") return narrativeTick(activeSession() ?? US_SESSION); // manual pre-open narrative
 
   // Scheduled mode — runs in the US and Asia windows; AI-scores only during RTH.
   const expr = `*/${config.scoreIntervalMin} * * * *`;
-  console.log(`Scheduler armed: every ${config.scoreIntervalMin}m. AI score ${config.aiScoreStart}-${config.aiScoreEnd} (RTH); off-RTH = spot+reversal refresh. Windows US ${config.sessionStart}-${config.sessionEnd}, Asia ${config.asiaStart}-${config.asiaEnd} ${config.sessionTz}.`);
+  console.log(`Scheduler armed: every ${config.scoreIntervalMin}m. AI score ${config.aiScoreStart}-${config.aiScoreEnd} (RTH); off-RTH = spot+reversal refresh. Pre-open narrative ${config.narrativeTime} ET (Mon-Fri). Windows US ${config.sessionStart}-${config.sessionEnd}, Asia ${config.asiaStart}-${config.asiaEnd} ${config.sessionTz}.`);
   cron.schedule(expr, async () => {
     const session = activeSession();
     if (!session) return;
@@ -201,6 +238,16 @@ async function main() {
       await liveTick(session);
     } catch (err) {
       console.error("tick failed:", err instanceof Error ? err.message : err);
+    }
+  }, { timezone: config.sessionTz });
+
+  // Pre-open narrative: once per weekday at config.narrativeTime ET (default 09:00), before RTH scoring.
+  const [nh, nm] = config.narrativeTime.split(":").map(Number);
+  cron.schedule(`${nm ?? 0} ${nh ?? 9} * * 1-5`, async () => {
+    try {
+      await narrativeTick(activeSession() ?? US_SESSION);
+    } catch (err) {
+      console.error("narrative tick failed:", err instanceof Error ? err.message : err);
     }
   }, { timezone: config.sessionTz });
 }

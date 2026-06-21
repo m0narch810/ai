@@ -430,6 +430,170 @@ body { overflow-x: hidden; min-height: 100vh; }
 #refresh:hover  { border-color: var(--red); color: var(--red); }
 #refresh:active { transform: translateY(1px); }
 
+/* ── TABS ── */
+.tabs {
+  display: flex;
+  gap: 0;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--line2);
+}
+.tab {
+  flex: 1;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  padding: 11px 8px;
+  cursor: pointer;
+  font-family: var(--jp);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink3);
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 9px;
+  transition: color .15s, border-color .15s;
+}
+.tab span {
+  font-family: var(--disp);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .26em;
+}
+.tab:hover { color: var(--ink2); }
+.tab.active { color: var(--ink); border-bottom-color: var(--red); }
+
+.view { animation: rise .4s var(--ease) both; }
+
+/* ── NARRATIVE ── */
+.narr-empty {
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--ink2);
+}
+.narr-empty code {
+  color: var(--red);
+  background: var(--red-soft);
+  padding: 1px 6px;
+}
+
+/* verdict hero */
+.narr-hero { margin-bottom: 12px; }
+.verdict {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 0;
+}
+.verdict-cell {
+  flex: 1;
+  min-width: 130px;
+  padding: 4px 18px 4px 0;
+  border-right: 1px solid var(--line);
+  margin-right: 18px;
+}
+.verdict-cell:last-child { border-right: none; margin-right: 0; padding-right: 0; }
+.vk {
+  font-family: var(--mono);
+  font-size: 9px; letter-spacing: .16em; text-transform: uppercase;
+  color: var(--ink3);
+}
+.vv {
+  margin-top: 7px;
+  font-family: var(--disp);
+  font-size: 26px; font-weight: 700; letter-spacing: -.01em;
+  line-height: 1.05;
+  color: var(--ink);
+}
+.vv.bull { color: var(--green); }
+.vv.bear { color: var(--red); }
+.vv.up::after  { content: " ▲"; font-size: 16px; }
+.vv.down::after{ content: " ▼"; font-size: 16px; }
+.vsub { margin-top: 5px; font-family: var(--mono); font-size: 10px; color: var(--ink2); }
+
+/* open-type body */
+.narr-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px dashed var(--line);
+  font-size: 13px;
+}
+.narr-line:last-child { border-bottom: none; }
+.narr-line .nk {
+  font-family: var(--mono);
+  font-size: 9px; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--ink3);
+  flex: none;
+  padding-top: 2px;
+}
+.narr-line .nv { text-align: right; color: var(--ink); }
+.narr-line .nv b { font-family: var(--mono); }
+.tell {
+  margin-top: 10px;
+  padding: 9px 11px;
+  background: var(--red-soft);
+  border-left: 2px solid var(--red);
+  font-size: 12px; line-height: 1.5; color: var(--ink2);
+}
+
+/* macro drivers */
+.driver {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px dashed var(--line);
+}
+.driver:last-child { border-bottom: none; }
+.driver .dk {
+  font-family: var(--mono);
+  font-size: 11px; color: var(--ink);
+  min-width: 92px; flex: none;
+}
+.driver .dv { font-family: var(--mono); font-size: 11px; color: var(--ink2); flex: 1; }
+.lean {
+  font-family: var(--disp);
+  font-size: 9px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+  padding: 2px 7px; flex: none;
+  border: 1px solid var(--line2); color: var(--ink3);
+}
+.lean.bull { color: var(--green); border-color: var(--green); }
+.lean.bear { color: var(--red); border-color: var(--red); }
+
+/* reversal zones */
+.zone {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--line);
+}
+.zone:last-child { border-bottom: none; }
+.zone-tick { width: 3px; align-self: stretch; flex: none; }
+.zone.resistance .zone-tick { background: var(--red); }
+.zone.support .zone-tick { background: var(--ink); }
+.zone-price {
+  font-family: var(--disp);
+  font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums;
+  color: var(--ink); min-width: 78px;
+}
+.zone.resistance .zone-price { color: var(--red); }
+.zone-side {
+  font-family: var(--mono);
+  font-size: 9px; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--ink3); min-width: 74px;
+}
+.zone-note { font-size: 12px; color: var(--ink2); line-height: 1.45; flex: 1; }
+
+#narrSummary {
+  font-family: var(--disp);
+  font-size: 15px; line-height: 1.65; color: var(--ink);
+}
+
 /* ── RESPONSIVE ── */
 @media (max-width: 620px) {
   .topgrid { grid-template-columns: 1fr; }

@@ -6,6 +6,7 @@
   "description": "Pulls Altaris options-flow data, scores QQQ strikes for reversal probability with Opus 4.8, serves a private level board.",
   "scripts": {
     "capture": "tsx src/run.ts --once",
+    "narrative": "tsx src/run.ts --narrative",
     "start": "tsx src/run.ts",
     "score:fixture": "tsx src/run.ts --fixture",
     "verify": "tsx src/verify.ts",

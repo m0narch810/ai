@@ -1,9 +1,11 @@
 const POLL_MS     = 60_000;
 const SPOT_MS     = 60_000;
 const CANDLE_MS   = 5 * 60_000;
+const NARR_MS     = 5 * 60_000;
 const STALE_MS    = 30 * 60_000;
 const SPOT_URL    = "/.netlify/functions/spot";
 const CANDLES_URL = "/.netlify/functions/altaris-candles";
+const NARR_URL    = "narrative.json";
 
 // ── palette (kept in sync with styles.css) ──
 const C = {
@@ -714,18 +716,175 @@ async function loadSpot() {
   } catch { /* offline / LAN — use scored spot */ }
 }
 
+// ── narrative tab ───────────────────────────────────────────────────────────────
+let narrData = null;
+
+const OPEN_TYPE_TONE = {
+  manip_down_real_up: "bull", manip_up_real_down: "bear",
+  real_pump: "bull", real_dump: "bear", unclear: "",
+};
+
+function narrAgo(n) {
+  const t = typeof n?.scored_at === "number" ? n.scored_at : Date.parse(n?.generated_at ?? "");
+  return agoMs(t);
+}
+
+function renderNarrative(n) {
+  const hero = $("#narrHero");
+  if (!n || !n.open_type) {
+    hero.replaceChildren(el("div", "narr-empty"));
+    hero.querySelector(".narr-empty").innerHTML =
+      'No narrative yet. It generates automatically before the open (≈09:00 ET), or run <code>npm run narrative</code>.';
+    for (const id of ["#narrOpen", "#narrMacro", "#narrZones"]) $(id).replaceChildren();
+    $("#narrSummaryWrap").hidden = true;
+    $("#narrFeedWrap").hidden = true;
+    return;
+  }
+
+  // verdict hero
+  const biasTone = n.macro_bias === "bullish" ? "bull" : n.macro_bias === "bearish" ? "bear" : "";
+  const dirTone  = n.expansion_direction === "up" ? "up" : n.expansion_direction === "down" ? "down" : "";
+  hero.replaceChildren();
+  const v = el("div", "verdict");
+  const cell = (k, val, cls, sub) => {
+    const c = el("div", "verdict-cell");
+    c.appendChild(el("span", "vk", k));
+    c.appendChild(el("div", `vv ${cls}`.trim(), val));
+    if (sub) c.appendChild(el("div", "vsub", sub));
+    return c;
+  };
+  v.appendChild(cell("Macro Bias", n.macro_bias.toUpperCase(), biasTone,
+    typeof n.macro_bias_score === "number" ? `score ${n.macro_bias_score > 0 ? "+" : ""}${n.macro_bias_score}` : ""));
+  v.appendChild(cell("Expansion", n.expansion_direction.toUpperCase(), dirTone, "true open direction"));
+  v.appendChild(cell("Day Type", n.clean_or_choppy.toUpperCase(), "", n.scoring_method === "ai" ? `scored ${narrAgo(n)}` : "rule-based"));
+  hero.appendChild(v);
+
+  // open type
+  const open = $("#narrOpen");
+  open.replaceChildren();
+  const otTone = OPEN_TYPE_TONE[n.open_type] || "";
+  const otHead = el("div", `vv ${otTone}`.trim(), n.open_type_label || n.open_type);
+  otHead.style.fontSize = "17px"; otHead.style.marginBottom = "6px";
+  open.appendChild(otHead);
+  const line = (k, val) => {
+    if (val == null || val === "") return;
+    const r = el("div", "narr-line");
+    r.appendChild(el("span", "nk", k));
+    const nv = el("span", "nv");
+    nv.innerHTML = val;
+    r.appendChild(nv);
+    open.appendChild(r);
+  };
+  if (n.targeted_level != null) line("Targets", `<b>$${fmtPrice(n.targeted_level)}</b>`);
+  line("Extent", n.move_extent);
+  line("Confirms done", n.completion_signal);
+  if (n.next_target != null) line("Then", `<b>$${fmtPrice(n.next_target)}</b>`);
+  if (n.manipulation_tell) {
+    const tell = el("div", "tell", n.manipulation_tell);
+    open.appendChild(tell);
+  }
+
+  // macro drivers
+  const macro = $("#narrMacro");
+  macro.replaceChildren();
+  const drivers = Array.isArray(n.macro_drivers) ? n.macro_drivers : [];
+  if (!drivers.length) macro.appendChild(el("div", "narr-empty", "No macro drivers reported."));
+  for (const d of drivers) {
+    const row = el("div", "driver");
+    row.appendChild(el("span", "dk", d.label));
+    row.appendChild(el("span", "dv", d.reading));
+    row.appendChild(el("span", `lean ${d.lean === "bull" ? "bull" : d.lean === "bear" ? "bear" : ""}`.trim(), d.lean || "—"));
+    macro.appendChild(row);
+  }
+
+  // reversal zones
+  const zones = $("#narrZones");
+  zones.replaceChildren();
+  const zs = Array.isArray(n.reversal_zones) ? n.reversal_zones : [];
+  if (!zs.length) zones.appendChild(el("div", "narr-empty", "No reversal zones flagged."));
+  for (const z of zs) {
+    const row = el("div", `zone ${z.side === "resistance" ? "resistance" : "support"}`);
+    row.appendChild(el("span", "zone-tick"));
+    row.appendChild(el("span", "zone-price", `$${fmtPrice(z.price)}`));
+    row.appendChild(el("span", "zone-side", z.side === "resistance" ? "抵抗 RES" : "支持 SUP"));
+    row.appendChild(el("span", "zone-note", z.note || ""));
+    zones.appendChild(row);
+  }
+
+  // summary
+  if (n.summary) { $("#narrSummaryWrap").hidden = false; $("#narrSummary").textContent = n.summary; }
+  else $("#narrSummaryWrap").hidden = true;
+
+  // macro feed (raw readings)
+  const feedWrap = $("#narrFeedWrap"), feed = $("#narrFeed");
+  feed.replaceChildren();
+  const m = n.macro;
+  const fEntries = [];
+  if (m?.us2y)   fEntries.push(["US 2Y",  `${m.us2y.last} ${m.us2y.dir}`]);
+  if (m?.us10y)  fEntries.push(["US 10Y", `${m.us10y.last} ${m.us10y.dir}`]);
+  if (typeof m?.curve2s10s === "number") fEntries.push(["2s10s", `${m.curve2s10s}`]);
+  if (m?.usdjpy) fEntries.push(["USD/JPY", `${m.usdjpy.last} ${m.usdjpy.dir}`]);
+  if (m?.tga)    fEntries.push(["TGA", `${m.tga.dir}`]);
+  if (m?.rrp)    fEntries.push(["RRP", `${m.rrp.dir}`]);
+  if (m?.cot)    fEntries.push(["COT", `${m.cot.percentile}th pct`]);
+  if (fEntries.length) {
+    feedWrap.hidden = false;
+    for (const [k, val] of fEntries) {
+      const item = el("div", "metric");
+      item.appendChild(el("span", "mk", k));
+      item.appendChild(el("span", "mv", val));
+      feed.appendChild(item);
+    }
+    if (m?.notes?.length) {
+      const note = el("div", "metric");
+      note.appendChild(el("span", "mk", "Unavailable"));
+      note.appendChild(el("span", "mv", String(m.notes.length)));
+      feed.appendChild(note);
+    }
+  } else feedWrap.hidden = true;
+}
+
+async function loadNarrative() {
+  try {
+    const res = await fetch(`${NARR_URL}?t=${Date.now()}`, { cache: "no-store" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    narrData = await res.json();
+    renderNarrative(narrData);
+  } catch {
+    renderNarrative(null);
+  }
+}
+
+// ── tabs ──────────────────────────────────────────────────────────────────────
+function setView(view) {
+  $("#viewBoard").hidden     = view !== "board";
+  $("#viewNarrative").hidden = view !== "narrative";
+  for (const t of document.querySelectorAll(".tab")) t.classList.toggle("active", t.dataset.view === view);
+  try { localStorage.setItem("torii.view", view); } catch { /* ignore */ }
+  if (view === "narrative") loadNarrative();
+}
+for (const t of document.querySelectorAll(".tab")) {
+  t.addEventListener("click", () => setView(t.dataset.view));
+}
+
 // ── init ──────────────────────────────────────────────────────────────────────
 initBackground();
 tickClock();
 setInterval(tickClock, 1000);
-$("#refresh").addEventListener("click", () => { load(); loadSpot(); loadCandles(); });
+$("#refresh").addEventListener("click", () => { load(); loadSpot(); loadCandles(); loadNarrative(); });
 document.addEventListener("visibilitychange", () => {
-  if (!document.hidden) { load(); loadSpot(); loadCandles(); }
+  if (!document.hidden) { load(); loadSpot(); loadCandles(); loadNarrative(); }
 });
+
+let startView = "board";
+try { startView = localStorage.getItem("torii.view") || "board"; } catch { /* ignore */ }
+setView(startView);
 
 load();
 loadSpot();
 loadCandles();
-setInterval(load,        POLL_MS);
-setInterval(loadSpot,    SPOT_MS);
-setInterval(loadCandles, CANDLE_MS);
+loadNarrative();
+setInterval(load,         POLL_MS);
+setInterval(loadSpot,     SPOT_MS);
+setInterval(loadCandles,  CANDLE_MS);
+setInterval(loadNarrative, NARR_MS);

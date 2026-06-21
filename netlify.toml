@@ -16,6 +16,12 @@
   [headers.values]
     Cache-Control = "no-store, max-age=0"
 
+# Same for the pre-open narrative — must reflect today's generated file, never a cached one.
+[[headers]]
+  for = "/narrative.json"
+  [headers.values]
+    Cache-Control = "no-store, max-age=0"
+
 # The shell + assets must revalidate every load, or a redeploy shows the OLD UI
 # (browser keeps the cached styles.css/app.js). no-cache = use cache only after a
 # 304, so deploys appear immediately without bumping ?v= by hand.
