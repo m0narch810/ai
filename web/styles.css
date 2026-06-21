@@ -52,7 +52,9 @@ body { overflow-x: hidden; min-height: 100vh; }
 
 /* ── SECTION (systematic frame) ── */
 .sec {
-  background: var(--panel);
+  background: rgba(255,255,255,.72);
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
   border: 1px solid var(--line2);
 }
 .sec-label {

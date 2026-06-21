@@ -41,7 +41,7 @@ function svgEl(tag, attrs) {
 function initBackground() {
   const canvas = $("#bg");
   if (!canvas) return;
-  if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const reduce = !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
   const ctx = canvas.getContext("2d");
   let W = 0, H = 0, dpr = 1;
 
@@ -81,12 +81,12 @@ function initBackground() {
     // ── grid: minor + major lines, slow vertical drift ──
     const off = (now * 0.006) % GRID;
     ctx.lineWidth = 1;
-    ctx.strokeStyle = "rgba(17,18,16,0.05)";
+    ctx.strokeStyle = "rgba(17,18,16,0.08)";
     ctx.beginPath();
     for (let x = 0; x <= W; x += GRID) { ctx.moveTo(x + 0.5, 0); ctx.lineTo(x + 0.5, H); }
     for (let y = -off; y <= H; y += GRID) { ctx.moveTo(0, y + 0.5); ctx.lineTo(W, y + 0.5); }
     ctx.stroke();
-    ctx.strokeStyle = "rgba(17,18,16,0.085)";
+    ctx.strokeStyle = "rgba(17,18,16,0.13)";
     ctx.beginPath();
     for (let x = 0, i = 0; x <= W; x += GRID, i++) if (i % 4 === 0) { ctx.moveTo(x + 0.5, 0); ctx.lineTo(x + 0.5, H); }
     for (let y = -off, j = 0; y <= H; y += GRID, j++) if (j % 4 === 0) { ctx.moveTo(0, y + 0.5); ctx.lineTo(W, y + 0.5); }
@@ -94,7 +94,7 @@ function initBackground() {
 
     // ── big vertical 鳥居 watermark on the right gutter ──
     ctx.save();
-    ctx.fillStyle = "rgba(17,18,16,0.035)";
+    ctx.fillStyle = "rgba(17,18,16,0.06)";
     const wm = Math.min(W, H) * 0.34;
     ctx.font = `700 ${wm}px "Noto Sans JP", sans-serif`;
     ctx.textAlign = "center"; ctx.textBaseline = "middle";
@@ -188,12 +188,12 @@ function initBackground() {
     ctx.textAlign = "right";
     ctx.fillText(`FPS ${pad(Math.round(1 / Math.max(dt, .001)), 2)}`, W - m - L - 8, H - m - 6);
 
-    requestAnimationFrame(frame);
+    if (!reduce) requestAnimationFrame(frame);
   }
 
   resize();
-  window.addEventListener("resize", resize);
-  requestAnimationFrame(frame);
+  window.addEventListener("resize", () => { resize(); if (reduce) frame(performance.now()); });
+  frame(performance.now());  // reduced-motion → one static render; otherwise this kicks off the loop
 }
 
 // ── clock ───────────────────────────────────────────────────────────────────────
