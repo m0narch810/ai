@@ -1,4 +1,5 @@
 import YahooFinance from "yahoo-finance2";
+import { fetchCandles } from "./altaris.js";
 import { config, type SessionDef } from "./config.js";
 import type { Bar } from "./types.js";
 
@@ -68,17 +69,24 @@ export async function liveQqqEquivSpot(): Promise<number> {
 
 /**
  * Detection bars for a session, in QQQ price terms.
- *  US   — QQQ OHLC directly (RTH window).
- *  Asia — NQ=F OHLC converted to QQQ-equiv via the smoothed ratio (Asia window).
+ *  US   — Altaris /api/candles (15-min, same source as the chart the user watches; includes delta per bar).
+ *  Asia — NQ=F OHLC from Yahoo converted to QQQ-equiv via smoothed ratio (Altaris doesn't serve futures).
  */
 export async function fetchSessionBars(session: SessionDef): Promise<Bar[]> {
-  const raw = await fetchRaw(session.source, 14);
-  const inSession = raw.filter((r) => inWindow(etMinutes(r.date), session.startMin, session.endMin));
-
   if (session.source === "QQQ") {
-    return inSession.map((r) => ({ ts: etIso(r.date), open: r.open, high: r.high, low: r.low, close: r.close, volume: r.volume }));
+    const resp = await fetchCandles(1);
+    return resp.candles
+      .filter((c) => {
+        const m = /T(\d{2}):(\d{2})/.exec(c.t);
+        if (!m) return false;
+        return inWindow(Number(m[1]) * 60 + Number(m[2]), session.startMin, session.endMin);
+      })
+      .map((c) => ({ ts: c.t, open: c.o, high: c.h, low: c.l, close: c.c, volume: c.v, delta: c.d }));
   }
 
+  // Asia: NQ→QQQ via Yahoo (Altaris doesn't serve futures bars).
+  const raw = await fetchRaw("NQ=F", 14);
+  const inSession = raw.filter((r) => inWindow(etMinutes(r.date), session.startMin, session.endMin));
   const ratio = await nqToQqqRatio();
   return inSession.map((r) => ({
     ts: etIso(r.date),

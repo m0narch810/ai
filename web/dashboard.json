@@ -1,96 +1,92 @@
 {
-  "as_of": "2026-06-18T15:25:28",
-  "scored_at": 1781811023185,
-  "generated_at": "2026-06-18T19:30:23.190Z",
-  "session": "US",
-  "spot": 739.115,
-  "regime": "positive",
-  "read": "Price pulled back after breaking 740; 741 named call wall caps any final-hour bounce, 735 is the mechanical floor if selling extends below 737.",
+  "as_of": "2026-06-19T14:02:54",
+  "scored_at": 1781892500969,
+  "generated_at": "2026-06-21T01:27:21.336Z",
+  "session": null,
+  "spot": 729.585,
+  "regime": "negative",
+  "read": "Spot sitting just below the $730 zero-gamma ceiling with the $720 major put wall as the primary structural floor — expect a 720-730 range, with $715 the 0DTE backstop if 720 fails.",
   "hard_stop_pts": 0.48,
   "clean_reversal_pts": 0.1,
-  "iv": {
-    "current": 22.94,
-    "direction": "RISING"
-  },
-  "expected_move": 17.16,
+  "expected_move": 14.86,
   "levels": [
     {
-      "strike": 745,
-      "reversal_prob": 60,
-      "side": "resistance",
-      "reaction": "clean",
-      "tags": [
-        "Charm -56k",
-        "Vanna 1504",
-        "OI 46k",
-        "Call Wall Chain"
-      ],
-      "why": "Largest charm node in the visible range (-56,244M) stacked with vanna (+1,504M) in a sharply rising-IV tape — dealers mechanically forced to sell into this strike into the close; gamma is bleeding (-534M) but charm and vanna fully dominate and intensify from here.",
-      "outcome": "untouched",
-      "touched": false
-    },
-    {
-      "strike": 741,
+      "strike": 720,
       "reversal_prob": 55,
-      "side": "resistance",
+      "side": "support",
       "reaction": "mixed",
       "tags": [
-        "Call Wall",
-        "GEX $354M",
-        "0DTE",
+        "Put Wall",
+        "Major Wall",
+        "OI 87k",
         "Charm"
       ],
-      "why": "Named call wall (next above broken 740) with rapidly building GEX (+69.6M delta) and charm -4,280M — the most likely level tested in the final 35 min, but today's demonstrated willingness to break 740 means momentum can overshoot before the 740 GEX gravity pulls price back, so reaction is not guaranteed to be tick-clean.",
+      "why": "Dominant structural put wall: 87k put OI, -444M GEX, and -40.6k charm creating massive dealer buy-back as put delta decays into close; 104% put vol/OI confirms this is a live battleground today, not standing inventory — highest-conviction floor in the data, but negative-gamma amplification keeps the bounce character mixed rather than clean.",
+      "target_strike": 730,
       "outcome": "untouched",
-      "touched": false
-    },
-    {
-      "strike": 735,
-      "reversal_prob": 44,
-      "side": "support",
-      "reaction": "clean",
-      "tags": [
-        "GEX $537M",
-        "Charm Support",
-        "OI 56k",
-        "GEX Building"
-      ],
-      "why": "Largest gamma wall below spot (536.7M, building +55.5M) with positive charm (+13,290M) creating a concentrated mechanical dealer buy zone into the close — primary floor on any downside extension through 737, and the concentrated greek signature favors a sharp to-the-tick hold.",
-      "outcome": "none",
       "touched": false
     },
     {
       "strike": 730,
-      "reversal_prob": 37,
+      "reversal_prob": 40,
+      "side": "resistance",
+      "reaction": "chop",
+      "tags": [
+        "Zero Gamma",
+        "Vol Trigger",
+        "OI 89k",
+        "Regime Flip"
+      ],
+      "why": "Dual named ceiling — zero_gamma (730.24) AND vol_trigger (730.20) — where the regime flips to positive dealer gamma and amplification shuts off; 89k combined OI is the largest ATM mass, making it the mechanical cap for any bounce off 720, but price is already oscillating through this zone so tick entry is a grind not a snap.",
+      "target_strike": 720,
+      "outcome": "none",
+      "touched": false
+    },
+    {
+      "strike": 715,
+      "reversal_prob": 33,
       "side": "support",
       "reaction": "clean",
       "tags": [
-        "OI 100k",
         "Put Wall",
-        "Dex $2.7B",
+        "0DTE",
+        "Charm",
         "Major Wall"
       ],
-      "why": "Dominant combined OI (100k) and massive delta mass ($2.7B dex) define this as the structural floor, but 9 points from spot with positive GEX pinning into close sharply limits reach probability — strong conditional reversal, low fill odds today.",
+      "why": "Named 0DTE major put wall with the single largest charm reading in the entire dataset (-56.4k), surpassing even 720; the 0DTE charm pressure on dealers is at maximum with 118 mins left — if 720 fails in negative-gamma cascade, this level produces a faster, cleaner snap than 720 itself because dealer buy-back is mechanically forced and concentrated.",
+      "target_strike": 730,
       "outcome": "untouched",
       "touched": false
     },
     {
       "strike": 733,
-      "reversal_prob": 30,
-      "side": "support",
-      "reaction": "chop",
+      "reversal_prob": 28,
+      "side": "resistance",
+      "reaction": "mixed",
       "tags": [
-        "GEX $166M",
-        "OI 30k",
-        "Graded Messy",
-        "Charm"
+        "GEX +66M",
+        "Vol Battleground",
+        "Charm",
+        "OI 16k"
       ],
-      "why": "Reversed today but only after a 0.47pt grind — today's tape confirms this is a weak hold, not a tick-clean wall; a re-test in the final 35 minutes would likely produce the same choppy behavior rather than a clean limit-order entry.",
-      "outcome": "reversed",
-      "touched": true,
-      "touchedAt": "2026-06-18T09:37:00",
-      "overshoot": 0.47,
-      "clean": false
+      "why": "The single most actively contested strike today — 615% call vol/OI and 690% put vol/OI, the highest ratios in the data — with positive GEX and -7.4k charm reinforcing a ceiling; secondary resistance above 730 if a bounce overpowers the gamma-flip level, but 3.4 pts above spot in a downtrend keeps the probability low.",
+      "target_strike": 720,
+      "outcome": "none",
+      "touched": false
+    },
+    {
+      "strike": 750,
+      "reversal_prob": 22,
+      "side": "resistance",
+      "reaction": "clean",
+      "tags": [
+        "Call Wall",
+        "Named Wall"
+      ],
+      "why": "Primary named call wall, locked stable at 750 across all six today's wall-drift readings; 20+ pts from current spot makes it conditional on a full trend reversal — prior 67% score gutted by today's 740/735 breaks and expanded distance — but IF reached, concentrated OI creates a clean snap.",
+      "target_strike": 720,
+      "outcome": "untouched",
+      "touched": false
     }
   ]
 }

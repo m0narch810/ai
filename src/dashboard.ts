@@ -36,6 +36,7 @@ export interface DashboardData {
   /** IV regime + expected daily move, for the hero. */
   iv?: { current: number; direction: string };
   expected_move?: number;
+  scoring_method?: "ai" | "rule";
   levels: DashboardLevel[];
 }
 
@@ -70,6 +71,7 @@ export function buildDashboard(board: Board, detected: DetectedLevel[], session?
     clean_reversal_pts: config.cleanReversalPts,
     iv: board.iv,
     expected_move: board.expected_move,
+    scoring_method: board.scoring_method,
     levels: board.levels.map((l) => ({ ...l, ...outcomeFor(l.strike, l.side, detected) })),
   };
 }

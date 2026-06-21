@@ -53,8 +53,9 @@ export const config = {
   // model is a CLI alias ("opus"/"sonnet") or a full id.
   model: process.env.ANTHROPIC_MODEL?.trim() || "sonnet",
 
-  // Min take-profit (the 0.25% rule) — used in the AI prompt for spacing/TP.
-  tpMinPct: num("TP_MIN_PCT", 0.0025),
+  // Min take-profit floor: ~100 NQ points at current QQQ/NQ ratio (~41.5:1) ≈ 2.5 QQQ pts ≈ 0.34% of spot.
+  // Used in AI prompt as min_reversal_move_pts; only levels with a far structural target this far away score high.
+  tpMinPct: num("TP_MIN_PCT", 0.0034),
   // Swing size that confirms a level actually reversed (a "hold", not a poke).
   // Set above the TP min so minor chop near a level doesn't count as a reversal.
   reversalSwingPct: num("REVERSAL_SWING_PCT", 0.005),

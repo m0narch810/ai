@@ -85,6 +85,10 @@ function buildRung(level) {
     body.appendChild(chips);
   }
   if (level.why) body.appendChild(el("div", "why", level.why));
+  if (level.target_strike != null) {
+    const tgt = el("div", "target", `→ target $${fmtPrice(level.target_strike)}`);
+    body.appendChild(tgt);
+  }
   row.appendChild(body);
 
   const meter = el("div", "meter");
@@ -173,6 +177,11 @@ function renderHeroMetrics(data) {
 
 function renderBanner(data) {
   const b = $("#banner");
+  if (data?.scoring_method === "rule" && !boardStale()) {
+    b.hidden = false;
+    b.replaceChildren(el("span", "banner-dot"), el("span", "banner-text", `Manual scored (AI unavailable) — rule-based levels, refreshed ${scoredAgo()}. Spot & reversals are live.`));
+    return;
+  }
   if (!boardStale()) { b.hidden = true; return; }
   b.hidden = false;
   const text = isRthNow()
@@ -185,8 +194,9 @@ function render(data) {
   renderBanner(data);
   const stale = boardStale();
   const offline = stale && isRthNow();
-  $("#statusDot").className = `status-dot ${stale ? "stale" : "live"}`;
-  $("#statusText").textContent = !stale ? "live" : isRthNow() ? `scored ${scoredAgo()}` : "held · off-rth";
+  const rule = !stale && data?.scoring_method === "rule";
+  $("#statusDot").className = `status-dot ${stale ? "stale" : rule ? "rule" : "live"}`;
+  $("#statusText").textContent = !stale ? (rule ? `rule scored` : "live") : isRthNow() ? `scored ${scoredAgo()}` : "held · off-rth";
 
   renderHeroMetrics(data);
 
@@ -218,7 +228,7 @@ function render(data) {
     setTimeout(() => (e.fill.style.width = `${clamp(e.level.reversal_prob, 0, 100)}%`), 40 + i * 55)));
 
   repaintLive();
-  $("#asOf").textContent = `scored ${scoredAgo()}`;
+  $("#asOf").textContent = `${data?.scoring_method === "rule" ? "rule scored" : "scored"} ${scoredAgo()}`;
 }
 
 // ---- data --------------------------------------------------------------------

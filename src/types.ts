@@ -92,7 +92,7 @@ export interface CaptureRecord {
   iv?: IvSummary;
 }
 
-/** One OHLCV bar (from Yahoo), timestamped in ET. */
+/** One OHLCV bar, timestamped in ET. Delta is net buyer-minus-seller volume for the bar (from Altaris). */
 export interface Bar {
   ts: string;
   open: number;
@@ -100,6 +100,32 @@ export interface Bar {
   low: number;
   close: number;
   volume: number;
+  /** Net delta for the bar (Altaris candles). Undefined for NQ/Yahoo bars. */
+  delta?: number;
+}
+
+/** One 15-min candle from /api/candles. */
+export interface AltarisCandle {
+  t: string;   // ET ISO, e.g. "2026-06-18T09:30:00"
+  o: number; h: number; l: number; c: number; v: number;
+  d?: number;  // net delta (buyer minus seller volume)
+}
+
+/** Full response shape from GET /api/candles[?days=N]. */
+export interface AltarisCandlesResponse {
+  ticker: string;
+  candles: AltarisCandle[];
+  emas: { t: string; e20: number; e50: number }[];
+  vwap_z: { t: string; vwap: number; z: number; c: number }[];
+  delta_profile: { price: number; delta: number }[];
+  levels: {
+    spot: number;
+    call_wall: number; put_wall: number; major_wall: number;
+    max_pain: number; zero_gamma: number; vol_trigger: number;
+    gex_top5: { strike: number; gex: number }[];
+    gex_profile: { s: number; g: number }[];
+    [key: string]: unknown;
+  };
 }
 
 export type Side = "support" | "resistance";
@@ -107,7 +133,7 @@ export type Side = "support" | "resistance";
 /** A single scored level the AI produced. */
 export interface ScoredLevel {
   strike: number;
-  /** 0-100, conditional: P(reversal >= min move | price reaches this strike). */
+  /** 0-100, conditional: P(reversal >= min move to a far named level | price reaches this strike). */
   reversal_prob: number;
   side: Side;
   /** One short line of the confluences driving the score. */
@@ -119,6 +145,11 @@ export interface ScoredLevel {
    * "clean" = instant touch-and-reject; "chop" = grinds/oscillates with drawdown; "mixed" = unclear.
    */
   reaction?: "clean" | "chop" | "mixed";
+  /**
+   * The specific far structural level price is expected to reach on a successful reversal here.
+   * Must be >= min_reversal_move_pts away. Defines the "ping pong" target.
+   */
+  target_strike?: number;
 }
 
 /** The board the AI returns each tick. */
@@ -135,6 +166,8 @@ export interface Board {
   iv?: { current: number; direction: string };
   /** Expected daily move (points), surfaced for the dashboard hero. */
   expected_move?: number;
+  /** How this board was scored: "ai" = Claude, "rule" = deterministic fallback. */
+  scoring_method?: "ai" | "rule";
 }
 
 /** Detector outcome for a level over the day's spot path. */

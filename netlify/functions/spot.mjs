@@ -67,7 +67,7 @@ export const handler = async () => {
   try {
     const { wd, minutes } = etNow();
     const usOpen = wd >= 1 && wd <= 5 && minutes >= 510 && minutes <= 1020;        // Mon–Fri 08:30–17:00 ET
-    const asia = (minutes >= 1200 && wd >= 0 && wd <= 4) || (minutes <= 240 && wd >= 1 && wd <= 5); // 20:00→04:00
+    const asia = (minutes >= 1080 && wd >= 0 && wd <= 4) || (minutes <= 240 && wd >= 1 && wd <= 5); // 18:00→04:00
 
     if (usOpen) {
       const spot = lastPrice(await yahoo("QQQ"));

@@ -2,11 +2,11 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import cron from "node-cron";
 import { activeSession, config, isAiScoreTime, nowInSessionTz, RTH_MIN, type SessionDef } from "./config.js";
-import { captureTick, compactSnapshot, loadDaySnapshots } from "./capture.js";
+import { captureTick, compactSnapshot, loadDayGreek, loadDaySnapshots } from "./capture.js";
 import { detectMany } from "./detect.js";
 import { fetchSessionBars, liveQqqEquivSpot } from "./market.js";
 import { publish } from "./publish.js";
-import { scoreBoard } from "./score.js";
+import { scoreBoard, scoreBoardDeterministic } from "./score.js";
 import type { Board, CaptureRecord, DataSnapshot, DetectedLevel } from "./types.js";
 
 /** ~90 min of context at a 15-min cadence — enough to read trend without diluting deltas. */
@@ -15,12 +15,22 @@ const LOOKBACK = 6;
 /** Manual --once / --fixture runs outside any session default to a US frame. */
 const US_SESSION: SessionDef = { name: "US", source: "QQQ", startMin: RTH_MIN.start, endMin: RTH_MIN.end };
 
+// Unlisted strikes with |GEX| >= this rival the named walls and must be candidates.
+const GEX_WALL_THRESHOLD = 100e6;
+
 function named(snap: DataSnapshot): number[] {
-  return [
+  const explicit = [
     snap.call_wall, snap.put_wall, snap.major_wall, snap.max_pain, snap.zero_gamma, snap.vol_trigger,
     snap.call_wall_0dte, snap.put_wall_0dte, snap.major_wall_0dte,
     ...snap.call_walls, ...snap.put_walls,
   ].filter((n) => Number.isFinite(n) && n > 0);
+
+  const fromGex = Object.entries(snap.gex_bar ?? {})
+    .filter(([, gex]) => Math.abs(gex) >= GEX_WALL_THRESHOLD)
+    .map(([s]) => parseFloat(s))
+    .filter((s) => Number.isFinite(s) && s > 0);
+
+  return [...new Set([...explicit, ...fromGex])];
 }
 
 async function loadLatestBoard(date: string): Promise<Board | null> {
@@ -91,12 +101,19 @@ async function scoreFromHistory(date: string, history: CaptureRecord[], session:
   const prior = await loadLatestBoard(date);
 
   const candidateStrikes = [...named(cur), ...(prior?.levels.map((l) => l.strike) ?? [])];
-  const [detected, spot] = await Promise.all([
+  const [detected, spot, greek] = await Promise.all([
     detectForSession(session, candidateStrikes),
     effectiveSpot(session, cur.spot),
+    loadDayGreek(date),
   ]);
 
-  const board = await scoreBoard(history.slice(-LOOKBACK), prior, detected, session, spot);
+  let board: Board;
+  try {
+    board = await scoreBoard(history.slice(-LOOKBACK), prior, detected, session, spot, greek ?? undefined);
+  } catch (err) {
+    console.warn("AI scoring failed, falling back to rule-based scorer:", err instanceof Error ? err.message : err);
+    board = await scoreBoardDeterministic(history.slice(-LOOKBACK), prior, detected, session, spot);
+  }
   await persist(date, board, detected);
   printBoard(board, session, spot);
 

@@ -12,7 +12,7 @@
   --dim: #9aa4b6;
   --muted: #5c6678;
 
-  /* signature accent — Altaris's own violet; carries the spot rail + reversal heat */
+  /* signature accent — violet; carries the spot rail + reversal heat */
   --violet: #7c5af7;
   --violet-2: #a78bfa;
   --violet-dim: rgba(124,90,247,.14);
@@ -64,6 +64,7 @@ body {
 .status-dot.live { background: var(--up); }
 .status-dot.live::after { content: ""; position: absolute; inset: 0; border-radius: 50%; background: var(--up); animation: pulse 2.8s ease-out infinite; }
 .status-dot.stale { background: var(--amber); }
+.status-dot.rule { background: var(--amber); }
 .status-text { font-family: var(--mono); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); white-space: nowrap; }
 @keyframes pulse { 0%{ transform: scale(1); opacity: .6; } 70%{ transform: scale(3); opacity: 0; } 100%{ opacity: 0; } }
 
@@ -141,6 +142,7 @@ body {
 .chip.react.mixed { color: var(--dim); border-color: var(--line-2); background: var(--panel-3); }
 .rung .why { font-family: var(--ui); font-size: 11.5px; line-height: 1.5; color: var(--dim); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .rung.open .why { -webkit-line-clamp: unset; overflow: visible; }
+.rung .target { font-family: var(--mono); font-size: 11px; color: var(--acc); margin-top: 3px; letter-spacing: 0.03em; }
 
 .rung .meter { flex: 0 0 66px; display: flex; flex-direction: column; align-items: flex-end; gap: 5px; }
 .rung .prob { font-family: var(--mono); font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1; white-space: nowrap; }

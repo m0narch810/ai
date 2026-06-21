@@ -1,6 +1,6 @@
 import { config } from "./config.js";
 import { getCookie, hasCredentials, refreshCookie } from "./auth.js";
-import type { DataSnapshot, GreekTimeseries } from "./types.js";
+import type { AltarisCandlesResponse, DataSnapshot, GreekTimeseries } from "./types.js";
 
 const BROWSER_HEADERS = {
   accept: "*/*",
@@ -36,3 +36,6 @@ async function getJson<T>(endpoint: string): Promise<T> {
 export const fetchData = () => getJson<DataSnapshot>("data");
 export const fetchGreekTimeseries = () => getJson<GreekTimeseries>("greek_timeseries");
 export const fetchIvTracker = () => getJson<Record<string, unknown>>("iv_tracker");
+/** GET /api/candles[?days=N] — 15-min OHLCV + delta per bar, plus levels/emas/vwap_z/delta_profile. */
+export const fetchCandles = (days?: number) =>
+  getJson<AltarisCandlesResponse>(days ? `candles?days=${days}` : "candles");
