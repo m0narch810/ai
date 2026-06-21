@@ -323,14 +323,20 @@ export interface Regime {
   /** 0-100 agreement across the axes. */
   confidence: number;
   vol: {
-    /** Annualized GARCH conditional vol (%), next bar. */
-    ann: number;
-    /** Annualized long-run (unconditional) vol (%). */
-    longRun: number;
-    trend: "expanding" | "contracting" | "steady";
-    level: "low" | "normal" | "elevated" | "high";
-    /** GARCH persistence α+β — how sticky vol shocks are (0-1). */
+    /** Current realized vol (annualized %, rolling 10-day close-to-close). */
+    rv: number;
+    /** Percentile of current RV within ~2y of its own history (0-100) — the core vol-regime read. */
+    rvPercentile: number;
+    /** GARCH(1,1) daily conditional forward vol (annualized %). */
+    garchAnn: number;
+    /** GARCH persistence α+β (0-1) — how slowly a vol shock decays. */
     persistence: number;
+    /** Short-vs-medium realized-vol momentum. */
+    trend: "expanding" | "contracting" | "steady";
+    /** Vol level keyed off the RV percentile, not absolute % thresholds. */
+    level: "low" | "normal" | "elevated" | "high";
+    /** persistence > 0.9 — an elevated reading is likely to persist, not mean-revert. */
+    sticky: boolean;
   };
   trend: {
     /** Kaufman efficiency ratio 0-1 (1 = pure trend, 0 = pure chop). */

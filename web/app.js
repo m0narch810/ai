@@ -356,18 +356,40 @@ function renderGexChart(gexProfile, spot) {
     svg.appendChild(svgEl("rect", { x, y, width: barW, height: Math.max(1, barH), fill: color, opacity: 0.5 }));
   });
 
+  // x-axis: strike labels under the chart (≤6 evenly spaced)
+  const txt = (x, y, s, fill, anchor = "middle", weight) => {
+    const t = svgEl("text", { x, y, "text-anchor": anchor, fill, "font-family": "JetBrains Mono,monospace", "font-size": 8 });
+    if (weight) t.setAttribute("font-weight", weight);
+    t.textContent = s;
+    svg.appendChild(t);
+  };
+  const fmtK = (k) => (k % 1 === 0 ? String(k) : k.toFixed(1));
+  const nTicks = Math.min(6, n);
+  for (let t = 0; t < nTicks; t++) {
+    const idx = nTicks === 1 ? 0 : Math.round((t / (nTicks - 1)) * (n - 1));
+    const x = ML + (idx / n) * IW + (IW / n) / 2;
+    txt(clamp(x, ML, W - MR), H - 4, fmtK(gexProfile[idx].strike), C.ink3);
+  }
+
+  // y-axis sign hints + zero line label
+  txt(ML - 3, midY + 3.5, "0", C.ink3, "end");
+  txt(ML - 3, MT + 8, "+", C.ink3, "end");
+  txt(ML - 3, H - MB - 2, "−", C.ink3, "end");
+
+  // spot marker + its value
   if (typeof spot === "number" && gexProfile.length > 1) {
     const strikes = gexProfile.map(p => p.strike);
     const slo = strikes[0], shi = strikes[strikes.length - 1], sr = shi - slo || 1;
     const sx = ML + ((spot - slo) / sr) * IW;
     if (sx >= ML && sx <= W - MR) {
       svg.appendChild(svgEl("line", { x1: sx, y1: MT, x2: sx, y2: H - MB, stroke: C.red, "stroke-width": 1.5, "stroke-dasharray": "4 2" }));
+      txt(clamp(sx, ML + 14, W - MR - 14), MT + 7, spot.toFixed(2), C.red, "middle", 600);
     }
   }
 
-  const axLbl = svgEl("text", { x: ML - 3, y: midY + 3.5, "text-anchor": "end", fill: C.ink3, "font-family": "JetBrains Mono,monospace", "font-size": 8 });
-  axLbl.textContent = "0";
-  svg.appendChild(axLbl);
+  // color key lives in the panel subtitle, off the plot (red = +GEX/pin, dark = −GEX)
+  const sub = $("#gexChartSub");
+  if (sub) sub.textContent = "red +gex · dark −gex · ┊ spot";
 }
 
 // ── Candle + VWAP chart ──────────────────────────────────────────────────────
@@ -931,7 +953,8 @@ async function loadNarrative() {
 
 // ── regime tab ──────────────────────────────────────────────────────────────────
 let regData = null;
-const REGIME_URL = "regime.json";
+const REGIME_FN  = "/.netlify/functions/regime"; // cloud compute (works with the box off)
+const REGIME_URL = "regime.json";                // static fallback (LAN / first paint)
 
 function regAgo(r) {
   const t = typeof r?.scored_at === "number" ? r.scored_at : Date.parse(r?.generated_at ?? "");
@@ -1002,14 +1025,18 @@ function renderRegime(r) {
 }
 
 async function loadRegime() {
-  try {
-    const res = await fetch(`${REGIME_URL}?t=${Date.now()}`, { cache: "no-store" });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    regData = await res.json();
-    renderRegime(regData);
-  } catch {
-    renderRegime(null);
+  // Prefer the cloud function (live even when the scoring box is off); fall back to the static
+  // file for LAN viewing. Keep the last good read if both fail rather than blanking the tab.
+  for (const url of [`${REGIME_FN}?t=${Date.now()}`, `${REGIME_URL}?t=${Date.now()}`]) {
+    try {
+      const res = await fetch(url, { cache: "no-store" });
+      if (!res.ok) continue;
+      regData = await res.json();
+      renderRegime(regData);
+      return;
+    } catch { /* try next source */ }
   }
+  renderRegime(regData || null);
 }
 
 // ── tabs ──────────────────────────────────────────────────────────────────────

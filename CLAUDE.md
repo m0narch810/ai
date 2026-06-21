@@ -87,15 +87,10 @@ poll them independently.
   `web/narrative.json` (Narrative tab). It **tilts the per-tick board scoring** via
   `dayContextFromNarrative` (run.ts loads today's narrative and feeds it to `scoreBoard`).
 
-- **Market regime** (`src/regime.ts`) — recomputed on **every** tick, both the RTH score path
-  and the off-RTH refresh path, by `updateRegime()` in run.ts → `web/regime.json` (Regime tab).
-  Pure builder (mirrors `dashboard.ts`), **no AI and no Altaris** — bars come from
-  `market.ts` `fetchRegimeBars` (NQ=F 15-min × 10d → QQQ-equiv, so it updates overnight too).
-  Four classical, non-overfit pillars: GARCH(1,1) variance-targeted MLE (conditional vol,
-  expanding/contracting), 0-dim persistent homology via topographic prominence (support/
-  resistance pivots, flagged `confluence` when within 0.6pt of a scored board strike), Kaufman
-  efficiency ratio + Hurst (trend vs mean-reversion), and the dealer-gamma regime from the
-  snapshot. Best-effort: a Yahoo failure logs and is swallowed — it never blocks the board publish.
+The **market regime** used to be a third side-pass here, but it's **pure math on public data**
+(no AI, no Altaris login), so it was moved entirely to a Netlify function — see
+`netlify/functions/regime.mjs` under hosting. The local loop no longer computes it, so the box
+being off doesn't stop the Regime tab.
 
 ## Scheduler
 
@@ -137,6 +132,16 @@ so the site keeps working when the scoring box is off:
 - **`spot.mjs`** — live spot from Yahoo server-side (Yahoo blocks browser CORS). Mirrors
   `market.ts` session logic (QQQ in US; NQ→QQQ-equiv in Asia). The spot line stays live.
 - **`altaris-candles.mjs`** — the candle/VWAP feed for the board chart.
+- **`regime.mjs`** — the whole Regime tab. On-demand with a 15-min Netlify-Blobs cache, so the
+  heavy compute runs at most once per 15 min no matter how many viewers poll. Pillars, all
+  estimator-grade and parameter-free (no curve-fitting): **Yang-Zhang** realized vol (range-based,
+  gap-aware) ranked to a **percentile** over ~3y; **GARCH(1,1)** daily conditional vol + persistence
+  α+β; **VXN implied vol → variance risk premium** (implied − same-horizon realized, percentile-ranked
+  — cheap = under-hedged/continuation, rich = fade/premium-sell); **0-dim persistent homology**
+  topology pivots; **Kaufman ER** + **Anis-Lloyd-corrected Hurst**. Dealer-gamma label from the
+  published `dashboard.json`; all prices from Yahoo (QQQ daily 3y + 15m, ^VXN daily 3y). The page
+  (`app.js` `loadRegime`) hits this first, falls back to static `web/regime.json` on LAN.
+  **Runs with the box off** — that's the point. Kept display-only (does not tilt board scoring).
 - **`watchdog.mjs`** — a **scheduled** function (cron `*/15 * * * *` in `netlify.toml`
   `[functions."watchdog"]`). During 09:50–16:00 ET Mon–Fri it reads the deployed
   `dashboard.json`; if it hasn't scored in `WATCHDOG_STALE_MIN` (default 35) it pushes a phone
@@ -166,8 +171,9 @@ so the site keeps working when the scoring box is off:
   QQQ+NQ minute can be 50h+ back, so a short window finds no overlap and throws. Don't shrink it.
 - **Watchdog needs `NTFY_TOPIC` set in the Netlify env** (not `.env` — it runs in the cloud).
   Tunables: `WATCHDOG_STALE_MIN`, `NTFY_SERVER`. The scheduled function is invoked by cron, not HTTP.
-- **Regime recomputes every tick, incl. off-RTH** — it has no AI cost; if it stops updating while
-  the board does, look at `fetchRegimeBars`/Yahoo, not the scorer.
+- **Regime is a cloud function now, not the local loop.** It computes in `regime.mjs` (Yahoo +
+  Netlify Blobs), independent of the scoring box. If it's stale, look at the function logs / Yahoo,
+  not the scorer. The committed `web/regime.json` is only a LAN/first-paint fallback.
 - **`[hidden]` in CSS:** always keep `[hidden] { display: none !important }` before any
   `display: flex/grid` rules — flex display overrides the hidden attribute otherwise.
 - After CSS/JS changes: `npm run publish` re-deploys without re-scoring.

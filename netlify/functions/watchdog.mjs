@@ -14,7 +14,7 @@
 //   NTFY_TOPIC        (required)  your private ntfy topic — subscribe to it in the ntfy app.
 //   NTFY_SERVER       (optional)  default https://ntfy.sh
 //   WATCHDOG_STALE_MIN(optional)  minutes old before "stale". Default 35 (≈2 missed 15-min ticks).
-import { getStore } from "@netlify/blobs";
+import { connectLambda, getStore } from "@netlify/blobs";
 
 const NTFY_SERVER = (process.env.NTFY_SERVER || "https://ntfy.sh").replace(/\/$/, "");
 const NTFY_TOPIC = process.env.NTFY_TOPIC?.trim();
@@ -43,7 +43,8 @@ async function notify(title, message, priority, tags) {
   });
 }
 
-export const handler = async () => {
+export const handler = async (event) => {
+  connectLambda(event); // wire Blobs context from the event (classic Lambda-signature function)
   if (!NTFY_TOPIC) return { statusCode: 200, body: "NTFY_TOPIC not set — nothing to do" };
 
   const { wd, minutes } = etNow();

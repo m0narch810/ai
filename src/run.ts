@@ -4,9 +4,8 @@ import cron from "node-cron";
 import { activeSession, config, isAiScoreTime, nowInSessionTz, RTH_MIN, type SessionDef } from "./config.js";
 import { captureTick, compactSnapshot, loadDayGreek, loadDaySnapshots } from "./capture.js";
 import { detectMany } from "./detect.js";
-import { fetchRegimeBars, fetchSessionBars, liveQqqEquivSpot, medianBarMinutes } from "./market.js";
+import { fetchSessionBars, liveQqqEquivSpot } from "./market.js";
 import { buildNarrative, narrativeJsonPath, writeNarrative } from "./narrative.js";
-import { buildRegime, writeRegime } from "./regime.js";
 import { deploySite, publish } from "./publish.js";
 import { dayContextFromNarrative, scoreBoard, scoreBoardDeterministic } from "./score.js";
 import type { Board, CaptureRecord, DataSnapshot, DetectedLevel, Narrative } from "./types.js";
@@ -84,24 +83,6 @@ function printBoard(board: Board, session: SessionDef, spot: number) {
   console.log("");
 }
 
-/**
- * Recompute the always-on market regime (topology + GARCH + dealer-gamma) and write
- * web/regime.json so the next deploy ships it. Best-effort: a Yahoo hiccup must never
- * block the board publish, so failures are logged and swallowed.
- */
-async function updateRegime(spot: number, gammaRegime: string, board: Board | null) {
-  try {
-    const bars = await fetchRegimeBars();
-    const regime = buildRegime({
-      spot, bars, barMinutes: medianBarMinutes(bars), gammaRegime, board, asOf: nowInSessionTz().iso,
-    });
-    await writeRegime(regime);
-    console.log(`  regime: ${regime.state}  (vol ${regime.vol.ann}% ${regime.vol.trend} · ER ${regime.trend.er} · ${regime.confidence}%)`);
-  } catch (err) {
-    console.warn("regime update skipped:", err instanceof Error ? err.message : err);
-  }
-}
-
 /** Reversal detection runs on Yahoo OHLC bars (real wicks); a fetch failure must not block scoring. */
 async function detectForSession(session: SessionDef, strikes: number[]): Promise<DetectedLevel[]> {
   try {
@@ -149,9 +130,6 @@ async function scoreFromHistory(date: string, history: CaptureRecord[], session:
   await persist(date, board, detected);
   printBoard(board, session, spot);
 
-  // Regime read refreshes alongside the board (uses this tick's snapshot for dealer gamma).
-  await updateRegime(spot, cur.gex_regime || board.regime, board);
-
   // Hybrid model: scoring is local, the board auto-publishes to the phone dashboard.
   // A publish/deploy hiccup must never lose us a scored board.
   try {
@@ -189,9 +167,6 @@ async function refreshTick(session: SessionDef) {
     "utf8",
   );
   printBoard(board, session, spot);
-
-  // Off-RTH the levels are held, but the regime keeps updating on the live overnight tape.
-  await updateRegime(spot, prior.regime, prior);
 
   try {
     await publish(board, detected, session.name);

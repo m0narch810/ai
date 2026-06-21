@@ -70,41 +70,6 @@ export async function liveQqqEquivSpot(): Promise<number> {
 }
 
 /**
- * Longer, coarser bar series for regime stats (GARCH / topology / Hurst). Always built from
- * NQ=F (≈24h futures coverage, converted to QQQ-equiv) so the regime keeps updating overnight,
- * not just during RTH. ~10 trading days of 15-min bars ≈ a few hundred samples — enough for a
- * stable GARCH fit without drowning the recent structure.
- */
-export async function fetchRegimeBars(): Promise<Bar[]> {
-  const now = new Date();
-  const start = new Date(now.getTime() - 10 * 24 * 3600 * 1000);
-  const [res, ratio] = await Promise.all([
-    yf.chart("NQ=F", { period1: start, period2: now, interval: "15m" as "1m" }),
-    nqToQqqRatio(),
-  ]);
-  return res.quotes
-    .filter((r) => r.high != null && r.low != null && r.open != null && r.close != null)
-    .map((r) => ({
-      ts: etIso(r.date),
-      open: r.open! / ratio, high: r.high! / ratio, low: r.low! / ratio, close: r.close! / ratio,
-      volume: r.volume ?? 0,
-    }));
-}
-
-/** Median minutes between consecutive bars — used to annualize GARCH/realized vol honestly. */
-export function medianBarMinutes(bars: Bar[]): number {
-  const gaps: number[] = [];
-  for (let i = 1; i < bars.length; i++) {
-    const a = Date.parse(bars[i - 1]!.ts), b = Date.parse(bars[i]!.ts);
-    const dt = (b - a) / 60000;
-    if (dt > 0 && dt < 24 * 60) gaps.push(dt);
-  }
-  if (!gaps.length) return 15;
-  gaps.sort((a, b) => a - b);
-  return gaps[Math.floor(gaps.length / 2)]!;
-}
-
-/**
  * Detection bars for a session, in QQQ price terms.
  *  US   — Altaris /api/candles (15-min, same source as the chart the user watches; includes delta per bar).
  *  Asia — NQ=F OHLC from Yahoo converted to QQQ-equiv via smoothed ratio (Altaris doesn't serve futures).

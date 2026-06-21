@@ -1,18 +1,20 @@
 {
-  "as_of": "2026-06-21T15:48:23",
-  "generated_at": "2026-06-21T19:48:23.438Z",
-  "scored_at": 1782071303438,
+  "as_of": "2026-06-21T16:23:30",
+  "generated_at": "2026-06-21T20:23:30.531Z",
+  "scored_at": 1782073410531,
   "spot": 739.8,
-  "state": "RANGE · PINNED",
-  "read": "Positive dealer gamma is suppressing the range and vol is compressed — fade the edges. Rest limit orders at the persistent pivots; breakouts tend to fail.",
+  "state": "VOL STRESS · STICKY",
+  "read": "Realized vol is rich (98th pct) and persistent — expect range expansion to continue. Widen stops; respect breaks over fades.",
   "bias": "up",
-  "confidence": 68,
+  "confidence": 76,
   "vol": {
-    "ann": 19.7,
-    "longRun": 25.9,
-    "trend": "contracting",
-    "level": "normal",
-    "persistence": 0.764
+    "rv": 40.1,
+    "rvPercentile": 98,
+    "garchAnn": 30.1,
+    "persistence": 0.95,
+    "trend": "expanding",
+    "level": "high",
+    "sticky": true
   },
   "trend": {
     "er": 0.152,
@@ -25,10 +27,22 @@
   },
   "gauges": [
     {
-      "label": "Vol · GARCH",
-      "value": "20% ann · contracting",
-      "pct": 49.36084438370938,
-      "tone": "blue"
+      "label": "Realized Vol",
+      "value": "40% · 98th pct",
+      "pct": 98,
+      "tone": "amber"
+    },
+    {
+      "label": "GARCH Forward",
+      "value": "30% · expanding",
+      "pct": 60.194637185492894,
+      "tone": "amber"
+    },
+    {
+      "label": "Vol Memory · α+β",
+      "value": "0.95 · sticky",
+      "pct": 95.00000000000004,
+      "tone": "amber"
     },
     {
       "label": "Trend · ER",
@@ -37,7 +51,7 @@
       "tone": "blue"
     },
     {
-      "label": "Persistence · Hurst",
+      "label": "Trend Memory · Hurst",
       "value": "0.58 · trending",
       "pct": 57.55537101192193,
       "tone": "green"
@@ -47,12 +61,6 @@
       "value": "Positive · suppressing",
       "pct": 30,
       "tone": "blue"
-    },
-    {
-      "label": "Vol Shock Memory",
-      "value": "α+β 0.76 · fast decay",
-      "pct": 76.4,
-      "tone": ""
     }
   ],
   "pivots": [
@@ -102,7 +110,7 @@
       "price": 730.33,
       "side": "support",
       "persistence": 6.63,
-      "confluence": true
+      "confluence": false
     }
   ],
   "method": "topology+garch"
