@@ -7,13 +7,15 @@ const CANDLES_URL = "/.netlify/functions/altaris-candles";
 
 // ── palette (kept in sync with styles.css) ──
 const C = {
-  ink:  "#0a0a0a",
-  ink2: "#565450",
-  ink3: "#97948c",
-  line: "#cdcabf",
-  line2:"#b3afa2",
-  red:  "#e60026",
-  paper:"#e7e6e1",
+  ink:  "#111210",
+  ink2: "#5c5b56",
+  ink3: "#9b9a93",
+  line: "#e3e2dc",
+  line2:"#cdccc4",
+  red:  "#e60023",
+  blue: "#1f5fd0",
+  green:"#1c7a52",
+  paper:"#f1f1ee",
 };
 
 const $ = (s) => document.querySelector(s);
@@ -35,7 +37,7 @@ function svgEl(tag, attrs) {
   return e;
 }
 
-// ── CYBERPUNK BACKGROUND (grid · data-rain · particles · glitch) ────────────────
+// ── BACKGROUND — refined: fine drifting grid + slow scan beam + sparse ticks ─────
 function initBackground() {
   const canvas = $("#bg");
   if (!canvas) return;
@@ -43,28 +45,16 @@ function initBackground() {
   const ctx = canvas.getContext("2d");
   let W = 0, H = 0, dpr = 1;
 
-  const GRID = 46;          // grid cell size (px)
-  let drops = [];           // vertical data-rain streams
-  let dust  = [];           // drifting particles
-  let glitches = [];        // transient red dashes
+  const GRID = 52;
+  let ticks = [];   // slow-drifting crosshair ticks
 
   function seed() {
-    drops = Array.from({ length: Math.round(W / 70) }, () => ({
-      x: Math.random() * W,
-      y: Math.random() * H,
-      len: 60 + Math.random() * 160,
-      sp: 40 + Math.random() * 120,
-      red: Math.random() < 0.22,
-    }));
-    dust = Array.from({ length: 46 }, () => ({
+    ticks = Array.from({ length: 14 }, () => ({
       x: Math.random() * W, y: Math.random() * H,
-      vx: (Math.random() - 0.5) * 8,
-      vy: (Math.random() - 0.5) * 8,
-      r: 0.6 + Math.random() * 1.4,
-      red: Math.random() < 0.18,
+      vy: 4 + Math.random() * 7,
+      red: Math.random() < 0.25,
     }));
   }
-
   function resize() {
     dpr = Math.min(window.devicePixelRatio || 1, 2);
     W = window.innerWidth; H = window.innerHeight;
@@ -79,54 +69,36 @@ function initBackground() {
     const dt = Math.min((now - last) / 1000, 0.05); last = now;
     ctx.clearRect(0, 0, W, H);
 
-    // drifting grid
-    const off = (now * 0.012) % GRID;
+    // fine grid, very faint, slow vertical drift
+    const off = (now * 0.006) % GRID;
     ctx.lineWidth = 1;
-    ctx.strokeStyle = "rgba(10,10,10,0.045)";
+    ctx.strokeStyle = "rgba(17,18,16,0.035)";
     ctx.beginPath();
-    for (let x = -off; x <= W; x += GRID) { ctx.moveTo(x, 0); ctx.lineTo(x, H); }
-    for (let y = -off; y <= H; y += GRID) { ctx.moveTo(0, y); ctx.lineTo(W, y); }
+    for (let x = 0; x <= W; x += GRID) { ctx.moveTo(x + 0.5, 0); ctx.lineTo(x + 0.5, H); }
+    for (let y = -off; y <= H; y += GRID) { ctx.moveTo(0, y + 0.5); ctx.lineTo(W, y + 0.5); }
     ctx.stroke();
-    // grid intersections (faint nodes)
-    ctx.fillStyle = "rgba(10,10,10,0.06)";
-    for (let x = -off; x <= W; x += GRID)
-      for (let y = -off; y <= H; y += GRID) ctx.fillRect(x - 0.5, y - 0.5, 1, 1);
 
-    // data-rain streams
-    for (const d of drops) {
-      d.y += d.sp * dt;
-      if (d.y - d.len > H) { d.y = -Math.random() * 120; d.x = Math.random() * W; }
-      const g = ctx.createLinearGradient(d.x, d.y - d.len, d.x, d.y);
-      const col = d.red ? "230,0,38" : "10,10,10";
-      g.addColorStop(0, `rgba(${col},0)`);
-      g.addColorStop(1, `rgba(${col},${d.red ? 0.16 : 0.07})`);
-      ctx.strokeStyle = g;
-      ctx.lineWidth = d.red ? 1.4 : 1;
+    // slow horizontal scan beam (single, subtle)
+    const beamY = ((now * 0.022) % (H + 240)) - 120;
+    const bg = ctx.createLinearGradient(0, beamY - 120, 0, beamY + 120);
+    bg.addColorStop(0,   "rgba(230,0,35,0)");
+    bg.addColorStop(0.5, "rgba(230,0,35,0.05)");
+    bg.addColorStop(1,   "rgba(230,0,35,0)");
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, beamY - 120, W, 240);
+    ctx.fillStyle = "rgba(230,0,35,0.10)";
+    ctx.fillRect(0, beamY, W, 1);
+
+    // sparse drifting crosshair ticks
+    for (const t of ticks) {
+      t.y += t.vy * dt;
+      if (t.y > H + 8) { t.y = -8; t.x = Math.random() * W; }
+      ctx.strokeStyle = t.red ? "rgba(230,0,35,0.22)" : "rgba(17,18,16,0.14)";
+      ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.moveTo(d.x, d.y - d.len);
-      ctx.lineTo(d.x, d.y);
+      ctx.moveTo(t.x - 3, t.y); ctx.lineTo(t.x + 3, t.y);
+      ctx.moveTo(t.x, t.y - 3); ctx.lineTo(t.x, t.y + 3);
       ctx.stroke();
-    }
-
-    // particles
-    for (const p of dust) {
-      p.x += p.vx * dt; p.y += p.vy * dt;
-      if (p.x < 0) p.x = W; if (p.x > W) p.x = 0;
-      if (p.y < 0) p.y = H; if (p.y > H) p.y = 0;
-      ctx.fillStyle = p.red ? "rgba(230,0,38,0.35)" : "rgba(10,10,10,0.18)";
-      ctx.fillRect(p.x, p.y, p.r, p.r);
-    }
-
-    // occasional glitch dashes
-    if (Math.random() < 0.04) {
-      glitches.push({ x: Math.random() * W, y: Math.random() * H, w: 30 + Math.random() * 120, life: 1 });
-    }
-    glitches = glitches.filter(g => (g.life -= dt * 4) > 0);
-    for (const g of glitches) {
-      ctx.fillStyle = `rgba(230,0,38,${0.5 * g.life})`;
-      ctx.fillRect(g.x, g.y, g.w, 2);
-      ctx.fillStyle = `rgba(0,179,179,${0.4 * g.life})`;
-      ctx.fillRect(g.x + 3, g.y + 3, g.w * 0.6, 1);
     }
 
     requestAnimationFrame(frame);
@@ -137,12 +109,14 @@ function initBackground() {
   requestAnimationFrame(frame);
 }
 
-// ── HUD ticker text ─────────────────────────────────────────────────────────────
-function setTicker() {
-  const t = $("#hudTicker span");
-  if (!t) return;
-  const line = "TORII // QQQ DEALER POSITIONING ENGINE  ◇  MNQ EXECUTION  ◇  LIMIT ORDERS AT LEVELS  ◇  抵抗 / 支持  ◇  SYS NOMINAL  ◇  ";
-  t.textContent = line.repeat(2);
+// ── clock ───────────────────────────────────────────────────────────────────────
+function tickClock() {
+  const c = $("#clock");
+  if (!c) return;
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false,
+  }).format(new Date());
+  c.textContent = `${parts} ET`;
 }
 
 // ── sparkline ────────────────────────────────────────────────────────────────
@@ -181,8 +155,8 @@ function drawSparkline() {
   ctx.lineTo(px(0), H);
   ctx.closePath();
   const grad = ctx.createLinearGradient(0, 0, 0, H);
-  grad.addColorStop(0, "rgba(230,0,38,.12)");
-  grad.addColorStop(1, "rgba(230,0,38,0)");
+  grad.addColorStop(0, "rgba(230,0,35,.12)");
+  grad.addColorStop(1, "rgba(230,0,35,0)");
   ctx.fillStyle = grad;
   ctx.fill();
 
@@ -240,7 +214,7 @@ function renderGexChart(gexProfile, spot) {
     }
   }
 
-  const axLbl = svgEl("text", { x: ML - 3, y: midY + 3.5, "text-anchor": "end", fill: C.ink3, "font-family": "Share Tech Mono,monospace", "font-size": 8 });
+  const axLbl = svgEl("text", { x: ML - 3, y: midY + 3.5, "text-anchor": "end", fill: C.ink3, "font-family": "JetBrains Mono,monospace", "font-size": 8 });
   axLbl.textContent = "0";
   svg.appendChild(axLbl);
 }
@@ -309,7 +283,7 @@ function renderCandleChart(candles) {
     const v = lo + (prange * i) / 4;
     const y = py(v);
     svg.appendChild(svgEl("line", { x1: ML, y1: y, x2: W - MR, y2: y, stroke: C.line, "stroke-width": 0.5 }));
-    const lbl = svgEl("text", { x: ML - 3, y: y + 3.5, "text-anchor": "end", fill: C.ink3, "font-family": "Share Tech Mono,monospace", "font-size": 8 });
+    const lbl = svgEl("text", { x: ML - 3, y: y + 3.5, "text-anchor": "end", fill: C.ink3, "font-family": "JetBrains Mono,monospace", "font-size": 8 });
     lbl.textContent = v.toFixed(1);
     svg.appendChild(lbl);
   }
@@ -345,7 +319,7 @@ function renderLevelMap(data, spot) {
     const y1 = isRes ? H / 2 - tkH : H / 2;
     const y2 = isRes ? H / 2 : H / 2 + tkH;
     svg.appendChild(svgEl("rect", { x: x - 1.5, y: y1, width: 3, height: y2 - y1, fill: col, opacity: 0.28 + prob * 0.6 }));
-    const lbl = svgEl("text", { x, y: isRes ? y1 - 3 : y2 + 8, "text-anchor": "middle", "font-family": "Share Tech Mono,monospace", "font-size": 7, fill: col });
+    const lbl = svgEl("text", { x, y: isRes ? y1 - 3 : y2 + 8, "text-anchor": "middle", "font-family": "JetBrains Mono,monospace", "font-size": 7, fill: col });
     lbl.textContent = l.strike % 1 === 0 ? String(l.strike) : l.strike.toFixed(1);
     svg.appendChild(lbl);
   }
@@ -353,7 +327,7 @@ function renderLevelMap(data, spot) {
   if (typeof spot === "number") {
     const sx = ML + ((spot - pLo) / range) * (W - ML - MR);
     svg.appendChild(svgEl("line", { x1: sx, y1: 4, x2: sx, y2: H - 4, stroke: C.red, "stroke-width": 1.5, "stroke-dasharray": "3 2" }));
-    const sLbl = svgEl("text", { x: sx, y: H - 1, "text-anchor": "middle", "font-family": "Share Tech Mono,monospace", "font-size": 7, fill: C.red, "font-weight": 600 });
+    const sLbl = svgEl("text", { x: sx, y: H - 1, "text-anchor": "middle", "font-family": "JetBrains Mono,monospace", "font-size": 7, fill: C.red, "font-weight": 600 });
     sLbl.textContent = spot.toFixed(2);
     svg.appendChild(sLbl);
   }
@@ -417,32 +391,35 @@ function buildRung(level, i) {
   const row   = el("div", `rung ${isRes ? "res" : "sup"}`);
   row.style.setProperty("--i", i);
 
-  // head: dot · strike · dist ········· badge
-  const head = el("div", "rung-head");
-  head.appendChild(el("span", "dot"));
-  head.appendChild(el("span", "strike", fmtPrice(level.strike)));
-  const distEl = el("span", "dist");
-  head.appendChild(distEl);
-  head.appendChild(el("span", "head-spacer"));
-  const badgeEl = el("span", "badge");
-  head.appendChild(badgeEl);
-  row.appendChild(head);
+  // top row: [strike + dist] [react + meter] [prob%] [badge]
+  const top = el("div", "rung-top");
 
-  // bar: react · meter · prob%
-  const bar = el("div", "rung-bar");
-  bar.appendChild(el("span", `react ${level.reaction || "mixed"}`, level.reaction || "—"));
+  const sb = el("div", "strike-block");
+  sb.appendChild(el("span", "strike", fmtPrice(level.strike)));
+  const distEl = el("span", "dist");
+  sb.appendChild(distEl);
+  top.appendChild(sb);
+
+  const mb = el("div", "meter-block");
+  const react = level.reaction || "mixed";
+  mb.appendChild(el("span", `react ${react}`, react.toUpperCase()));
   const track = el("div", "prob-track");
   const fill  = el("span");
   track.appendChild(fill);
-  bar.appendChild(track);
+  mb.appendChild(track);
+  top.appendChild(mb);
+
   const prob = el("span", "prob-num", String(level.reversal_prob));
   prob.appendChild(el("i", null, "%"));
-  bar.appendChild(prob);
-  row.appendChild(bar);
+  top.appendChild(prob);
+
+  const badgeEl = el("span", "badge");
+  top.appendChild(badgeEl);
+  row.appendChild(top);
 
   // tags
   const tags = Array.isArray(level.tags) ? level.tags.slice(0, 4) : [];
-  if (tags.length) row.appendChild(el("div", "rung-tags", tags.join("  ·  ")));
+  if (tags.length) row.appendChild(el("div", "rung-tags", tags.join("  /  ")));
 
   // why + target
   if (level.why) {
@@ -479,7 +456,7 @@ function renderMetrics(data) {
   m.replaceChildren();
   const reg = data.regime || "";
   const cells = [];
-  if (reg) cells.push({ k: "Gamma", v: reg === "positive" ? "Positive" : reg === "negative" ? "Negative" : reg, cls: reg === "negative" ? "neg" : "" });
+  if (reg) cells.push({ k: "Gamma", v: reg === "positive" ? "Positive" : reg === "negative" ? "Negative" : reg, cls: reg === "negative" ? "neg" : reg === "positive" ? "pos" : "" });
   if (typeof data.expected_move === "number") cells.push({ k: "Exp Move", v: `±${data.expected_move.toFixed(1)}`, cls: "" });
   if (data.iv && typeof data.iv.current === "number") {
     const dir   = (data.iv.direction || "").toUpperCase();
@@ -496,7 +473,7 @@ function renderMetrics(data) {
   }
   m.appendChild(el("span", "metric-spacer"));
   const method = data.scoring_method === "rule" ? "rule" : "ai";
-  m.appendChild(el("span", `method-tag${method === "rule" ? " rule" : ""}`, method === "rule" ? "手動 Manual" : "AI"));
+  m.appendChild(el("span", `method-tag${method === "rule" ? " rule" : ""}`, method === "rule" ? "MANUAL" : "AI SCORED"));
 }
 
 // ── repaint ───────────────────────────────────────────────────────────────────
@@ -652,7 +629,8 @@ async function loadSpot() {
 
 // ── init ──────────────────────────────────────────────────────────────────────
 initBackground();
-setTicker();
+tickClock();
+setInterval(tickClock, 1000);
 $("#refresh").addEventListener("click", () => { load(); loadSpot(); loadCandles(); });
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden) { load(); loadSpot(); loadCandles(); }
