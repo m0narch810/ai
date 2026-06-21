@@ -12,26 +12,53 @@ export default async function handler(req, context) {
     });
   }
 
+  // Must mirror src/auth.ts exactly: Altaris expects { email, password } (NOT username),
+  // and the same headers — otherwise the login is rejected.
+  const LOGIN_HEADERS = {
+    accept: "application/json",
+    "content-type": "application/json",
+    referer: "https://altaris.up.railway.app/login",
+    "user-agent":
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
+  };
+
+  // Pull altaris_session out of one or more Set-Cookie headers (undici splits them).
+  const extractCookie = (res) => {
+    const raw = typeof res.headers.getSetCookie === "function"
+      ? res.headers.getSetCookie()
+      : [res.headers.get("set-cookie") ?? ""];
+    for (const line of raw) {
+      const m = /(?:^|;\s*)altaris_session=([^;]+)/.exec(line);
+      if (m?.[1]) return `altaris_session=${m[1]}`;
+    }
+    return null;
+  };
+
   try {
     const loginRes = await fetch(`${base}/login`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: user, password: pass }),
+      headers: LOGIN_HEADERS,
+      body: JSON.stringify({ email: user, password: pass }),
     });
 
     if (!loginRes.ok) {
-      return new Response(JSON.stringify({ error: "Altaris login failed", status: loginRes.status }), {
+      const body = await loginRes.text().catch(() => "");
+      return new Response(JSON.stringify({ error: "Altaris login failed", status: loginRes.status, body: body.slice(0, 200) }), {
         status: 502,
         headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
       });
     }
 
-    const setCookie = loginRes.headers.get("set-cookie") || "";
-    const cookieMatch = setCookie.match(/altaris_session=([^;]+)/);
-    const cookie = cookieMatch ? `altaris_session=${cookieMatch[1]}` : setCookie.split(";")[0];
+    const cookie = extractCookie(loginRes);
+    if (!cookie) {
+      return new Response(JSON.stringify({ error: "Login ok but no altaris_session cookie returned" }), {
+        status: 502,
+        headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+      });
+    }
 
     const candleRes = await fetch(`${base}/candles?days=1`, {
-      headers: { Cookie: cookie },
+      headers: { accept: "application/json", "user-agent": LOGIN_HEADERS["user-agent"], Cookie: cookie },
     });
 
     if (!candleRes.ok) {
