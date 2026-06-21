@@ -196,6 +196,34 @@ body { overflow-x: hidden; min-height: 100vh; }
   text-overflow: ellipsis;
 }
 
+/* ── NEXT-OPEN COUNTDOWN (narrative tab reminder) ── */
+.open-countdown {
+  display: flex;
+  align-items: baseline;
+  gap: 11px;
+  padding: 9px 12px;
+  margin-bottom: 14px;
+  border: 1px solid var(--line2);
+  background: var(--panel-bg);
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+  font-family: var(--mono);
+}
+.oc-label {
+  font-size: 10px; letter-spacing: .18em; text-transform: uppercase;
+  color: var(--ink3);
+}
+.oc-kind {
+  font-size: 11px; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--ink2);
+}
+.oc-time {
+  margin-left: auto;
+  font-size: 15px; letter-spacing: .04em;
+  font-variant-numeric: tabular-nums;
+  color: var(--red);
+}
+
 /* ── TOP GRID ── */
 .topgrid {
   display: grid;

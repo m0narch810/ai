@@ -215,6 +215,51 @@ function initBackground() {
   frame(performance.now());  // reduced-motion → one static render; otherwise this kicks off the loop
 }
 
+// ── next-open countdown ───────────────────────────────────────────────────────
+// Reminder for the two opens that matter: the 18:00 ET futures (re)open (Sunday, and
+// Mon–Thu after the daily 17:00–18:00 break) and the 09:30 ET cash open (Mon–Fri).
+// Computed in ET wall-clock each tick — accurate to the second except across the two
+// annual DST flips (acceptable for a reminder). Market holidays are not modelled.
+const MARKET_OPENS = (() => {
+  const list = [];
+  for (let d = 1; d <= 5; d++) list.push({ dow: d, h: 9,  m: 30, kind: "CASH OPEN · 09:30 ET" });
+  for (let d = 0; d <= 4; d++) list.push({ dow: d, h: 18, m: 0,  kind: "FUTURES OPEN · 18:00 ET" });
+  return list;
+})();
+
+function etNowParts() {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York", weekday: "short",
+    hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false,
+  }).formatToParts(new Date());
+  const g = (t) => parts.find((p) => p.type === t)?.value ?? "0";
+  const dow = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }[g("weekday")] ?? 0;
+  const hour = parseInt(g("hour"), 10) % 24; // hour12:false can emit "24" at midnight
+  return { dow, hour, min: parseInt(g("minute"), 10), sec: parseInt(g("second"), 10) };
+}
+
+function tickOpenCountdown() {
+  const elTime = $("#ocTime"), elKind = $("#ocKind");
+  if (!elTime || !elKind) return;
+  const { dow, hour, min, sec } = etNowParts();
+  const nowSec = dow * 86400 + hour * 3600 + min * 60 + sec;
+  const WEEK = 7 * 86400;
+  let best = null;
+  for (const o of MARKET_OPENS) {
+    let delta = (o.dow * 86400 + o.h * 3600 + o.m * 60) - nowSec;
+    if (delta <= 0) delta += WEEK; // already passed this week → next week's occurrence
+    if (!best || delta < best.delta) best = { delta, o };
+  }
+  if (!best) return;
+  const d = Math.floor(best.delta / 86400);
+  const hh = Math.floor((best.delta % 86400) / 3600);
+  const mm = Math.floor((best.delta % 3600) / 60);
+  const ss = Math.floor(best.delta % 60);
+  const p2 = (n) => String(n).padStart(2, "0");
+  elTime.textContent = (d > 0 ? `${d}d ` : "") + `${p2(hh)}:${p2(mm)}:${p2(ss)}`;
+  elKind.textContent = best.o.kind;
+}
+
 // ── clock ───────────────────────────────────────────────────────────────────────
 function tickClock() {
   const c = $("#clock");
@@ -926,8 +971,8 @@ $("#themeToggle")?.addEventListener("click", () => {
 
 // ── init ──────────────────────────────────────────────────────────────────────
 initBackground();
-tickClock();
-setInterval(tickClock, 1000);
+tickClock(); tickOpenCountdown();
+setInterval(() => { tickClock(); tickOpenCountdown(); }, 1000);
 $("#refresh").addEventListener("click", () => { load(); loadSpot(); loadCandles(); loadNarrative(); });
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden) { load(); loadSpot(); loadCandles(); loadNarrative(); }
