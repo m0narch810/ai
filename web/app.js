@@ -56,7 +56,7 @@ function drawSparkline() {
   ctx.beginPath();
   ctx.moveTo(px(0), py(pts[0].v));
   for (let i = 1; i < pts.length; i++) ctx.lineTo(px(i), py(pts[i].v));
-  ctx.strokeStyle = "#00aee0";
+  ctx.strokeStyle = "#c80000";
   ctx.lineWidth   = 1.5;
   ctx.lineJoin    = "round";
   ctx.stroke();
@@ -68,15 +68,15 @@ function drawSparkline() {
   ctx.lineTo(px(0), H);
   ctx.closePath();
   const grad = ctx.createLinearGradient(0, 0, 0, H);
-  grad.addColorStop(0, "rgba(0,174,224,.15)");
-  grad.addColorStop(1, "rgba(0,174,224,0)");
+  grad.addColorStop(0, "rgba(200,0,0,.08)");
+  grad.addColorStop(1, "rgba(200,0,0,0)");
   ctx.fillStyle = grad;
   ctx.fill();
 
   const last = pts[pts.length - 1];
   ctx.beginPath();
   ctx.arc(px(pts.length - 1), py(last.v), 2.5, 0, Math.PI * 2);
-  ctx.fillStyle = "#00aee0";
+  ctx.fillStyle = "#c80000";
   ctx.fill();
 
   const rangeEl = $("#sparkRange");
@@ -97,16 +97,16 @@ function renderGexChart(gexProfile, spot) {
   const barW   = Math.max(2, Math.floor(IW / n) - 1);
   const midY   = MT + IH / 2;
 
-  svg.appendChild(svgEl("line", { x1: ML, y1: midY, x2: W - MR, y2: midY, stroke: "#1d2b3e", "stroke-width": 1 }));
+  svg.appendChild(svgEl("line", { x1: ML, y1: midY, x2: W - MR, y2: midY, stroke: "#c4bdb4", "stroke-width": 1 }));
 
   gexProfile.forEach((p, i) => {
     const x    = ML + (i / n) * IW + (IW / n - barW) / 2;
     const frac = p.gex_m / maxAbs;
     const barH = Math.abs(frac) * (IH / 2 - 2);
     const isPos = p.gex_m >= 0;
-    const color = isPos ? "#e03333" : "#00cc78";
+    const color = isPos ? "#c80000" : "#1a1410";
     const y = isPos ? midY - barH : midY;
-    svg.appendChild(svgEl("rect", { x, y, width: barW, height: Math.max(1, barH), fill: color, opacity: 0.6 }));
+    svg.appendChild(svgEl("rect", { x, y, width: barW, height: Math.max(1, barH), fill: color, opacity: 0.55 }));
   });
 
   if (typeof spot === "number" && gexProfile.length > 1) {
@@ -114,11 +114,11 @@ function renderGexChart(gexProfile, spot) {
     const slo = strikes[0], shi = strikes[strikes.length - 1], sr = shi - slo || 1;
     const sx = ML + ((spot - slo) / sr) * IW;
     if (sx >= ML && sx <= W - MR) {
-      svg.appendChild(svgEl("line", { x1: sx, y1: MT, x2: sx, y2: H - MB, stroke: "#00aee0", "stroke-width": 1.5, "stroke-dasharray": "4 2" }));
+      svg.appendChild(svgEl("line", { x1: sx, y1: MT, x2: sx, y2: H - MB, stroke: "#c80000", "stroke-width": 1.5, "stroke-dasharray": "4 2" }));
     }
   }
 
-  const axLbl = svgEl("text", { x: ML - 3, y: midY + 3.5, "text-anchor": "end", fill: "#1c2940", "font-family": "JetBrains Mono,monospace", "font-size": 8 });
+  const axLbl = svgEl("text", { x: ML - 3, y: midY + 3.5, "text-anchor": "end", fill: "#c0b8b0", "font-family": "JetBrains Mono,monospace", "font-size": 8 });
   axLbl.textContent = "0";
   svg.appendChild(axLbl);
 }
@@ -171,7 +171,7 @@ function renderCandleChart(candles) {
     const l = b.l ?? b.low   ?? 0;
     const x    = ML + i * bw;
     const bull  = c >= o;
-    const color = bull ? "#00cc78" : "#e03333";
+    const color = bull ? "#1a1410" : "#c80000";
     const bodyTop = py(Math.max(o, c));
     const bodyBot = py(Math.min(o, c));
     const bodyH   = Math.max(1, bodyBot - bodyTop);
@@ -181,13 +181,13 @@ function renderCandleChart(candles) {
   });
 
   const vwapD = vwapPts.map((v, i) => `${i === 0 ? "M" : "L"}${(ML + i * bw + bw / 2).toFixed(1)},${py(v).toFixed(1)}`).join(" ");
-  svg.appendChild(svgEl("path", { d: vwapD, fill: "none", stroke: "#f0a623", "stroke-width": 1.5, opacity: 0.85 }));
+  svg.appendChild(svgEl("path", { d: vwapD, fill: "none", stroke: "#7a7068", "stroke-width": 1.5, opacity: 0.85 }));
 
   for (let i = 0; i <= 4; i++) {
     const v = lo + (prange * i) / 4;
     const y = py(v);
-    svg.appendChild(svgEl("line", { x1: ML, y1: y, x2: W - MR, y2: y, stroke: "#1d2b3e", "stroke-width": 0.5 }));
-    const lbl = svgEl("text", { x: ML - 3, y: y + 3.5, "text-anchor": "end", fill: "#1c2940", "font-family": "JetBrains Mono,monospace", "font-size": 8 });
+    svg.appendChild(svgEl("line", { x1: ML, y1: y, x2: W - MR, y2: y, stroke: "#ddd8d0", "stroke-width": 0.5 }));
+    const lbl = svgEl("text", { x: ML - 3, y: y + 3.5, "text-anchor": "end", fill: "#c0b8b0", "font-family": "JetBrains Mono,monospace", "font-size": 8 });
     lbl.textContent = v.toFixed(1);
     svg.appendChild(lbl);
   }
@@ -212,12 +212,12 @@ function renderLevelMap(data, spot) {
   const W = 420, H = 72, ML = 40, MR = 40;
 
   svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
-  svg.appendChild(svgEl("line", { x1: ML, y1: H / 2, x2: W - MR, y2: H / 2, stroke: "#1d2b3e", "stroke-width": 1 }));
+  svg.appendChild(svgEl("line", { x1: ML, y1: H / 2, x2: W - MR, y2: H / 2, stroke: "#c4bdb4", "stroke-width": 1 }));
 
   for (const l of levels) {
     const x = ML + ((l.strike - pLo) / range) * (W - ML - MR);
     const isRes = l.side === "resistance";
-    const col  = isRes ? "#e03333" : "#00cc78";
+    const col  = isRes ? "#c80000" : "#1a1410";
     const prob = l.reversal_prob / 100;
     const tkH  = 8 + prob * 18;
     const y1 = isRes ? H / 2 - tkH : H / 2;
@@ -230,8 +230,8 @@ function renderLevelMap(data, spot) {
 
   if (typeof spot === "number") {
     const sx = ML + ((spot - pLo) / range) * (W - ML - MR);
-    svg.appendChild(svgEl("line", { x1: sx, y1: 4, x2: sx, y2: H - 4, stroke: "#00aee0", "stroke-width": 1.5, "stroke-dasharray": "3 2" }));
-    const sLbl = svgEl("text", { x: sx, y: H - 1, "text-anchor": "middle", "font-family": "JetBrains Mono,monospace", "font-size": 7, fill: "#00aee0" });
+    svg.appendChild(svgEl("line", { x1: sx, y1: 4, x2: sx, y2: H - 4, stroke: "#c80000", "stroke-width": 1.5, "stroke-dasharray": "3 2" }));
+    const sLbl = svgEl("text", { x: sx, y: H - 1, "text-anchor": "middle", "font-family": "JetBrains Mono,monospace", "font-size": 7, fill: "#c80000" });
     sLbl.textContent = spot.toFixed(2);
     svg.appendChild(sLbl);
   }
