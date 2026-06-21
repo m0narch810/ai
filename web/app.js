@@ -37,7 +37,7 @@ function svgEl(tag, attrs) {
   return e;
 }
 
-// ── BACKGROUND — refined: fine drifting grid + slow scan beam + sparse ticks ─────
+// ── BACKGROUND — HUD blueprint: grid, ruler, watermark, radar, scan, telemetry ───
 function initBackground() {
   const canvas = $("#bg");
   if (!canvas) return;
@@ -45,14 +45,21 @@ function initBackground() {
   const ctx = canvas.getContext("2d");
   let W = 0, H = 0, dpr = 1;
 
-  const GRID = 52;
-  let ticks = [];   // slow-drifting crosshair ticks
+  const GRID = 44;
+  let ticks = [];    // slow-drifting crosshair ticks
+  let bits  = [];    // faint floating binary/hex glyphs
 
   function seed() {
-    ticks = Array.from({ length: 14 }, () => ({
+    ticks = Array.from({ length: 26 }, () => ({
       x: Math.random() * W, y: Math.random() * H,
-      vy: 4 + Math.random() * 7,
-      red: Math.random() < 0.25,
+      vy: 5 + Math.random() * 10,
+      red: Math.random() < 0.22,
+      s: 2 + Math.random() * 3,
+    }));
+    bits = Array.from({ length: 22 }, () => ({
+      x: Math.random() * W, y: Math.random() * H,
+      vy: 8 + Math.random() * 16,
+      ch: Math.random() < 0.5 ? (Math.random() < 0.5 ? "0" : "1") : "0123456789ABCDEF"[Math.floor(Math.random() * 16)],
     }));
   }
   function resize() {
@@ -64,42 +71,122 @@ function initBackground() {
     seed();
   }
 
+  const pad = (n, w) => String(n).padStart(w, "0");
+
   let last = performance.now();
   function frame(now) {
     const dt = Math.min((now - last) / 1000, 0.05); last = now;
     ctx.clearRect(0, 0, W, H);
 
-    // fine grid, very faint, slow vertical drift
+    // ── grid: minor + major lines, slow vertical drift ──
     const off = (now * 0.006) % GRID;
     ctx.lineWidth = 1;
-    ctx.strokeStyle = "rgba(17,18,16,0.035)";
+    ctx.strokeStyle = "rgba(17,18,16,0.05)";
     ctx.beginPath();
     for (let x = 0; x <= W; x += GRID) { ctx.moveTo(x + 0.5, 0); ctx.lineTo(x + 0.5, H); }
     for (let y = -off; y <= H; y += GRID) { ctx.moveTo(0, y + 0.5); ctx.lineTo(W, y + 0.5); }
     ctx.stroke();
+    ctx.strokeStyle = "rgba(17,18,16,0.085)";
+    ctx.beginPath();
+    for (let x = 0, i = 0; x <= W; x += GRID, i++) if (i % 4 === 0) { ctx.moveTo(x + 0.5, 0); ctx.lineTo(x + 0.5, H); }
+    for (let y = -off, j = 0; y <= H; y += GRID, j++) if (j % 4 === 0) { ctx.moveTo(0, y + 0.5); ctx.lineTo(W, y + 0.5); }
+    ctx.stroke();
 
-    // slow horizontal scan beam (single, subtle)
-    const beamY = ((now * 0.022) % (H + 240)) - 120;
-    const bg = ctx.createLinearGradient(0, beamY - 120, 0, beamY + 120);
+    // ── big vertical 鳥居 watermark on the right gutter ──
+    ctx.save();
+    ctx.fillStyle = "rgba(17,18,16,0.035)";
+    const wm = Math.min(W, H) * 0.34;
+    ctx.font = `700 ${wm}px "Noto Sans JP", sans-serif`;
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    const wmx = W > 760 ? W - wm * 0.62 : W * 0.5;
+    ctx.fillText("鳥", wmx, H * 0.5 - wm * 0.56);
+    ctx.fillText("居", wmx, H * 0.5 + wm * 0.56);
+    ctx.restore();
+
+    // ── left-edge ruler ──
+    ctx.strokeStyle = "rgba(17,18,16,0.16)";
+    ctx.fillStyle   = "rgba(17,18,16,0.28)";
+    ctx.font = '8px "JetBrains Mono", monospace';
+    ctx.textAlign = "left"; ctx.textBaseline = "middle";
+    ctx.lineWidth = 1;
+    for (let y = 0, i = 0; y <= H; y += 22, i++) {
+      const major = i % 5 === 0;
+      ctx.beginPath();
+      ctx.moveTo(0, y + 0.5); ctx.lineTo(major ? 9 : 5, y + 0.5);
+      ctx.stroke();
+      if (major) ctx.fillText(pad(i * 22, 4), 13, y);
+    }
+
+    // ── radar sweep, top-right ──
+    const rcx = W > 760 ? W - 96 : W - 60;
+    const rcy = 110, rr = W > 760 ? 60 : 40;
+    ctx.strokeStyle = "rgba(230,0,35,0.16)";
+    ctx.lineWidth = 1;
+    for (const f of [0.4, 0.7, 1]) { ctx.beginPath(); ctx.arc(rcx, rcy, rr * f, 0, Math.PI * 2); ctx.stroke(); }
+    ctx.beginPath(); ctx.moveTo(rcx - rr, rcy); ctx.lineTo(rcx + rr, rcy);
+    ctx.moveTo(rcx, rcy - rr); ctx.lineTo(rcx, rcy + rr); ctx.stroke();
+    const ang = (now * 0.0009) % (Math.PI * 2);
+    const sweep = ctx.createLinearGradient(rcx, rcy, rcx + Math.cos(ang) * rr, rcy + Math.sin(ang) * rr);
+    sweep.addColorStop(0, "rgba(230,0,35,0.34)");
+    sweep.addColorStop(1, "rgba(230,0,35,0)");
+    ctx.strokeStyle = sweep; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(rcx, rcy); ctx.lineTo(rcx + Math.cos(ang) * rr, rcy + Math.sin(ang) * rr); ctx.stroke();
+
+    // ── horizontal scan beam ──
+    const beamY = ((now * 0.02) % (H + 240)) - 120;
+    const bg = ctx.createLinearGradient(0, beamY - 110, 0, beamY + 110);
     bg.addColorStop(0,   "rgba(230,0,35,0)");
-    bg.addColorStop(0.5, "rgba(230,0,35,0.05)");
+    bg.addColorStop(0.5, "rgba(230,0,35,0.06)");
     bg.addColorStop(1,   "rgba(230,0,35,0)");
     ctx.fillStyle = bg;
-    ctx.fillRect(0, beamY - 120, W, 240);
-    ctx.fillStyle = "rgba(230,0,35,0.10)";
+    ctx.fillRect(0, beamY - 110, W, 220);
+    ctx.fillStyle = "rgba(230,0,35,0.14)";
     ctx.fillRect(0, beamY, W, 1);
 
-    // sparse drifting crosshair ticks
+    // ── floating hex/binary glyphs ──
+    ctx.font = '10px "JetBrains Mono", monospace';
+    ctx.fillStyle = "rgba(17,18,16,0.12)";
+    ctx.textAlign = "left"; ctx.textBaseline = "middle";
+    for (const b of bits) {
+      b.y += b.vy * dt;
+      if (b.y > H + 6) { b.y = -6; b.x = Math.random() * W; }
+      ctx.fillText(b.ch, b.x, b.y);
+    }
+
+    // ── drifting crosshair ticks ──
+    ctx.lineWidth = 1;
     for (const t of ticks) {
       t.y += t.vy * dt;
       if (t.y > H + 8) { t.y = -8; t.x = Math.random() * W; }
-      ctx.strokeStyle = t.red ? "rgba(230,0,35,0.22)" : "rgba(17,18,16,0.14)";
-      ctx.lineWidth = 1;
+      ctx.strokeStyle = t.red ? "rgba(230,0,35,0.26)" : "rgba(17,18,16,0.16)";
       ctx.beginPath();
-      ctx.moveTo(t.x - 3, t.y); ctx.lineTo(t.x + 3, t.y);
-      ctx.moveTo(t.x, t.y - 3); ctx.lineTo(t.x, t.y + 3);
+      ctx.moveTo(t.x - t.s, t.y); ctx.lineTo(t.x + t.s, t.y);
+      ctx.moveTo(t.x, t.y - t.s); ctx.lineTo(t.x, t.y + t.s);
       ctx.stroke();
     }
+
+    // ── viewport corner brackets + telemetry ──
+    const m = 14, L = 16;
+    ctx.strokeStyle = "rgba(230,0,35,0.4)";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(m, m + L); ctx.lineTo(m, m); ctx.lineTo(m + L, m);
+    ctx.moveTo(W - m - L, m); ctx.lineTo(W - m, m); ctx.lineTo(W - m, m + L);
+    ctx.moveTo(W - m, H - m - L); ctx.lineTo(W - m, H - m); ctx.lineTo(W - m - L, H - m);
+    ctx.moveTo(m + L, H - m); ctx.lineTo(m, H - m); ctx.lineTo(m, H - m - L);
+    ctx.stroke();
+
+    ctx.font = '9px "JetBrains Mono", monospace';
+    ctx.fillStyle = "rgba(17,18,16,0.3)";
+    const t10 = Math.floor(now / 100);
+    ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+    ctx.fillText(`SYS ${pad(t10 % 100000, 5)}`, m + L + 8, m + 4);
+    ctx.textAlign = "right";
+    ctx.fillText(`SCAN ${pad(Math.floor(beamY < 0 ? 0 : beamY), 4)}`, W - m - L - 8, m + 4);
+    ctx.textAlign = "left";
+    ctx.fillText("TORII//QQQ", m + L + 8, H - m - 6);
+    ctx.textAlign = "right";
+    ctx.fillText(`FPS ${pad(Math.round(1 / Math.max(dt, .001)), 2)}`, W - m - L - 8, H - m - 6);
 
     requestAnimationFrame(frame);
   }
