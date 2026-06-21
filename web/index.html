@@ -3,112 +3,123 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#f4f2ed" />
+  <meta name="theme-color" content="#f7f4ee" />
   <title>Torii · QQQ</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Shippori+Mincho:wght@500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-<div id="app">
 
-  <!-- TOPBAR -->
+<canvas id="bg" class="bg-canvas" aria-hidden="true"></canvas>
+
+<main id="app">
+
+  <!-- ── HEADER ── -->
   <header class="topbar">
     <div class="brand">
-      <span class="ticker">QQQ</span>
-      <span class="title">Torii</span>
-    </div>
-    <div class="topspot">
-      <span class="spotnum" id="heroSpot">—</span>
-      <span class="spotchg" id="heroChg"></span>
-      <span class="spotsrc" id="heroSrc"></span>
+      <span class="brand-jp">鳥居</span>
+      <div class="brand-text">
+        <span class="brand-en">Torii</span>
+        <span class="brand-sub">QQQ · dealer positioning</span>
+      </div>
     </div>
     <div class="status">
       <span class="status-dot" id="statusDot"></span>
       <span class="status-text" id="statusText">loading</span>
     </div>
-    <button id="refresh" type="button" aria-label="Refresh">↻</button>
   </header>
 
-  <!-- METRICS STRIP -->
-  <div class="mstrip">
-    <div id="heroMetrics"></div>
-    <div id="heroIv"></div>
-  </div>
+  <!-- ── SPOT ── -->
+  <section class="spot-block">
+    <div class="spot-line">
+      <span class="spotnum" id="heroSpot">—</span>
+      <span class="spotchg" id="heroChg"></span>
+    </div>
+    <span class="spotsrc" id="heroSrc"></span>
+  </section>
 
-  <!-- SPARKLINE -->
+  <!-- ── SPARKLINE ── -->
   <div class="spark-panel">
-    <canvas id="sparkline" class="sparkline" width="600" height="48"></canvas>
+    <canvas id="sparkline" class="sparkline"></canvas>
     <span class="spark-range" id="sparkRange"></span>
   </div>
 
-  <!-- READ -->
+  <!-- ── METRICS ── -->
+  <div class="metrics" id="metricsRow"></div>
+
+  <!-- ── READ ── -->
   <div class="read-line" id="readWrap" hidden>
-    <span class="read-kw">Read</span>
-    <span id="heroRead"></span>
+    <span class="read-kw"><i class="kw-jp">読み</i>Read</span>
+    <p id="heroRead"></p>
   </div>
 
-  <!-- BANNER -->
+  <!-- ── BANNER ── -->
   <div class="banner" id="banner" hidden></div>
 
-  <!-- CHARTS (desktop only) -->
+  <!-- ── CHARTS (desktop) ── -->
   <div class="charts-section" id="chartsSection">
     <div class="chart-panel">
       <div class="chart-hdr">
         <span class="chart-title">GEX Profile</span>
-        <span class="chart-sub" id="gexChartSub">pos = resistance · neg = support</span>
+        <span class="chart-sub" id="gexChartSub">resistance · support</span>
       </div>
-      <svg id="gexChart" class="chart-svg" viewBox="0 0 400 140" preserveAspectRatio="none"></svg>
+      <svg id="gexChart" class="chart-svg" viewBox="0 0 400 150" preserveAspectRatio="none"></svg>
     </div>
     <div class="chart-panel">
       <div class="chart-hdr">
         <span class="chart-title">Price · VWAP</span>
-        <span class="chart-sub" id="candleChartSub">5-min candles</span>
+        <span class="chart-sub" id="candleChartSub">5-min</span>
       </div>
-      <svg id="candleChart" class="chart-svg" viewBox="0 0 400 140" preserveAspectRatio="none"></svg>
+      <svg id="candleChart" class="chart-svg" viewBox="0 0 400 150" preserveAspectRatio="none"></svg>
     </div>
   </div>
 
-  <!-- MOBILE LEVEL MAP -->
+  <!-- ── MOBILE LEVEL MAP ── -->
   <div class="level-map-wrap" id="levelMapWrap" hidden>
     <svg id="levelMap" class="level-map"></svg>
+    <span class="level-map-label" id="levelMapLabel"></span>
   </div>
 
-  <!-- LEVELS TABLE -->
-  <div class="level-table" id="ladderGrid" aria-label="Price levels">
-    <div class="table-head">
-      <div></div>
-      <div class="th">Strike</div>
-      <div class="th">Prob</div>
-      <div class="th">React</div>
-      <div class="th">Level</div>
-      <div class="th">Status</div>
-    </div>
+  <!-- ── LADDER ── -->
+  <div class="ladder" id="ladderGrid" aria-label="Price levels">
 
-    <div class="section-hdr res-hdr">
-      <span class="sh-label">Ceilings <span class="sh-count" id="ceilCount"></span></span>
+    <div class="lane res-lane">
+      <div class="lane-hdr">
+        <span class="lane-jp">抵抗</span>
+        <span class="lane-en">Resistance</span>
+        <span class="lane-count" id="ceilCount"></span>
+      </div>
+      <div class="rungs" id="ceilings"></div>
     </div>
-    <div class="rungs" id="ceilings"></div>
 
     <div class="spotrail" id="spotrail" hidden>
-      <span class="rail-marker">◆</span>
+      <span class="rail-line"></span>
       <span class="rail-tag" id="railTag"></span>
+      <span class="rail-line"></span>
     </div>
 
-    <div class="section-hdr sup-hdr">
-      <span class="sh-label">Floors <span class="sh-count" id="floorCount"></span></span>
+    <div class="lane sup-lane">
+      <div class="lane-hdr">
+        <span class="lane-jp">支持</span>
+        <span class="lane-en">Support</span>
+        <span class="lane-count" id="floorCount"></span>
+      </div>
+      <div class="rungs" id="floors"></div>
     </div>
-    <div class="rungs" id="floors"></div>
+
   </div>
 
   <div class="empty" id="empty" hidden></div>
 
   <footer class="foot">
     <span id="asOf"></span>
+    <button id="refresh" type="button" aria-label="Refresh">↻</button>
   </footer>
 
-</div>
+</main>
+
 <script src="app.js"></script>
 </body>
 </html>
