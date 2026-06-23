@@ -51,6 +51,37 @@ export interface DataSnapshot {
   gex_regime: string;
   realized_vol: number;
   net_vanna: number;
+  /**
+   * Per-strike implied vol (%) for the nearest expiration, from /api/vol_skew_multi — the IV smile/skew.
+   * A local IV bump at a strike = concentrated demand/dealer-defense there (stronger, cleaner node);
+   * elevated OTM-put vs OTM-call IV (risk reversal) = downside hedging. Optional (enrichment).
+   */
+  iv_skew?: StrikeMap<number>;
+  /**
+   * 0DTE-ISOLATED greeks — the same-day-expiry slice of the strike×expiration heatmaps (not the
+   * all-expiration `*_bar` aggregates). Into the cash close 0DTE positioning dominates pinning/charm,
+   * so these isolate the slice that actually holds price to the tick. Nearest expiry if no true 0DTE.
+   */
+  gex_0dte_bar?: StrikeMap<number>;
+  charm_0dte_bar?: StrikeMap<number>;
+  vanna_0dte_bar?: StrikeMap<number>;
+  /** Day-over-day OI change per strike (calls/puts) from /api/oi_change — where walls are BUILDING. */
+  oi_day_bar?: StrikeMap<StrikePair>;
+}
+
+/** /api/oi_change — day-over-day OI by strike (where positioning is building/unwinding). */
+export interface OiChangeResponse {
+  ticker: string;
+  spot: number;
+  has_previous: boolean;
+  prev_date?: string;
+  nodes: { strike: number; delta_calls: number; delta_puts: number; delta_total: number; pct_change: number; status: string }[];
+}
+
+/** /api/vol_skew_multi — per-strike IV across expirations (the smile). */
+export interface VolSkewResponse {
+  strikes: number[];
+  expirations: { label: string; dte: number; data: { strike: number; iv: number }[] }[];
 }
 
 /** One row of the intraday aggregate tape (greek_timeseries.history[]). */
@@ -152,6 +183,25 @@ export interface ScoredLevel {
   target_strike?: number;
 }
 
+/**
+ * A reversal score for ONE exact strike, computed deterministically for EVERY near-spot strike
+ * (not just the curated picks) so a resting limit at any strike has a precise number. Differentiated
+ * by real greek confluence: empty strikes score near zero, true nodes peak. The AI `levels` are the
+ * highlighted subset on top of this; coverage guarantees no node is ever omitted.
+ */
+export interface CoverageLevel {
+  strike: number;
+  /** 0-100 reversal likelihood AT this exact strike, from its own greeks (reachability aside). */
+  prob: number;
+  side: Side;
+  reaction: "clean" | "chop" | "mixed";
+  tags: string[];
+  /** Per-strike implied vol (%) from the skew, when captured — a local bump = demand/defense here. */
+  iv?: number;
+  /** True if price already broke this strike today (hard-stopped) — de-rated to ~zero. */
+  broken?: boolean;
+}
+
 /** The board the AI returns each tick. */
 export interface Board {
   as_of: string;
@@ -170,6 +220,8 @@ export interface Board {
   scoring_method?: "ai" | "rule";
   /** Near-spot GEX distribution for the dashboard GEX chart. */
   gex_profile?: { strike: number; gex_m: number }[];
+  /** Per-strike reversal score for EVERY near-spot strike (precision coverage; see CoverageLevel). */
+  coverage?: CoverageLevel[];
 }
 
 // ── Pre-open narrative (dxrk: market-open prediction + RTH macro bias) ────────────

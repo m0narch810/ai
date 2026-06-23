@@ -4,7 +4,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { config } from "./config.js";
 import { activeSession } from "./config.js";
-import type { Board, DetectedLevel, ReversalOutcome, ScoredLevel, Side } from "./types.js";
+import type { Board, CoverageLevel, DetectedLevel, ReversalOutcome, ScoredLevel, Side } from "./types.js";
 
 /** A scored level annotated with how it has played out on today's tape. */
 export interface DashboardLevel extends ScoredLevel {
@@ -39,6 +39,8 @@ export interface DashboardData {
   scoring_method?: "ai" | "rule";
   /** Near-spot GEX distribution for the dashboard GEX bar chart. */
   gex_profile?: { strike: number; gex_m: number }[];
+  /** Per-strike reversal score for EVERY near-spot strike (precision coverage). */
+  coverage?: CoverageLevel[];
   levels: DashboardLevel[];
 }
 
@@ -75,6 +77,7 @@ export function buildDashboard(board: Board, detected: DetectedLevel[], session?
     expected_move: board.expected_move,
     scoring_method: board.scoring_method,
     gex_profile: board.gex_profile,
+    coverage: board.coverage,
     levels: board.levels.map((l) => ({ ...l, ...outcomeFor(l.strike, l.side, detected) })),
   };
 }

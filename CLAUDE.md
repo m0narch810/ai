@@ -19,6 +19,7 @@ the output is a ranked set of strikes to rest limit orders at, not real-time sig
 
 ```bash
 npm run capture        # one full capture → detect → score → publish cycle, now
+npm run backfill [date] # recover a window the PC missed: pull cloud snapshots → score the gap
 npm run narrative      # one pre-open narrative pass (macro bias × open-type) → web/narrative.json
 npm start              # scheduled loop: every SCORE_INTERVAL_MIN during US + Asia windows
 npm run score:fixture  # score the bundled fixtures/ offline (no Altaris call) — smoke test
@@ -43,12 +44,18 @@ One cycle is orchestrated in `src/run.ts` (`scoreFromHistory`) and chains four s
    via `POST /api/login`; refreshes the session cookie automatically on 401 — no manual paste
    needed (`ALTARIS_COOKIE` in `.env` is optional once credentials are set). `compactSnapshot`
    drops the giant `*_hm` heatmaps but **aggregates `cex_hm`/`tex_hm`/`vannex_hm` into per-strike
-   `charm_bar`/`tex_bar`/`vanna_bar`** (those greeks have no native per-strike `*_bar`).
+   `charm_bar`/`tex_bar`/`vanna_bar`** (those greeks have no native per-strike `*_bar`). It ALSO isolates
+   the **0DTE slice** of gamma/charm/vanna (`zeroDteSlice` takes the `dte===0` column of `gex_hm`/`cex_hm`/
+   `vannex_hm` → `gex_0dte_bar`/`charm_0dte_bar`/`vanna_0dte_bar`) — the all-expiration aggregate dilutes
+   the same-day positioning that dominates pinning into the close. Plus `/api/vol_skew_multi` → `data.iv_skew`
+   (per-strike IV smile; `skewToStrikeMap`) and `/api/oi_change` → `data.oi_day_bar` (day-over-day OI
+   change per strike — where walls are building; `oiChangeToBar`). Everything except `data` is non-fatal
+   enrichment.
 
 2. **Detect** (`src/detect.ts` ← `src/market.ts`) — sequential, bar-by-bar grader on **Yahoo
    OHLC wicks, not the Altaris spot tape**. Key thresholds (all in absolute QQQ points, sized
    to MNQ execution):
-   - `fillTolPts` (0.08) — price must actually reach within 0.08 pts of the strike to count as
+   - `fillTolPts` (0.15) — price must actually reach within 0.15 pts of the strike to count as
      *tested*. A resting limit at the strike only fills if price reaches it; coming within a
      point is not a touch.
    - `hardStopPts` (0.48 ≈ 20 MNQ pts) — crossing this far beyond the level = **broke**.
@@ -68,6 +75,24 @@ One cycle is orchestrated in `src/run.ts` (`scoreFromHistory`) and chains four s
    - `minutes_to_cash_close` fed in context so scorer weights time-of-day (pinning, 0DTE charm).
    - Probability discipline: at most one level >65%, two ≥55%; levels must be differentiated.
    - Editing scoring behavior: edit `SYSTEM` / `buildInput` in `src/score.ts`, not code structure.
+   - **0DTE isolation** (`*_0dte_bar`): the scorer gets per-strike `gex_0dte_m`/`charm_0dte_m`/`vanna_0dte_m`
+     separate from the all-expiration bars, with SYSTEM guidance to weight them by `minutes_to_cash_close`
+     (0DTE dominates pinning late). Coverage adds a modest capped `dte0Score` + a `0DTE Pin` tag.
+   - **OI building** (`data.oi_day_bar` from `oi_change`): per-strike `d_oi_day_calls`/`d_oi_day_puts`
+     (day-over-day, distinct from intraday `d_oi_*`) — puts growing at support / calls at resistance = a
+     wall being reinforced. Coverage adds `oiBuildScore` + an `OI Building` tag.
+   - **IV skew** (`data.iv_skew` from `vol_skew_multi`): the scorer sees per-strike `iv` + `iv_vs_atm` on
+     each strike row and an `iv_skew` context block (`atm_iv`, `otm_put_iv`, `otm_call_iv`, `risk_reversal`).
+     A local IV bump = concentrated demand/dealer-defense → stronger node; positive risk_reversal = put skew
+     = better-defended supports. Coverage folds a modest `skewBump` (0-8, capped — the ATM tape is noisy)
+     into the confluence. `iv_tracker` (regime level/direction) still drives vanna/vega weighting separately.
+   - **Per-strike coverage** (`buildCoverage` in `src/score.ts`): alongside the curated `levels`, every
+     board carries `coverage[]` — a deterministic reversal score (`probFromConfluence` of the shared
+     `scoreStrike` confluence) for EVERY near-spot strike, so a resting limit at any exact strike has its
+     own number and no real node is ever omitted. The AI/curated `levels` are highlighted picks ON TOP of
+     coverage, not a filter. Coverage is on both AI and rule boards (and the cloud `board.mts`). Its `prob`
+     is a structural reversal-node strength (0-78), a DIFFERENT scale from a curated level's conditional
+     `reversal_prob` — don't compare them 1:1. Dashboard renders it as the "EVERY STRIKE" panel.
 
 4. **Persist + publish** (`src/dashboard.ts`, `src/publish.ts`) — writes `data/scored/latest.json`
    (+ `<date>.boards.jsonl` + `<date>.calibration.jsonl` for grading), merges board × detector
@@ -142,6 +167,26 @@ so the site keeps working when the scoring box is off:
   published `dashboard.json`; all prices from Yahoo (QQQ daily 3y + 15m, ^VXN daily 3y). The page
   (`app.js` `loadRegime`) hits this first, falls back to static `web/regime.json` on LAN.
   **Runs with the box off** — that's the point. Kept display-only (does not tilt board scoring).
+- **`capture.mjs`** — a **scheduled** function (cron `*/15 * * * *`) that snapshots Altaris flow +
+  greeks to **Netlify Blobs** (`captures` store, key `<ET-date>/<HH-MM>`) so option positioning
+  isn't lost when the scoring PC is off. Self-gates to 09:00–16:00 ET Mon–Fri. Stores a compacted
+  `CaptureRecord` + the as-of greek timeseries (compaction mirrors `src/capture.ts` — keep in sync).
+  Needs `ALTARIS_USER`/`ALTARIS_PASS` in the **Netlify** env. Recover the missed window with
+  `npm run backfill` (`src/cloudCaptures.ts` pulls the blobs → `src/run.ts` `backfillDay` merges
+  them into `data/raw`, AI-scores only the ticks with no board yet, chaining each off the
+  chronologically-previous board so there's no look-ahead, then re-sorts the logs + publishes).
+  Reversal grading is historical Yahoo OHLC, so a morning missed at 10 AM grades correctly at 2 PM.
+  `npm run backfill` needs `NETLIFY_SITE_ID` + `NETLIFY_AUTH_TOKEN` in the **local** `.env` (it's an
+  outside client to Blobs; the cloud function has ambient access). Backfill is same-day by design.
+- **`board.mts`** — on-demand cloud **deterministic** board, so levels keep moving when the PC is
+  off instead of freezing. A **TypeScript** function: esbuild bundles the *actual* `scoreBoardDeterministic`
+  + `detectMany` + `buildDashboard` from `src/` (zero logic drift — only `scoring_method:"rule"` +
+  `cloud:true` differ from a live board). Reads the latest `capture.mjs` snapshot from Blobs, fetches
+  Altaris candles for reversal grading (`fetchCandles` auto-logs-in via `src/auth.ts`), caches the
+  result 5 min in Blobs. The import graph deliberately avoids `market.ts` so `yahoo-finance2` isn't
+  bundled. Frontend (`app.js` `load`) hits this **only when the published board is stale during RTH**
+  (box offline) and swaps it in if fresher — banner flips to "cloud-calculated rule-based (lower
+  confidence)", the header timer reads `NEXT CALC`. Needs `ALTARIS_USER`/`ALTARIS_PASS` in Netlify env.
 - **`watchdog.mjs`** — a **scheduled** function (cron `*/15 * * * *` in `netlify.toml`
   `[functions."watchdog"]`). During 09:50–16:00 ET Mon–Fri it reads the deployed
   `dashboard.json`; if it hasn't scored in `WATCHDOG_STALE_MIN` (default 35) it pushes a phone

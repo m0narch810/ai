@@ -28,6 +28,11 @@
       <span class="status-sep"></span>
       <span class="status-dot" id="statusDot"></span>
       <span class="status-text" id="statusText">BOOT</span>
+      <span class="status-sep"></span>
+      <span class="next-score" id="nextScore" title="Time until the next scheduled scoring tick">
+        <span class="ns-label" id="nsLabel">NEXT SCORE</span>
+        <span class="ns-time" id="nsTime">--:--</span>
+      </span>
     </div>
   </header>
 
@@ -86,6 +91,11 @@
     <section class="sec level-map-wrap" id="levelMapWrap" hidden>
       <div class="sec-label"><span><i class="ix">M</i> MAP</span><span class="jp" id="levelMapLabel"></span></div>
       <div class="sec-body"><svg id="levelMap" class="level-map"></svg></div>
+    </section>
+
+    <section class="sec coverage-wrap" id="coverageWrap" hidden>
+      <div class="sec-label"><span><i class="ix">C</i> EVERY STRIKE</span><span class="jp" id="coverageSub">全価格 · reversal score</span></div>
+      <div class="sec-body coverage" id="coverageGrid"></div>
     </section>
 
     <div class="ladder" id="ladderGrid" aria-label="Price levels">
@@ -168,20 +178,10 @@
         <div class="sec-body" id="narrOpen"></div>
       </section>
       <section class="sec">
-        <div class="sec-label"><span><i class="ix">07</i> MACRO BIAS</span><span class="jp">地合い</span></div>
-        <div class="sec-body" id="narrMacro"></div>
+        <div class="sec-label"><span><i class="ix">08</i> REVERSAL ZONES</span><span class="jp">反転</span></div>
+        <div class="sec-body" id="narrZones"></div>
       </section>
     </div>
-
-    <section class="sec">
-      <div class="sec-label"><span><i class="ix">08</i> REVERSAL ZONES</span><span class="jp">反転</span></div>
-      <div class="sec-body" id="narrZones"></div>
-    </section>
-
-    <section class="sec" id="narrFeedWrap" hidden>
-      <div class="sec-label"><span><i class="ix">10</i> MACRO FEED</span><span class="jp">指標</span></div>
-      <div class="sec-body metrics" id="narrFeed"></div>
-    </section>
 
   </section>
 
@@ -192,6 +192,6 @@
 
 </main>
 
-<script src="app.js?v=18"></script>
+<script src="app.js?v=26"></script>
 </body>
 </html>

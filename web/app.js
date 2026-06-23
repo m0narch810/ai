@@ -5,6 +5,7 @@ const NARR_MS     = 5 * 60_000;
 const STALE_MS    = 30 * 60_000;
 const SPOT_URL    = "/.netlify/functions/spot";
 const CANDLES_URL = "/.netlify/functions/altaris-candles";
+const BOARD_FN    = "/.netlify/functions/board"; // cloud deterministic board (box-off fallback)
 const NARR_URL    = "narrative.json";
 
 // ── palette (kept in sync with styles.css) ──
@@ -261,6 +262,62 @@ function tickOpenCountdown() {
   elKind.textContent = best.o.kind;
 }
 
+// ── next-score countdown ──────────────────────────────────────────────────────
+// Time until the next scheduled scoring tick. Both the local loop (cron */15) and the cloud
+// capture function fire on clock-aligned 15-min boundaries (:00/:15/:30/:45). During the RTH
+// AI window (09:15–16:00 ET, Mon–Fri) the next boundary is an AI re-score IF the box is online;
+// if the board's gone stale (box offline) that same boundary is a *cloud capture* instead — the
+// snapshot is saved for `npm run backfill`, but no fresh AI levels print. Outside the window the
+// next score is the next session's 09:15 open.
+const AI_OPEN_MIN  = 9 * 60 + 15; // 09:15 ET
+const AI_CLOSE_MIN = 16 * 60;     // 16:00 ET (inclusive — the close-tick still scores)
+const SCORE_STEP   = 15;          // minutes between ticks (matches SCORE_INTERVAL_MIN + capture cron)
+
+function secsToNextAiOpen({ dow, hour, min, sec }) {
+  const nowSec = dow * 86400 + hour * 3600 + min * 60 + sec;
+  const WEEK = 7 * 86400;
+  let best = Infinity;
+  for (let d = 1; d <= 5; d++) {           // Mon–Fri
+    let t = d * 86400 + AI_OPEN_MIN * 60 - nowSec;
+    if (t <= 0) t += WEEK;                  // already passed this week → next week
+    if (t < best) best = t;
+  }
+  return best;
+}
+
+// → { delta: seconds, mode: "tick" | "session" }
+function nextScoreInfo() {
+  const p = etNowParts();
+  const curMin = p.hour * 60 + p.min;
+  const inWindow = p.dow >= 1 && p.dow <= 5 && curMin >= AI_OPEN_MIN && curMin <= AI_CLOSE_MIN;
+  if (inWindow) {
+    const nextBoundaryMin = curMin - (p.min % SCORE_STEP) + SCORE_STEP; // next :00/:15/:30/:45
+    if (nextBoundaryMin <= AI_CLOSE_MIN) {
+      return { delta: (nextBoundaryMin - curMin) * 60 - p.sec, mode: "tick" };
+    }
+  }
+  return { delta: secsToNextAiOpen(p), mode: "session" }; // past today's close / off-hours
+}
+
+function tickNextScore() {
+  const elT = $("#nsTime"), elL = $("#nsLabel"), wrap = $("#nextScore");
+  if (!elT || !elL) return;
+  const { delta, mode } = nextScoreInfo();
+  const d = Math.floor(delta / 86400);
+  const hh = Math.floor((delta % 86400) / 3600);
+  const mm = Math.floor((delta % 3600) / 60);
+  const ss = Math.floor(delta % 60);
+  const p2 = (n) => String(n).padStart(2, "0");
+  elT.textContent = (d > 0 ? `${d}d ` : "") + (d > 0 || hh > 0 ? `${p2(hh)}:` : "") + `${p2(mm)}:${p2(ss)}`;
+
+  // Online → AI score. Showing the cloud rule board (box offline) → the next tick recomputes
+  // calculated levels. Box stale with no cloud board yet → the next tick is just a capture.
+  const cloudRule = (lastData?.scoring_method === "rule") && (lastData?._cloud || lastData?.cloud);
+  const calc = mode === "tick" && (cloudRule || boardStale());
+  elL.textContent = !calc ? "NEXT AI SCORE" : cloudRule ? "NEXT CALC" : "NEXT CAPTURE";
+  if (wrap) wrap.classList.toggle("capture", calc);
+}
+
 // ── clock ───────────────────────────────────────────────────────────────────────
 function tickClock() {
   const c = $("#clock");
@@ -269,6 +326,20 @@ function tickClock() {
     timeZone: "America/New_York", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false,
   }).format(new Date());
   c.textContent = `${parts} ET`;
+}
+
+// Update all "X ago" timestamps every second so they drift live rather than freezing at render time.
+function tickAgoStamps() {
+  const asOf = $("#asOf");
+  if (asOf && lastData) {
+    const prefix = lastData.scoring_method === "rule" ? "rule scored" : "scored";
+    asOf.textContent = `${prefix} ${scoredAgo()}`;
+  }
+  const ns = $(".ms-stamp");
+  if (ns && narrData?.scoring_method === "ai") ns.textContent = `scored ${narrAgo(narrData)}`;
+  // Regime stamp: first .vsub inside #regHero is always the "scored X ago" on the Regime cell.
+  const rs = document.querySelector("#regHero .vsub");
+  if (rs && regData) rs.textContent = `scored ${regAgo(regData)}`;
 }
 
 // ── sparkline ────────────────────────────────────────────────────────────────
@@ -517,6 +588,51 @@ function renderLevelMap(data, spot) {
   if (lbl) lbl.textContent = `${levels.length} levels`;
 }
 
+// Per-strike coverage: EVERY near-spot strike with its own reversal score, so a limit at any exact
+// strike has a number. The board's curated picks are highlighted; the rest is the full field.
+function renderCoverage(data, spot) {
+  const wrap = $("#coverageWrap"), grid = $("#coverageGrid");
+  if (!wrap || !grid) return;
+  const cov = Array.isArray(data?.coverage) ? data.coverage : [];
+  if (!cov.length) { wrap.hidden = true; return; }
+  wrap.hidden = false;
+  grid.replaceChildren();
+
+  const keyOf = (s) => Math.round(s * 10) / 10;
+  const picks = new Set((data.levels || []).map((l) => keyOf(l.strike)));
+
+  const col = (title, items, sideCls) => {
+    const c = el("div", "cov-col");
+    c.appendChild(el("div", "cov-col-head", title));
+    for (const it of items) {
+      const pick = picks.has(keyOf(it.strike));
+      const row = el("div",
+        `cov-row ${sideCls}${pick ? " pick" : ""}${it.broken ? " broke" : ""}${it.prob < 15 && !pick ? " faint" : ""}`);
+      row.appendChild(el("span", "cov-strike", it.strike % 1 === 0 ? String(it.strike) : it.strike.toFixed(1)));
+      const bar = el("span", "cov-bar");
+      const fill = el("span", "cov-fill");
+      fill.style.width = `${clamp(it.prob, 0, 100)}%`;
+      bar.appendChild(fill);
+      row.appendChild(bar);
+      row.appendChild(el("span", "cov-prob", String(it.prob)));
+      row.appendChild(el("span", "cov-iv", typeof it.iv === "number" ? `${it.iv}` : "·"));
+      const meta = [it.reaction, typeof it.iv === "number" ? `IV ${it.iv}` : "", ...(it.tags || [])].filter(Boolean).join(" · ");
+      if (meta) row.title = meta;
+      c.appendChild(row);
+    }
+    return c;
+  };
+
+  // Both columns descending by strike (highest at top) — resistance above spot, support below.
+  const res = cov.filter((c) => c.side === "resistance").sort((a, b) => b.strike - a.strike);
+  const sup = cov.filter((c) => c.side === "support").sort((a, b) => b.strike - a.strike);
+  grid.appendChild(col("抵抗 RES", res, "res"));
+  grid.appendChild(col("支持 SUP", sup, "sup"));
+
+  const sub = $("#coverageSub");
+  if (sub) sub.textContent = `全価格 · ${cov.length} strikes scored`;
+}
+
 // ── time ──────────────────────────────────────────────────────────────────────
 function agoMs(t) {
   if (typeof t !== "number" || Number.isNaN(t)) return "";
@@ -612,7 +728,7 @@ function buildRung(level, i) {
     row.appendChild(why);
   }
 
-  row.addEventListener("click", () => row.classList.toggle("open"));
+  // Justifications are always visible now (no click-to-expand).
   return { el: row, level, distEl, badgeEl, fill };
 }
 
@@ -702,7 +818,10 @@ function renderBanner(data) {
   const b = $("#banner");
   if (data?.scoring_method === "rule" && !boardStale()) {
     b.hidden = false;
-    b.replaceChildren(el("span", "banner-dot"), el("span", "", `Manual scored (AI unavailable) — rule-based levels, refreshed ${scoredAgo()}. Spot & reversals are live.`));
+    const txt = data._cloud || data.cloud
+      ? `Box offline — cloud-calculated rule-based levels (lower confidence), refreshed ${scoredAgo()}. Spot & reversals are live.`
+      : `Manual scored (AI unavailable) — rule-based levels, refreshed ${scoredAgo()}. Spot & reversals are live.`;
+    b.replaceChildren(el("span", "banner-dot"), el("span", "", txt));
     return;
   }
   if (!boardStale()) { b.hidden = true; return; }
@@ -747,6 +866,7 @@ function render(data) {
     $("#asOf").textContent = "";
     renderLevelMap(data, currentSpot());
     renderGexChart(data.gex_profile, currentSpot());
+    renderCoverage(data, currentSpot());
     return;
   }
 
@@ -766,6 +886,7 @@ function render(data) {
 
   renderLevelMap(data, currentSpot());
   renderGexChart(data.gex_profile, currentSpot());
+  renderCoverage(data, currentSpot());
   if (candleData) renderCandleChart(candleData);
 
   requestAnimationFrame(() =>
@@ -777,11 +898,30 @@ function render(data) {
 }
 
 // ── data ──────────────────────────────────────────────────────────────────────
+// The cloud deterministic board — fresh rule-based levels computed server-side when the box is off.
+async function loadCloudBoard() {
+  try {
+    const res = await fetch(`${BOARD_FN}?t=${Date.now()}`, { cache: "no-store" });
+    if (!res.ok) return null;
+    const j = await res.json();
+    return j && Array.isArray(j.levels) ? j : null;
+  } catch { return null; }
+}
+
+const freshnessOf = (d) => { const t = typeof d?.scored_at === "number" ? d.scored_at : Date.parse(d?.generated_at ?? ""); return Number.isFinite(t) ? t : 0; };
+
 async function load() {
   try {
     const res = await fetch(`dashboard.json?t=${Date.now()}`, { cache: "no-store" });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    lastData = await res.json();
+    let data = await res.json();
+    // Box offline during RTH → the published board is frozen. Pull the cloud-calculated
+    // rule-based board so the levels keep moving (flagged lower-confidence) instead of going stale.
+    if (isRthNow() && freshnessOf(data) < Date.now() - STALE_MS) {
+      const cloud = await loadCloudBoard();
+      if (cloud && freshnessOf(cloud) > freshnessOf(data)) data = cloud;
+    }
+    lastData = data;
     render(lastData);
   } catch {
     $("#statusText").textContent = "no data";
@@ -828,28 +968,67 @@ function renderNarrative(n) {
     hero.replaceChildren(el("div", "narr-empty"));
     hero.querySelector(".narr-empty").innerHTML =
       'No narrative yet. It generates automatically before the open (≈09:00 ET), or run <code>npm run narrative</code>.';
-    for (const id of ["#narrOpen", "#narrMacro", "#narrZones"]) $(id).replaceChildren();
-    $("#narrFeedWrap").hidden = true;
+    for (const id of ["#narrOpen", "#narrZones"]) $(id).replaceChildren();
     return;
   }
 
-  // verdict hero
+  // 30-second macro scan: status line · cross-asset arrows · NOW · NEWS
   const biasTone = n.macro_bias === "bullish" ? "bull" : n.macro_bias === "bearish" ? "bear" : "";
   const dirTone  = n.expansion_direction === "up" ? "up" : n.expansion_direction === "down" ? "down" : "";
+  const GLYPH    = { rising: "▲", falling: "▼", flat: "►", up: "▲", down: "▼", neutral: "►" };
   hero.replaceChildren();
-  const v = el("div", "verdict");
-  const cell = (k, val, cls, sub) => {
-    const c = el("div", "verdict-cell");
-    c.appendChild(el("span", "vk", k));
-    c.appendChild(el("div", `vv ${cls}`.trim(), val));
-    if (sub) c.appendChild(el("div", "vsub", sub));
-    return c;
+  const scan = el("div", "mscan");
+
+  // status line
+  const status = el("div", "mscan-status");
+  status.appendChild(el("span", `ms-bias ${biasTone}`.trim(), (n.macro_bias || "neutral").toUpperCase()));
+  if (typeof n.macro_bias_score === "number")
+    status.appendChild(el("span", "ms-score", `${n.macro_bias_score > 0 ? "+" : ""}${n.macro_bias_score}`));
+  status.appendChild(el("span", "ms-sep", "·"));
+  status.appendChild(el("span", "ms-day", (n.clean_or_choppy || "—").toUpperCase()));
+  status.appendChild(el("span", "ms-sep", "·"));
+  status.appendChild(el("span", `ms-expand ${dirTone}`.trim(), `EXPAND ${GLYPH[n.expansion_direction] || "►"}`));
+  status.appendChild(el("span", "ms-sep", "·"));
+  const sAbs = Math.abs(n.macro_bias_score ?? 0);
+  status.appendChild(el("span", "ms-conf", sAbs >= 50 ? "●●● high" : sAbs >= 25 ? "●●○ med" : "●○○ low"));
+  status.appendChild(el("span", "ms-stamp", n.scoring_method === "ai" ? `scored ${narrAgo(n)}` : "rule-based"));
+  scan.appendChild(status);
+
+  // cross-asset arrow strip (one glance: which way each leg is moving)
+  const mac = n.macro || {}, cx = mac.cross || {};
+  const cross = el("div", "mscan-cross");
+  const xa = (key, dir, val, tone) => {
+    const x = el("div", "xa");
+    x.appendChild(el("span", "xk", key));
+    x.appendChild(el("span", `xar ${tone || ""}`.trim(), GLYPH[dir] || "·"));
+    if (val != null) x.appendChild(el("span", "xv", String(val)));
+    return x;
   };
-  v.appendChild(cell("Macro Bias", n.macro_bias.toUpperCase(), biasTone,
-    typeof n.macro_bias_score === "number" ? `score ${n.macro_bias_score > 0 ? "+" : ""}${n.macro_bias_score}` : ""));
-  v.appendChild(cell("Expansion", n.expansion_direction.toUpperCase(), dirTone, "true open direction"));
-  v.appendChild(cell("Day Type", n.clean_or_choppy.toUpperCase(), "", n.scoring_method === "ai" ? `scored ${narrAgo(n)}` : "rule-based"));
-  hero.appendChild(v);
+  cross.appendChild(xa("EQ", n.expansion_direction || "neutral", null, dirTone)); // equity stance = bias
+  if (mac.us10y) cross.appendChild(xa("RATE", mac.us10y.dir, mac.us10y.last));
+  if (cx.brent)  cross.appendChild(xa("OIL", cx.brent.dir, cx.brent.last));
+  if (cx.gold)   cross.appendChild(xa("GOLD", cx.gold.dir, cx.gold.last));
+  if (cx.dxy)    cross.appendChild(xa("USD", cx.dxy.dir, cx.dxy.last));
+  if (cx.vix)    cross.appendChild(xa("VOL", cx.vix.dir, cx.vix.last, cx.vix.dir === "rising" ? "amber" : ""));
+  if (cross.childElementCount) scan.appendChild(cross);
+
+  // NEWS — top live headlines, impact-coloured
+  const evs = (Array.isArray(n.news_events) ? n.news_events : []).filter((e) => e?.headline).slice(0, 3);
+  if (evs.length) {
+    const watch = el("div", "mscan-watch");
+    watch.appendChild(el("span", "ms-label", "NEWS"));
+    const list = el("span", "ms-watch-list");
+    evs.forEach((ev, idx) => {
+      if (idx) list.appendChild(el("span", "ms-sep", " · "));
+      const tone = ev.impact === "bullish" ? "bull" : ev.impact === "bearish" ? "bear" : "";
+      const item = el("span", `ms-ev ${tone}`.trim(), ev.headline);
+      item.title = `${ev.source ? ev.source + " — " : ""}${ev.headline}`;
+      list.appendChild(item);
+    });
+    watch.appendChild(list);
+    scan.appendChild(watch);
+  }
+  hero.appendChild(scan);
 
   // open type
   const open = $("#narrOpen");
@@ -878,29 +1057,6 @@ function renderNarrative(n) {
     open.appendChild(tell);
   }
 
-  // macro drivers
-  const macro = $("#narrMacro");
-  macro.replaceChildren();
-  const drivers = Array.isArray(n.macro_drivers) ? n.macro_drivers : [];
-  if (!drivers.length) macro.appendChild(el("div", "narr-empty", "No macro drivers reported."));
-  for (const d of drivers) {
-    const row = el("div", "driver");
-    row.appendChild(el("span", "dk", d.label));
-    row.appendChild(el("span", "dv", d.reading));
-    row.appendChild(el("span", `lean ${d.lean === "bull" ? "bull" : d.lean === "bear" ? "bear" : ""}`.trim(), d.lean || "—"));
-    macro.appendChild(row);
-  }
-  // live news/events (web search + GDELT), rendered as driver rows keyed by source
-  for (const ev of (Array.isArray(n.news_events) ? n.news_events : [])) {
-    if (!ev?.headline) continue;
-    const row = el("div", "driver");
-    row.appendChild(el("span", "dk", ev.source || "news"));
-    row.appendChild(el("span", "dv", ev.headline));
-    const tone = ev.impact === "bullish" ? "bull" : ev.impact === "bearish" ? "bear" : "";
-    row.appendChild(el("span", `lean ${tone}`.trim(), ev.impact || "—"));
-    macro.appendChild(row);
-  }
-
   // reversal zones
   const zones = $("#narrZones");
   zones.replaceChildren();
@@ -915,38 +1071,6 @@ function renderNarrative(n) {
     zones.appendChild(row);
   }
 
-  // macro feed (raw readings)
-  const feedWrap = $("#narrFeedWrap"), feed = $("#narrFeed");
-  feed.replaceChildren();
-  const m = n.macro;
-  const fEntries = [];
-  if (m?.us2y)   fEntries.push(["US 2Y",  `${m.us2y.last} ${m.us2y.dir}`]);
-  if (m?.us10y)  fEntries.push(["US 10Y", `${m.us10y.last} ${m.us10y.dir}`]);
-  if (typeof m?.curve2s10s === "number") fEntries.push(["2s10s", `${m.curve2s10s}`]);
-  if (m?.usdjpy) fEntries.push(["USD/JPY", `${m.usdjpy.last} ${m.usdjpy.dir}`]);
-  if (m?.tga)    fEntries.push(["TGA", `${m.tga.dir}`]);
-  if (m?.rrp)    fEntries.push(["RRP", `${m.rrp.dir}`]);
-  if (m?.cot)    fEntries.push(["COT", `${ordinal(m.cot.percentile)} pct`]);
-  const c = m?.cross;
-  if (c?.brent)  fEntries.push(["Oil", `${c.brent.last} ${c.brent.dir}`]);
-  if (c?.vix)    fEntries.push(["VIX", `${c.vix.last} ${c.vix.dir}`]);
-  if (c?.dxy)    fEntries.push(["DXY", `${c.dxy.last} ${c.dxy.dir}`]);
-  if (c?.gold)   fEntries.push(["Gold", `${c.gold.last} ${c.gold.dir}`]);
-  if (fEntries.length) {
-    feedWrap.hidden = false;
-    for (const [k, val] of fEntries) {
-      const item = el("div", "metric");
-      item.appendChild(el("span", "mk", k));
-      item.appendChild(el("span", "mv", val));
-      feed.appendChild(item);
-    }
-    if (m?.notes?.length) {
-      const note = el("div", "metric");
-      note.appendChild(el("span", "mk", "Unavailable"));
-      note.appendChild(el("span", "mv", String(m.notes.length)));
-      feed.appendChild(note);
-    }
-  } else feedWrap.hidden = true;
 }
 
 async function loadNarrative() {
@@ -1087,8 +1211,8 @@ $("#themeToggle")?.addEventListener("click", () => {
 
 // ── init ──────────────────────────────────────────────────────────────────────
 initBackground();
-tickClock(); tickOpenCountdown();
-setInterval(() => { tickClock(); tickOpenCountdown(); }, 1000);
+tickClock(); tickOpenCountdown(); tickNextScore(); tickAgoStamps();
+setInterval(() => { tickClock(); tickOpenCountdown(); tickNextScore(); tickAgoStamps(); }, 1000);
 $("#refresh").addEventListener("click", () => { load(); loadSpot(); loadCandles(); loadNarrative(); loadRegime(); });
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden) { load(); loadSpot(); loadCandles(); loadNarrative(); loadRegime(); }

@@ -30,7 +30,9 @@ Picked **hybrid**: Max scoring stays local (free), board auto-publishes to a sta
 ## TODO
 - [ ] (When wanted) enable computer-off viewing: install netlify-cli + link the site, set `PUBLISH_TARGET=netlify`.
 - [ ] Let it run a few sessions to **accumulate calibration data**, then check "is 70% actually 70%?" and whether Opus beats Sonnet.
-- [ ] (Optional) add `vol_skew_multi` per-strike IV skew if we want more IV granularity.
+- [x] Add `vol_skew_multi` per-strike IV skew — captured into `data.iv_skew`, fed to the AI scorer
+      (per-strike `iv`/`iv_vs_atm` + `iv_skew` context) and the coverage confluence (`skewBump`), shown
+      on the coverage panel. (2026-06-22)
 
 ## Gotchas / facts
 - **Cookie expires** — when capture returns 401/403, re-paste `altaris_session=...` into `.env`.

@@ -16,6 +16,13 @@
 [functions."watchdog"]
   schedule = "*/15 * * * *"
 
+# Cloud capture: every 15 min it logs into Altaris and stores a flow/greek snapshot to Netlify
+# Blobs, so option positioning isn't lost when the scoring PC is off. The function self-gates to
+# 09:00–16:00 ET Mon–Fri (cheap no-op otherwise). Recover with `npm run backfill`. See capture.mjs.
+# Requires ALTARIS_USER + ALTARIS_PASS in the Netlify site env.
+[functions."capture"]
+  schedule = "*/15 * * * *"
+
 # The board JSON must never be cached by the CDN, or the phone shows a stale board.
 [[headers]]
   for = "/dashboard.json"

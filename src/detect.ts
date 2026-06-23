@@ -14,8 +14,8 @@ const r2 = (n: number) => Math.round(n * 100) / 100;
  *              `clean` = the overshoot beyond the level stayed within CLEAN_REVERSAL_PTS
  *              (a tight turn). A non-clean reversed held only after grinding past it.
  *  pending   : reached the level, still live — neither hard-stopped nor rejected yet.
- *  untouched : price never actually REACHED it (within FILL_TOL_PTS) — excluded from grading.
- *              Coming within ~a point is NOT a touch; a resting limit there would never fill.
+ *  untouched : price never actually REACHED it (within FILL_TOL_PTS = 0.15 pts) — excluded from grading.
+ *              Near-misses within 0.15 pts count; reversals 0.5+ pts short belong to the next strike.
  *
  * Overshoot is the ADVERSE excursion beyond the level (above it for resistance, below for
  * support); reject is the FAVORABLE move back off it. Within one bar the hard stop is checked

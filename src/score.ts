@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { fetchCandles } from "./altaris.js";
 import { config, type SessionDef } from "./config.js";
-import type { AltarisCandlesResponse, Board, CaptureRecord, DataSnapshot, DetectedLevel, GreekTimeseries, Narrative, ScoredLevel } from "./types.js";
+import type { AltarisCandlesResponse, Board, CaptureRecord, CoverageLevel, DataSnapshot, DetectedLevel, GreekTimeseries, Narrative, ScoredLevel } from "./types.js";
 
 /** Compact pre-open call fed into the board scorer to tilt probabilities (see SYSTEM). */
 export interface DayContext {
@@ -66,6 +66,12 @@ Definitions and rules — follow exactly:
   A level with several of these stacking (e.g. big gex + big |charm| + big vanna + OI mass) is a much stronger reversal candidate than gex alone.
 - TIME OF DAY matters — "minutes_to_cash_close" is minutes left to the 16:00 ET cash close. Into the close: gamma/charm pinning intensifies and 0DTE positioning dominates — price gets pulled toward the dominant pin / max-pain, large walls hold harder and to the tick, while far-OTM strikes lose relevance. Early/mid-session, moves are more directional and walls are more likely to be probed and broken. Fridays (weekly expiry; monthly OPEX on the 3rd Friday) amplify charm/pin effects. Weight both probability AND the reaction call by the clock.
 - The "iv" block gives the IV regime: current vs session-start IV, the change, direction, and a vanna_note. USE IT to weight vanna/vega: if IV is RISING/FALLING, vanna flows matter and vanna-heavy strikes gain reversal strength; if STABLE, downweight vanna and lean on gamma/charm. Follow the vanna_note's guidance.
+- IV SKEW — the per-strike implied-vol smile (nearest expiration). Two places: the "iv_skew" context block (atm_iv, otm_put_iv, otm_call_iv, risk_reversal = OTM-put IV − OTM-call IV), and per-strike "iv" + "iv_vs_atm" on each strike row. Read it as DEMAND, which strengthens levels:
+  - A LOCAL IV BUMP at a strike (iv_vs_atm clearly positive vs its neighbours) = concentrated option demand / dealers defending that strike = a STRONGER, CLEANER reversal node. This often marks the exact strike price turns at — weight it like a real confluence alongside gex/charm/OI.
+  - risk_reversal strongly POSITIVE (steep put skew) = heavy downside hedging: supports below spot are better-defended (more reliable bounces) and resistances are easier fades on a relief pop. risk_reversal NEGATIVE (call skew) = upside chase: call walls are more likely to be defended/pinned.
+  - The skew tape is jumpy near ATM — treat a single noisy print cautiously; trust a bump that lines up with other confluence (a wall, heavy OI, charm) far more than one standing alone.
+- 0DTE ISOLATION — the "gex_0dte_m", "charm_0dte_m", "vanna_0dte_m" per-strike fields are the SAME-DAY-expiry slice of gamma/charm/vanna, separated out from the all-expiration "*_m" bars. This is the slice that actually pins price to the tick. WEIGHT IT BY THE CLOCK: as minutes_to_cash_close drops (last 1-2 hours), 0DTE positioning DOMINATES — a strike with huge 0DTE gamma/charm is the pin that holds hardest and cleanest into the close; lean on the 0DTE numbers far more than the all-expiration aggregate there. Early/mid-session 0DTE is one input among many. A strike whose strength is mostly 0DTE will fade after the close; one with strength across expirations is more durable — say which it is.
+- OI BUILDING — the "d_oi_day_calls"/"d_oi_day_puts" fields are DAY-OVER-DAY OI change (today vs prior close), distinct from the intraday "d_oi_*". Positive = contracts ADDED overnight/today; this is where new positioning is being laid. Puts growing at/below spot = support being reinforced; calls growing above = resistance building. A wall with growing OI is STRENGTHENING (more reliable hold); one with shrinking OI is being unwound (weakening — de-rate it even if its standing OI is still large).
 - The DELTAS (d_*) matter as much as the levels: a level strengthens when its |gex| is growing, weakens when |gex| is shrinking. For call walls (positive gex): d_gex positive = strengthening, d_gex negative = weakening. For put walls (negative gex): d_gex MORE NEGATIVE = strengthening, d_gex toward zero or positive = weakening. Same logic applies to d_charm — for put walls, charm building means d_charm more negative (wall gaining bullish dealer-buy force); for call walls, d_charm more negative = wall gaining bearish dealer-sell force. Weigh the trend, not just the snapshot.
 - Regime modifier (NET/aggregate GEX, not per-strike): positive net GEX = pinning regime — dealers stabilize, fade into levels, walls hold cleanly. Negative net GEX (spot BELOW the gamma flip / zero_gamma) = AMPLIFICATION regime — dealers are short gamma and ADD to moves, so weak and moderate levels get blown through. In a negative net GEX regime: RAISE THE BAR HARD. Only score the 2-3 highest-confluence structural levels (dominant named walls with stacked greeks); drop everything else from the board entirely. A level that would score 40-55% in a positive regime should not appear on the board at all in a negative regime — it will simply get run through. Do not confuse this with per-strike sign — a put-heavy strike (negative per-strike gex) is a support node regardless of the net regime.
 - You are given your OWN previous call. REVISE it rather than recomputing from scratch — only move a probability when the data justifies it. Avoid jitter.
@@ -140,6 +146,53 @@ function buildGexProfile(snap: DataSnapshot, spot: number): { strike: number; ge
   }));
 }
 
+/** Implied vol (%) at a strike from the skew map — exact, else nearest within ~0.6 pt. */
+function ivAt(cur: DataSnapshot, strike: number): number | null {
+  const sk = cur.iv_skew;
+  if (!sk) return null;
+  const exact = sk[strike.toFixed(1)];
+  if (typeof exact === "number") return exact;
+  let best: number | null = null, bd = 0.6;
+  for (const [k, v] of Object.entries(sk)) {
+    const dd = Math.abs(Number(k) - strike);
+    if (dd <= bd) { bd = dd; best = v; }
+  }
+  return best;
+}
+
+/**
+ * Skew summary near spot: ATM IV + a 25-delta-ish risk reversal (≈3% OTM put IV − OTM call IV).
+ * Positive risk_reversal = put skew = downside hedging demand. Null when no skew was captured.
+ */
+function skewContext(cur: DataSnapshot, spot: number) {
+  if (!cur.iv_skew) return null;
+  const atm = ivAt(cur, spot);
+  const otmPut = ivAt(cur, spot * 0.97);
+  const otmCall = ivAt(cur, spot * 1.03);
+  return {
+    atm_iv: atm != null ? round(atm, 2) : null,
+    otm_put_iv: otmPut != null ? round(otmPut, 2) : null,
+    otm_call_iv: otmCall != null ? round(otmCall, 2) : null,
+    risk_reversal: otmPut != null && otmCall != null ? round(otmPut - otmCall, 2) : null,
+  };
+}
+
+/**
+ * Local IV-bump confidence for ONE strike: how elevated its IV is vs the smooth local skew
+ * (mean of the strikes ±2 away). A positive bump = concentrated demand / dealers defending here =
+ * a stronger, cleaner node. Returns a 0-8 confluence contribution (capped, modest — the skew tape
+ * is noisy near ATM, so this only nudges; the AI reads the full per-strike IV for nuance).
+ */
+function skewBump(cur: DataSnapshot, k: number): number {
+  const iv = ivAt(cur, k);
+  if (iv == null) return 0;
+  const lo = ivAt(cur, k - 2), hi = ivAt(cur, k + 2);
+  const base = lo != null && hi != null ? (lo + hi) / 2 : null;
+  if (base == null || base <= 0) return 0;
+  const rel = (iv - base) / base; // relative elevation vs neighbours
+  return rel > 0.08 ? Math.min(8, (rel - 0.08) * 20) : 0;
+}
+
 /** Per-strike near-spot rows with deltas vs the oldest snapshot in the lookback window. */
 function buildStrikeRows(history: CaptureRecord[], spot: number) {
   const cur = history[history.length - 1]!.data;
@@ -149,12 +202,14 @@ function buildStrikeRows(history: CaptureRecord[], spot: number) {
   type BarName = "gex_bar" | "dex_bar" | "vex_bar" | "charm_bar" | "tex_bar" | "vanna_bar" | "rex_bar";
   const bar = (snap: typeof cur, name: BarName, k: string) => snap[name]?.[k] ?? 0;
 
+  const atmIv = ivAt(cur, spot); // skew baseline so each strike's IV is read vs ATM
   return strikesNear(cur, spot).map((k) => {
     const s = key(k);
     const oi = cur.oi_bar[s] ?? { calls: 0, puts: 0 };
     const oiRef = ref.oi_bar[s] ?? { calls: 0, puts: 0 };
     const vol = cur.vol_bar?.[s] ?? { calls: 0, puts: 0 };
     const d = (name: BarName) => M(bar(cur, name, s) - bar(ref, name, s));
+    const iv = ivAt(cur, k);
     return {
       strike: k,
       oi_calls: round(oi.calls), oi_puts: round(oi.puts),
@@ -165,7 +220,16 @@ function buildStrikeRows(history: CaptureRecord[], spot: number) {
       vega_m: M(bar(cur, "vex_bar", s)), vanna_m: M(bar(cur, "vanna_bar", s)),
       charm_m: M(bar(cur, "charm_bar", s)), tex_m: M(bar(cur, "tex_bar", s)),
       rho_m: M(bar(cur, "rex_bar", s)),
+      // 0DTE-isolated gamma/charm/vanna — weight these into the close (0DTE dominates pinning).
+      gex_0dte_m: M(cur.gex_0dte_bar?.[s] ?? 0),
+      charm_0dte_m: M(cur.charm_0dte_bar?.[s] ?? 0),
+      vanna_0dte_m: M(cur.vanna_0dte_bar?.[s] ?? 0),
+      // Per-strike IV from the skew + how elevated it sits vs ATM (a local bump = demand/defense here).
+      iv: iv != null ? round(iv, 2) : null,
+      iv_vs_atm: iv != null && atmIv != null ? round(iv - atmIv, 2) : null,
       d_oi_calls: round(oi.calls - oiRef.calls), d_oi_puts: round(oi.puts - oiRef.puts),
+      // Day-over-day OI change (walls building vs unwinding) from /api/oi_change.
+      d_oi_day_calls: round(cur.oi_day_bar?.[s]?.calls ?? 0), d_oi_day_puts: round(cur.oi_day_bar?.[s]?.puts ?? 0),
       d_gex_m: d("gex_bar"), d_vanna_m: d("vanna_bar"), d_charm_m: d("charm_bar"), d_vega_m: d("vex_bar"),
     };
   });
@@ -224,6 +288,7 @@ function buildInput(history: CaptureRecord[], prior: Board | null, detected: Det
       minutes_to_cash_close: minutesToCashClose(history[history.length - 1]!.capturedAt),
     },
     iv: history[history.length - 1]!.iv ?? null,
+    iv_skew: skewContext(cur, spot),
     strikes_near_spot: buildStrikeRows(history, spot),
     your_prior_call: prior ? prior.levels.map((l) => ({ strike: l.strike, reversal_prob: l.reversal_prob, side: l.side })) : null,
     graded_levels: detected
@@ -296,11 +361,139 @@ export async function scoreBoard(
   board.expected_move = cur.expected_move;
   board.levels = (board.levels ?? []).sort((a, b) => b.reversal_prob - a.reversal_prob);
   board.gex_profile = buildGexProfile(cur, spot);
+  // Per-strike coverage is deterministic — it guarantees a number at EVERY near-spot strike, so the
+  // AI's curated picks become highlights on top of full coverage rather than a filter that omits nodes.
+  board.coverage = buildCoverage(cur, spot, detected);
   return board;
 }
 
 // GEX threshold for unlisted strikes to count as structural walls (mirrors run.ts).
 const GEX_RULE_THRESHOLD = 100e6;
+
+type NamedSets = Record<"major_wall" | "call_wall" | "put_wall" | "call_walls" | "put_walls" | "zero_gamma" | "vol_trigger" | "max_pain", Set<number>>;
+
+/** Named-level sets used for the confluence bonus + tag generation. */
+function namedSets(cur: DataSnapshot): NamedSets {
+  const fin = (n: number) => Number.isFinite(n) && n > 0;
+  return {
+    major_wall: new Set([cur.major_wall, cur.major_wall_0dte].filter(fin)),
+    call_wall: new Set([cur.call_wall, cur.call_wall_0dte].filter(fin)),
+    put_wall: new Set([cur.put_wall, cur.put_wall_0dte].filter(fin)),
+    call_walls: new Set(cur.call_walls),
+    put_walls: new Set(cur.put_walls),
+    zero_gamma: new Set([cur.zero_gamma].filter(fin)),
+    vol_trigger: new Set([cur.vol_trigger].filter(fin)),
+    max_pain: new Set([cur.max_pain].filter(fin)),
+  };
+}
+
+interface StrikeScore {
+  strike: number; score: number; side: "support" | "resistance";
+  tags: string[]; reaction: "clean" | "chop" | "mixed"; gex: number; oi: number;
+}
+
+/**
+ * Confluence score for ONE strike from its own greeks — the shared core of both the curated
+ * rule board and the full per-strike coverage. `score` is an unbounded-ish confluence sum
+ * (named-wall + |GEX| + OI + |charm| + activity); callers either rank it or map it to a prob.
+ */
+function scoreStrike(cur: DataSnapshot, k: number, spot: number, ns: NamedSets): StrikeScore {
+  const M = (n: number) => n / 1e6;
+  const s = k.toFixed(1);
+  const gex = cur.gex_bar?.[s] ?? 0;
+  const charm = cur.charm_bar?.[s] ?? 0;
+  const oi = (cur.oi_bar?.[s]?.calls ?? 0) + (cur.oi_bar?.[s]?.puts ?? 0);
+  const oiCalls = cur.oi_bar?.[s]?.calls ?? 0;
+  const oiPuts = cur.oi_bar?.[s]?.puts ?? 0;
+  const volCalls = cur.vol_bar?.[s]?.calls ?? 0;
+  const volPuts = cur.vol_bar?.[s]?.puts ?? 0;
+  const volOiCall = oiCalls > 0 ? volCalls / oiCalls : 0;
+  const volOiPut = oiPuts > 0 ? volPuts / oiPuts : 0;
+
+  const side: "support" | "resistance" = k > spot ? "resistance" : k < spot ? "support" : gex >= 0 ? "resistance" : "support";
+
+  let nameScore = 0;
+  if (ns.major_wall.has(k)) nameScore = 40;
+  else if (ns.call_wall.has(k) || ns.put_wall.has(k)) nameScore = 35;
+  else if (ns.call_walls.has(k) || ns.put_walls.has(k)) nameScore = 22;
+  else if (ns.zero_gamma.has(k) || ns.vol_trigger.has(k)) nameScore = 15;
+  else if (ns.max_pain.has(k)) nameScore = 12;
+
+  const gexScore = Math.min(25, Math.log1p(Math.abs(M(gex))) * 5);
+  const oiScore = Math.min(15, Math.log1p(oi / 1000) * 2.5);
+  const charmScore = Math.min(15, Math.log1p(Math.abs(M(charm))) * 3);
+  const activityScore = Math.min(10, (side === "resistance" ? volOiCall : volOiPut) * 3);
+  const skewScore = skewBump(cur, k); // local IV bump = concentrated demand/defense (0-8, modest)
+
+  // 0DTE pin emphasis: large SAME-DAY gamma+charm = a same-day pin that holds to the tick (0-10, capped).
+  const gex0 = cur.gex_0dte_bar?.[s] ?? 0, charm0 = cur.charm_0dte_bar?.[s] ?? 0;
+  const dte0Mag = Math.abs(M(gex0)) + Math.abs(M(charm0));
+  const dte0Score = Math.min(10, Math.log1p(dte0Mag / 50) * 2.5);
+
+  // OI BUILDING day-over-day on the relevant side (puts at a support, calls at a resistance) = wall
+  // being reinforced overnight (0-6, modest). Shrinking OI gives nothing — it's weakening.
+  const oiDay = cur.oi_day_bar?.[s];
+  const oiBuild = oiDay ? (side === "resistance" ? oiDay.calls : oiDay.puts) : 0;
+  const oiBuildScore = oiBuild > 0 ? Math.min(6, Math.log1p(oiBuild / 500) * 1.5) : 0;
+
+  const score = nameScore + gexScore + oiScore + charmScore + activityScore + skewScore + dte0Score + oiBuildScore;
+
+  const tags: string[] = [];
+  if (ns.major_wall.has(k)) tags.push("Major Wall");
+  if (ns.call_wall.has(k) && !tags.some((t) => t.includes("Major"))) tags.push("Call Wall");
+  if (ns.put_wall.has(k) && !tags.some((t) => t.includes("Major"))) tags.push("Put Wall");
+  if (ns.call_walls.has(k) && !tags.some((t) => t.includes("Call"))) tags.push("Call Wall");
+  if (ns.put_walls.has(k) && !tags.some((t) => t.includes("Put"))) tags.push("Put Wall");
+  if (ns.zero_gamma.has(k)) tags.push("Zero Gamma");
+  if (ns.vol_trigger.has(k)) tags.push("Vol Trigger");
+  if (ns.max_pain.has(k)) tags.push("Max Pain");
+  const gexAbs = Math.abs(M(gex));
+  if (gexAbs >= 500) tags.push(`GEX ${M(gex) >= 0 ? "+" : "−"}${(gexAbs / 1000).toFixed(1)}B`);
+  else if (gexAbs >= 50) tags.push(`GEX ${M(gex) >= 0 ? "+" : "−"}${Math.round(gexAbs)}M`);
+  if (oi > 50000) tags.push(`OI ${Math.round(oi / 1000)}k`);
+  if (dte0Score >= 5) tags.push("0DTE Pin");      // strong same-day gamma/charm
+  if (oiBuildScore >= 2) tags.push("OI Building"); // wall reinforced day-over-day
+
+  let reaction: "clean" | "chop" | "mixed";
+  // A concentrated 0DTE pin tightens the turn → cleaner tick rejection.
+  if ((nameScore >= 35 && gexAbs >= 100) || dte0Score >= 7) reaction = "clean";
+  else if (ns.zero_gamma.has(k) || ns.vol_trigger.has(k) || ns.max_pain.has(k)) reaction = "chop";
+  else reaction = "mixed";
+
+  return { strike: k, score, side, tags: tags.slice(0, 4), reaction, gex, oi };
+}
+
+/**
+ * Map a confluence score to an absolute 0-100 reversal likelihood AT the strike. A transparent
+ * monotonic squash — NOT tuned to historical PnL: a dominant multi-greek node (score ~80+) lands
+ * ~64, a named-wall-only strike (~40) ~36, an empty strike (~5) ~11. Conditional on price reaching
+ * the strike (reachability is the spot line's job, not this number's).
+ */
+const probFromConfluence = (score: number) => Math.max(5, Math.min(78, Math.round(8 + score * 0.7)));
+
+/**
+ * Per-strike reversal coverage: a score for EVERY near-spot strike, so a resting limit at any
+ * exact strike has its own number and no real node is ever omitted. Differentiated by real greek
+ * confluence (empty strikes ~low, true nodes peak). Strikes broken today are de-rated to ~zero.
+ */
+export function buildCoverage(cur: DataSnapshot, spot: number, detected: DetectedLevel[]): CoverageLevel[] {
+  const ns = namedSets(cur);
+  const broken = detected.filter((d) => d.outcome === "broke").map((d) => d.strike);
+  const isBroken = (k: number) => broken.some((b) => Math.abs(b - k) <= 0.75);
+  return strikesNear(cur, spot)
+    .map((k) => {
+      const ss = scoreStrike(cur, k, spot, ns);
+      const broke = isBroken(k);
+      const iv = ivAt(cur, k);
+      return {
+        strike: k, side: ss.side, reaction: ss.reaction, tags: ss.tags,
+        prob: broke ? 5 : probFromConfluence(ss.score),
+        ...(iv != null ? { iv: round(iv, 1) } : {}),
+        ...(broke ? { broken: true } : {}),
+      };
+    })
+    .sort((a, b) => b.strike - a.strike);
+}
 
 /**
  * Deterministic rule-based scorer — fallback when Claude is unavailable.
@@ -322,18 +515,7 @@ export async function scoreBoardDeterministic(
   const band = config.nearSpotBandPct * spot;
   const M = (n: number) => n / 1e6;
 
-  // Named level sets for bonus scoring and tag generation.
-  const ns = {
-    major_wall: new Set([cur.major_wall, cur.major_wall_0dte].filter((n) => Number.isFinite(n) && n > 0)),
-    call_wall: new Set([cur.call_wall, cur.call_wall_0dte].filter((n) => Number.isFinite(n) && n > 0)),
-    put_wall: new Set([cur.put_wall, cur.put_wall_0dte].filter((n) => Number.isFinite(n) && n > 0)),
-    call_walls: new Set(cur.call_walls),
-    put_walls: new Set(cur.put_walls),
-    zero_gamma: new Set([cur.zero_gamma].filter((n) => Number.isFinite(n) && n > 0)),
-    vol_trigger: new Set([cur.vol_trigger].filter((n) => Number.isFinite(n) && n > 0)),
-    max_pain: new Set([cur.max_pain].filter((n) => Number.isFinite(n) && n > 0)),
-  };
-
+  const ns = namedSets(cur);
   const allNamed = new Set([
     ...ns.major_wall, ...ns.call_wall, ...ns.put_wall,
     ...ns.call_walls, ...ns.put_walls, ...ns.zero_gamma, ...ns.vol_trigger, ...ns.max_pain,
@@ -351,59 +533,7 @@ export async function scoreBoardDeterministic(
     candidates = [...allNamed].filter((k) => !brokenStrikes.has(k)).slice(0, 10);
   }
 
-  interface Cand {
-    strike: number; score: number; side: "support" | "resistance";
-    tags: string[]; reaction: "clean" | "chop" | "mixed"; gex: number; oi: number;
-  }
-
-  const scored: Cand[] = candidates.map((k) => {
-    const s = k.toFixed(1);
-    const gex = cur.gex_bar?.[s] ?? 0;
-    const charm = cur.charm_bar?.[s] ?? 0;
-    const oi = (cur.oi_bar?.[s]?.calls ?? 0) + (cur.oi_bar?.[s]?.puts ?? 0);
-    const oiCalls = cur.oi_bar?.[s]?.calls ?? 0;
-    const oiPuts = cur.oi_bar?.[s]?.puts ?? 0;
-    const volCalls = cur.vol_bar?.[s]?.calls ?? 0;
-    const volPuts = cur.vol_bar?.[s]?.puts ?? 0;
-    const volOiCall = oiCalls > 0 ? volCalls / oiCalls : 0;
-    const volOiPut = oiPuts > 0 ? volPuts / oiPuts : 0;
-
-    const side: "support" | "resistance" = k > spot ? "resistance" : k < spot ? "support" : gex >= 0 ? "resistance" : "support";
-
-    let nameScore = 0;
-    if (ns.major_wall.has(k)) nameScore = 40;
-    else if (ns.call_wall.has(k) || ns.put_wall.has(k)) nameScore = 35;
-    else if (ns.call_walls.has(k) || ns.put_walls.has(k)) nameScore = 22;
-    else if (ns.zero_gamma.has(k) || ns.vol_trigger.has(k)) nameScore = 15;
-    else if (ns.max_pain.has(k)) nameScore = 12;
-
-    const gexScore = Math.min(25, Math.log1p(Math.abs(M(gex))) * 5);
-    const oiScore = Math.min(15, Math.log1p(oi / 1000) * 2.5);
-    const charmScore = Math.min(15, Math.log1p(Math.abs(M(charm))) * 3);
-    const activityScore = Math.min(10, (side === "resistance" ? volOiCall : volOiPut) * 3);
-    const score = nameScore + gexScore + oiScore + charmScore + activityScore;
-
-    const tags: string[] = [];
-    if (ns.major_wall.has(k)) tags.push("Major Wall");
-    if (ns.call_wall.has(k) && !tags.some((t) => t.includes("Major"))) tags.push("Call Wall");
-    if (ns.put_wall.has(k) && !tags.some((t) => t.includes("Major"))) tags.push("Put Wall");
-    if (ns.call_walls.has(k) && !tags.some((t) => t.includes("Call"))) tags.push("Call Wall");
-    if (ns.put_walls.has(k) && !tags.some((t) => t.includes("Put"))) tags.push("Put Wall");
-    if (ns.zero_gamma.has(k)) tags.push("Zero Gamma");
-    if (ns.vol_trigger.has(k)) tags.push("Vol Trigger");
-    if (ns.max_pain.has(k)) tags.push("Max Pain");
-    const gexAbs = Math.abs(M(gex));
-    if (gexAbs >= 500) tags.push(`GEX ${M(gex) >= 0 ? "+" : "−"}${(gexAbs / 1000).toFixed(1)}B`);
-    else if (gexAbs >= 50) tags.push(`GEX ${M(gex) >= 0 ? "+" : "−"}${Math.round(gexAbs)}M`);
-    if (oi > 50000) tags.push(`OI ${Math.round(oi / 1000)}k`);
-
-    let reaction: "clean" | "chop" | "mixed";
-    if (nameScore >= 35 && gexAbs >= 100) reaction = "clean";
-    else if (ns.zero_gamma.has(k) || ns.vol_trigger.has(k) || ns.max_pain.has(k)) reaction = "chop";
-    else reaction = "mixed";
-
-    return { strike: k, score, side, tags: tags.slice(0, 4), reaction, gex, oi };
-  });
+  const scored = candidates.map((k) => scoreStrike(cur, k, spot, ns));
 
   scored.sort((a, b) => b.score - a.score);
   const top = scored.slice(0, 7);
@@ -463,5 +593,6 @@ export async function scoreBoardDeterministic(
     expected_move: cur.expected_move,
     scoring_method: "rule",
     gex_profile: buildGexProfile(cur, spot),
+    coverage: buildCoverage(cur, spot, detected),
   };
 }

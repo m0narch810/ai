@@ -37,10 +37,12 @@ Priority endpoints (confirmed from Network tab):
 
 | Endpoint           | Feeds                                            | Priority |
 |--------------------|--------------------------------------------------|----------|
-| `data`             | Header levels (Call/Put/Major Wall, Max Pain, Gamma Flip), OI by strike, net GEX | must-have |
+| `data`             | Header levels (Call/Put/Major Wall, Max Pain, Gamma Flip), OI by strike, net GEX, **+ 0DTE-isolated gamma/charm/vanna from the `*_hm` heatmaps** | must-have |
 | `greek_timeseries` | Per-strike GEX/DEX + live flow tape              | high     |
-| `regime_v2`/`macro`| Regime state / stress warning (filter)           | useful   |
-| `iv_tracker`/`vol_skew_multi` | IV term structure + skew (sizing/TP)  | optional |
+| `iv_tracker`       | IV regime (level + direction, for vanna/vega weighting) | high     |
+| `vol_skew_multi`   | Per-strike IV smile/skew — local bumps strengthen nodes | high     |
+| `oi_change`        | Day-over-day OI by strike — where walls are building/unwinding | high |
+| `regime_v2`/`macro`| Altaris's own regime / macro panels — NOT used (we compute these ourselves) | unused |
 | `charm_overlay`/`anomalies` | derived viz                             | skip     |
 
 ### [2] Scoring (`src/score.ts`) — AI-as-analyst

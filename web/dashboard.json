@@ -1,47 +1,151 @@
 {
-  "as_of": "2026-06-21T16:19:00",
-  "scored_at": 1782073410349,
-  "generated_at": "2026-06-21T21:09:08.417Z",
-  "session": null,
-  "spot": 739.8,
-  "regime": "positive",
-  "read": "Spot 739.8 trapped between $750 call wall ceiling and $732 support floor; fade rallies to 750 and buy dips to 732 for an 18-point range.",
+  "as_of": "2026-06-23T16:00:00",
+  "scored_at": 1782245178599,
+  "generated_at": "2026-06-23T21:00:14.589Z",
+  "session": "US",
+  "spot": 714.55,
+  "regime": "negative",
+  "read": "Trapped between 720 resistance (Major Wall / Zero Gamma) and 710 support (Put Wall); expect ping-pong between them tomorrow, with 700 as structural backstop if 710 fails.",
   "hard_stop_pts": 0.48,
   "clean_reversal_pts": 0.1,
   "iv": {
-    "current": 14.54,
+    "current": 41.16,
     "direction": "STABLE"
   },
-  "expected_move": 6.82,
+  "expected_move": 19.69,
   "scoring_method": "ai",
   "gex_profile": [
     {
+      "strike": 697,
+      "gex_m": -42.7
+    },
+    {
+      "strike": 698,
+      "gex_m": -22.8
+    },
+    {
+      "strike": 699,
+      "gex_m": -29.8
+    },
+    {
+      "strike": 700,
+      "gex_m": -471.3
+    },
+    {
+      "strike": 701,
+      "gex_m": -40.2
+    },
+    {
+      "strike": 702,
+      "gex_m": -21.5
+    },
+    {
+      "strike": 703,
+      "gex_m": -24
+    },
+    {
+      "strike": 704,
+      "gex_m": -25.8
+    },
+    {
+      "strike": 705,
+      "gex_m": -206.8
+    },
+    {
+      "strike": 706,
+      "gex_m": -32.2
+    },
+    {
+      "strike": 707,
+      "gex_m": -71.7
+    },
+    {
+      "strike": 708,
+      "gex_m": -44.2
+    },
+    {
+      "strike": 709,
+      "gex_m": -83.7
+    },
+    {
+      "strike": 710,
+      "gex_m": -267
+    },
+    {
+      "strike": 711,
+      "gex_m": -65.4
+    },
+    {
+      "strike": 712,
+      "gex_m": -94.9
+    },
+    {
+      "strike": 713,
+      "gex_m": -108
+    },
+    {
+      "strike": 714,
+      "gex_m": -92.2
+    },
+    {
+      "strike": 715,
+      "gex_m": -418.3
+    },
+    {
+      "strike": 716,
+      "gex_m": -53.5
+    },
+    {
+      "strike": 717,
+      "gex_m": -88.2
+    },
+    {
+      "strike": 717.5,
+      "gex_m": -0.1
+    },
+    {
+      "strike": 718,
+      "gex_m": -62.9
+    },
+    {
+      "strike": 719,
+      "gex_m": -61.1
+    },
+    {
+      "strike": 720,
+      "gex_m": -526.5
+    },
+    {
+      "strike": 721,
+      "gex_m": -30.1
+    },
+    {
       "strike": 722,
-      "gex_m": -34.4
+      "gex_m": -36.8
     },
     {
       "strike": 722.5,
-      "gex_m": 1.2
+      "gex_m": 1
     },
     {
       "strike": 723,
-      "gex_m": 3.1
+      "gex_m": -20.4
     },
     {
       "strike": 724,
-      "gex_m": -49.8
+      "gex_m": -6.1
     },
     {
       "strike": 725,
-      "gex_m": -73.2
+      "gex_m": -138.3
     },
     {
       "strike": 726,
-      "gex_m": -95.2
+      "gex_m": -71.3
     },
     {
       "strike": 727,
-      "gex_m": 5.5
+      "gex_m": -46.7
     },
     {
       "strike": 727.5,
@@ -49,204 +153,514 @@
     },
     {
       "strike": 728,
-      "gex_m": -126.9
+      "gex_m": -23.4
     },
     {
       "strike": 729,
-      "gex_m": 2.2
+      "gex_m": -16.4
     },
     {
       "strike": 730,
-      "gex_m": 10.8
+      "gex_m": -154.5
     },
     {
       "strike": 731,
-      "gex_m": 8.3
+      "gex_m": 0.5
     },
     {
       "strike": 732,
-      "gex_m": -111.2
+      "gex_m": -54.4
+    }
+  ],
+  "coverage": [
+    {
+      "strike": 732,
+      "side": "resistance",
+      "reaction": "clean",
+      "tags": [
+        "GEX −54M",
+        "0DTE Pin"
+      ],
+      "prob": 50,
+      "iv": 64.2
     },
     {
-      "strike": 732.5,
-      "gex_m": -0.2
+      "strike": 731,
+      "side": "resistance",
+      "reaction": "clean",
+      "tags": [
+        "0DTE Pin"
+      ],
+      "prob": 45,
+      "iv": 117.2
     },
     {
-      "strike": 733,
-      "gex_m": 47.3
+      "strike": 730,
+      "side": "resistance",
+      "reaction": "clean",
+      "tags": [
+        "GEX −155M",
+        "OI 77k",
+        "0DTE Pin"
+      ],
+      "prob": 57,
+      "iv": 60.1
     },
     {
-      "strike": 734,
-      "gex_m": 7.8
+      "strike": 729,
+      "side": "resistance",
+      "reaction": "clean",
+      "tags": [
+        "0DTE Pin"
+      ],
+      "prob": 46,
+      "iv": 58
     },
     {
-      "strike": 735,
-      "gex_m": 110.5
+      "strike": 728,
+      "side": "resistance",
+      "reaction": "clean",
+      "tags": [
+        "0DTE Pin"
+      ],
+      "prob": 49,
+      "iv": 56
     },
     {
-      "strike": 736,
-      "gex_m": 16.1
+      "strike": 727.5,
+      "side": "resistance",
+      "reaction": "mixed",
+      "tags": [],
+      "prob": 12,
+      "iv": 56
     },
     {
-      "strike": 737,
-      "gex_m": 24.7
+      "strike": 727,
+      "side": "resistance",
+      "reaction": "clean",
+      "tags": [
+        "0DTE Pin"
+      ],
+      "prob": 49,
+      "iv": 53.9
     },
     {
-      "strike": 737.5,
-      "gex_m": -0.2
+      "strike": 726,
+      "side": "resistance",
+      "reaction": "clean",
+      "tags": [
+        "GEX −71M",
+        "0DTE Pin"
+      ],
+      "prob": 58,
+      "iv": 81.9
     },
     {
-      "strike": 738,
-      "gex_m": 22.9
+      "strike": 725,
+      "side": "resistance",
+      "reaction": "mixed",
+      "tags": [
+        "GEX −138M",
+        "OI 63k",
+        "0DTE Pin"
+      ],
+      "prob": 55,
+      "iv": 49.7
     },
     {
-      "strike": 739,
-      "gex_m": 47.4
+      "strike": 724,
+      "side": "resistance",
+      "reaction": "clean",
+      "tags": [
+        "0DTE Pin"
+      ],
+      "prob": 44,
+      "iv": 32.9
     },
     {
-      "strike": 740,
-      "gex_m": 115
+      "strike": 723,
+      "side": "resistance",
+      "reaction": "clean",
+      "tags": [
+        "0DTE Pin"
+      ],
+      "prob": 48,
+      "iv": 37.8
     },
     {
-      "strike": 741,
-      "gex_m": 14.4
+      "strike": 722.5,
+      "side": "resistance",
+      "reaction": "chop",
+      "tags": [
+        "Vol Trigger"
+      ],
+      "prob": 29,
+      "iv": 37.8
     },
     {
-      "strike": 742,
-      "gex_m": 35.3
+      "strike": 722,
+      "side": "resistance",
+      "reaction": "clean",
+      "tags": [
+        "0DTE Pin"
+      ],
+      "prob": 55,
+      "iv": 60.2
     },
     {
-      "strike": 742.5,
-      "gex_m": 0.2
+      "strike": 721,
+      "side": "resistance",
+      "reaction": "clean",
+      "tags": [
+        "0DTE Pin"
+      ],
+      "prob": 49,
+      "iv": 28.5
     },
     {
-      "strike": 743,
-      "gex_m": 27.8
+      "strike": 720,
+      "side": "resistance",
+      "reaction": "clean",
+      "tags": [
+        "Major Wall",
+        "GEX −0.5B",
+        "OI 96k",
+        "0DTE Pin"
+      ],
+      "prob": 78,
+      "iv": 45.8
     },
     {
-      "strike": 744,
-      "gex_m": 54.9
+      "strike": 719,
+      "side": "resistance",
+      "reaction": "clean",
+      "tags": [
+        "GEX −61M",
+        "0DTE Pin"
+      ],
+      "prob": 53,
+      "iv": 45.6
     },
     {
-      "strike": 745,
-      "gex_m": 142.5
+      "strike": 718,
+      "side": "resistance",
+      "reaction": "clean",
+      "tags": [
+        "GEX −63M",
+        "0DTE Pin"
+      ],
+      "prob": 50,
+      "iv": 41.7
     },
     {
-      "strike": 746,
-      "gex_m": 31.6
+      "strike": 717.5,
+      "side": "resistance",
+      "reaction": "mixed",
+      "tags": [],
+      "prob": 11,
+      "iv": 41.7
     },
     {
-      "strike": 747,
-      "gex_m": 65
+      "strike": 717,
+      "side": "resistance",
+      "reaction": "clean",
+      "tags": [
+        "GEX −88M",
+        "0DTE Pin"
+      ],
+      "prob": 51,
+      "iv": 42
     },
     {
-      "strike": 748,
-      "gex_m": 49.5
+      "strike": 716,
+      "side": "resistance",
+      "reaction": "mixed",
+      "tags": [
+        "GEX −53M",
+        "0DTE Pin"
+      ],
+      "prob": 49,
+      "iv": 41.1
     },
     {
-      "strike": 749,
-      "gex_m": 24.7
+      "strike": 715,
+      "side": "resistance",
+      "reaction": "mixed",
+      "tags": [
+        "GEX −418M",
+        "OI 66k",
+        "0DTE Pin"
+      ],
+      "prob": 55,
+      "iv": 41.2
     },
     {
-      "strike": 750,
-      "gex_m": 238.5
+      "strike": 714,
+      "side": "support",
+      "reaction": "mixed",
+      "tags": [
+        "GEX −92M",
+        "OI Building"
+      ],
+      "prob": 49,
+      "iv": 41.9
     },
     {
-      "strike": 751,
-      "gex_m": 18.3
+      "strike": 713,
+      "side": "support",
+      "reaction": "clean",
+      "tags": [
+        "Put Wall",
+        "GEX −108M",
+        "0DTE Pin",
+        "OI Building"
+      ],
+      "prob": 77,
+      "iv": 42.2
     },
     {
-      "strike": 752,
-      "gex_m": 25.8
+      "strike": 712,
+      "side": "support",
+      "reaction": "clean",
+      "tags": [
+        "GEX −95M",
+        "0DTE Pin"
+      ],
+      "prob": 51,
+      "iv": 43.6
     },
     {
-      "strike": 753,
-      "gex_m": 21.9
+      "strike": 711,
+      "side": "support",
+      "reaction": "clean",
+      "tags": [
+        "GEX −65M",
+        "0DTE Pin"
+      ],
+      "prob": 51,
+      "iv": 44.9
     },
     {
-      "strike": 754,
-      "gex_m": 16.8
+      "strike": 710,
+      "side": "support",
+      "reaction": "clean",
+      "tags": [
+        "Put Wall",
+        "GEX −267M",
+        "OI 63k",
+        "0DTE Pin"
+      ],
+      "prob": 72,
+      "iv": 46.6
     },
     {
-      "strike": 755,
-      "gex_m": 155.1
+      "strike": 709,
+      "side": "support",
+      "reaction": "clean",
+      "tags": [
+        "GEX −84M",
+        "0DTE Pin"
+      ],
+      "prob": 53,
+      "iv": 47.6
     },
     {
-      "strike": 756,
-      "gex_m": 16.4
+      "strike": 708,
+      "side": "support",
+      "reaction": "clean",
+      "tags": [
+        "0DTE Pin",
+        "OI Building"
+      ],
+      "prob": 51,
+      "iv": 59.8
     },
     {
-      "strike": 757,
-      "gex_m": 45.8
+      "strike": 707,
+      "side": "support",
+      "reaction": "clean",
+      "tags": [
+        "GEX −72M",
+        "0DTE Pin"
+      ],
+      "prob": 52,
+      "iv": 63.4
     },
     {
-      "strike": 758,
-      "gex_m": 17.6
+      "strike": 706,
+      "side": "support",
+      "reaction": "clean",
+      "tags": [
+        "0DTE Pin"
+      ],
+      "prob": 49,
+      "iv": 67.1
+    },
+    {
+      "strike": 705,
+      "side": "support",
+      "reaction": "clean",
+      "tags": [
+        "Put Wall",
+        "GEX −207M",
+        "0DTE Pin",
+        "OI Building"
+      ],
+      "prob": 72,
+      "iv": 71.4
+    },
+    {
+      "strike": 704,
+      "side": "support",
+      "reaction": "clean",
+      "tags": [
+        "0DTE Pin",
+        "OI Building"
+      ],
+      "prob": 48,
+      "iv": 78
+    },
+    {
+      "strike": 703,
+      "side": "support",
+      "reaction": "clean",
+      "tags": [
+        "0DTE Pin"
+      ],
+      "prob": 49,
+      "iv": 89.4
+    },
+    {
+      "strike": 702,
+      "side": "support",
+      "reaction": "clean",
+      "tags": [
+        "0DTE Pin"
+      ],
+      "prob": 51,
+      "iv": 93.4
+    },
+    {
+      "strike": 701,
+      "side": "support",
+      "reaction": "clean",
+      "tags": [
+        "0DTE Pin",
+        "OI Building"
+      ],
+      "prob": 50,
+      "iv": 87.1
+    },
+    {
+      "strike": 700,
+      "side": "support",
+      "reaction": "clean",
+      "tags": [
+        "Put Wall",
+        "GEX −471M",
+        "OI 124k",
+        "0DTE Pin"
+      ],
+      "prob": 78,
+      "iv": 62.7
+    },
+    {
+      "strike": 699,
+      "side": "support",
+      "reaction": "clean",
+      "tags": [
+        "0DTE Pin",
+        "OI Building"
+      ],
+      "prob": 48,
+      "iv": 107.8
+    },
+    {
+      "strike": 698,
+      "side": "support",
+      "reaction": "clean",
+      "tags": [
+        "0DTE Pin",
+        "OI Building"
+      ],
+      "prob": 50,
+      "iv": 113.6
+    },
+    {
+      "strike": 697,
+      "side": "support",
+      "reaction": "clean",
+      "tags": [
+        "0DTE Pin",
+        "OI Building"
+      ],
+      "prob": 52,
+      "iv": 119.3
     }
   ],
   "levels": [
     {
-      "strike": 750,
-      "reversal_prob": 63,
+      "strike": 720,
+      "reversal_prob": 65,
       "side": "resistance",
-      "reaction": "clean",
+      "reaction": "mixed",
       "tags": [
-        "Call Wall",
         "Major Wall",
-        "GEX +238.5M",
-        "Charm -13B"
+        "Zero Gamma",
+        "Vol Trigger",
+        "Charm Cap"
       ],
-      "why": "Session-locked ceiling: GEX 238.5M dominant, charm -13B, vanna 1.75B, OI 39.7k calls; wall drift anchored at 750 across all six Altaris readings without a tick of movement — dealers are mechanically short delta at the exact strike and will force a clean snap-rejection.",
-      "target_strike": 732,
-      "outcome": "untouched",
+      "why": "Named major wall where zero gamma (722.5) and vol trigger converge; 78K puts building (+10K today), +15K multi-exp charm cap (0DTE expired, residual cross-expiry structure intact), and -840M cumulative delta confirm it as the session's dominant sell-side anchor — structural ceiling for tomorrow.",
+      "target_strike": 710,
+      "outcome": "none",
       "touched": false
     },
     {
-      "strike": 732,
+      "strike": 710,
       "reversal_prob": 55,
       "side": "support",
       "reaction": "mixed",
       "tags": [
         "Put Wall",
-        "Charm -21.9B",
-        "Vol/OI 150%+",
-        "Delta Profile"
+        "OI 50k",
+        "Charm",
+        "GEX -267M"
       ],
-      "why": "Largest charm magnitude in the entire dataset (-21.9B) on a negative-GEX (-111.2M) put floor; vol/OI ran 150%+ on both sides all session and the day's biggest delta print (-5.57M at 732.5) identifies this as the structural floor where dealer put-hedge buybacks are mechanically forced — raised from 44% on the charm concentration and delta-profile evidence the prior lacked.",
-      "target_strike": 750,
+      "why": "Named put wall with 50K OI and -7.3K multi-exp charm (dealer buy-back force after 0DTE expires); 513% put vol/OI confirms active battleground defense today; primary support counterpart to 720 ceiling across a clean 10-pt range.",
+      "target_strike": 720,
       "outcome": "untouched",
       "touched": false
     },
     {
-      "strike": 745,
-      "reversal_prob": 42,
-      "side": "resistance",
-      "reaction": "mixed",
-      "tags": [
-        "Call Wall",
-        "GEX +142.5M",
-        "Charm -9.1B",
-        "OI 24.7k"
-      ],
-      "why": "Real intermediate call wall (GEX 142.5M, charm -9.1B) but de-rated because flanking strikes at 744 (54.9M GEX) and 747 (65M GEX) create a diffuse 4-point call cluster rather than a single-tick snap point — a stall zone between spot and the dominant 750 wall.",
-      "target_strike": 732,
-      "outcome": "untouched",
-      "touched": false
-    },
-    {
-      "strike": 728,
-      "reversal_prob": 40,
+      "strike": 700,
+      "reversal_prob": 44,
       "side": "support",
       "reaction": "clean",
       "tags": [
         "Put Wall",
-        "GEX -126.9M",
-        "Charm -18.7B",
-        "Vol/OI 100%"
+        "OI 108k",
+        "Charm",
+        "IV Skew"
       ],
-      "why": "Named put wall with the largest negative per-strike GEX in the lower range (-126.9M) and charm -18.7B; entire put OI traded through today (100% vol/OI) so the remaining structure is the real settlement floor — greek cliff is concentrated enough for a clean tick-bounce on a deep retrace below 732.",
-      "target_strike": 750,
+      "why": "Dominant named put wall with largest OI mass (108K puts) and strongest multi-exp charm (-64K, most powerful dealer buy force of any level); +9,918 day adds and +21.5 IV skew bump signal deep institutional defense; backstop if 710 fails under negative-GEX amplification.",
+      "target_strike": 720,
       "outcome": "untouched",
+      "touched": false
+    },
+    {
+      "strike": 730,
+      "reversal_prob": 35,
+      "side": "resistance",
+      "reaction": "chop",
+      "tags": [
+        "OI Building",
+        "Charm Cap",
+        "GEX -154M",
+        "Put OI 52k"
+      ],
+      "why": "Largest above-spot OI build today (+15,907 adds), 52K put OI, and +35K multi-exp charm create a secondary ceiling if 720 clears; not a named call wall but carries structural weight by OI and charm mass alone.",
+      "target_strike": 710,
+      "outcome": "none",
       "touched": false
     }
   ]

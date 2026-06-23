@@ -1,291 +1,305 @@
 {
-  "as_of": "2026-06-21T16:55:14",
-  "generated_at": "2026-06-21T21:04:01.110Z",
-  "scored_at": 1782075841110,
-  "spot": 739.8,
+  "as_of": "2026-06-22T18:27:23",
+  "generated_at": "2026-06-22T22:33:41.445Z",
+  "scored_at": 1782167621445,
+  "spot": 738.115,
   "macro_bias": "bullish",
-  "macro_bias_score": 68,
+  "macro_bias_score": 35,
   "macro_drivers": [
     {
       "label": "2Y Yield",
-      "reading": "3.80, -0.02 from 3.82; 10Y flat at 4.451; bull steepener; Fed held 3.5-3.75% June 17 (Warsh first meeting, dots pushed to 2027-28) — market ignoring hawkish tilt, 2Y barely above upper bound",
-      "lean": "bull"
-    },
-    {
-      "label": "Net Liquidity (TGA + RRP)",
-      "reading": "TGA -$24.6B this week (Treasury spending, cash injected); RRP drained to $0.25B from $6.83B — effectively zero, full depletion; dual liquidity flush into system",
-      "lean": "bull"
-    },
-    {
-      "label": "COT Crowding",
-      "reading": "Nasdaq spec net -3.3%, 2nd percentile — extreme crowded short; entire spec book was war-positioned short for Iran conflict; ceasefire deal catches every short wrong-footed; maximum forced-cover fuel",
-      "lean": "bull"
-    },
-    {
-      "label": "Iran War / Ceasefire Catalyst",
-      "reading": "US-Iran interim MOU signed June 15-17; Strait of Hormuz reopened (12.5M bbl/night per Vance June 20); Vance in Switzerland June 21 finalizing deal details; $6B frozen Qatar assets to be released; Trump threats to 'hit Iran very hard' create deal-collapse tail risk",
-      "lean": "bull"
-    },
-    {
-      "label": "BOJ / Carry Trade",
-      "reading": "BOJ hiked to 1.0% at June meeting; headline flags two more possible hikes; ~$500B yen carry outstanding (Morgan Stanley); USD/JPY 161.23 with mild yen bid (-0.118); systemic unwind risk is week-level, not a Monday catalyst",
-      "lean": "bear"
-    },
-    {
-      "label": "FOMC / Warsh",
-      "reading": "Held unanimously at 3.5-3.75% June 17; dot plot removed 2026 cut, pushed to 2027-28 citing Iran-war inflation spike; Warsh nod to possible future hikes; but 2Y at 3.80 shows market not pricing additional moves",
+      "reading": "3.84%, flat (+0.00bps) — no near-term rate shock from the short end",
       "lean": "neutral"
     },
     {
-      "label": "Cross-Asset Overlay",
-      "reading": "Gold -$73 (no haven bid — risk-on confirmation); HYG +$0.28 (credit market risk-on); Brent +$0.74 to $80.59 = Trump-threat deal-fragility premium NOT a new supply disruption (Strait is open); VIX +0.38 to 16.78 (low); copper -0.76%, BTC -0.74% (mild growth caution)",
+      "label": "10Y Yield",
+      "reading": "4.509%, +5.8bps vs prior close — long end rising without 2Y follow, mild duration pressure on NQ",
+      "lean": "bear"
+    },
+    {
+      "label": "TGA",
+      "reading": "$880.7B, +$52.6B week-over-week — Treasury absorbing cash, draining system liquidity",
+      "lean": "bear"
+    },
+    {
+      "label": "RRP",
+      "reading": "$3.93B, +$3.67B day-over-day — money migrating to Fed overnight, tightening net liquidity",
+      "lean": "bear"
+    },
+    {
+      "label": "COT / NQ Positioning",
+      "reading": "Net speculative at 2nd percentile — historically maximum crowded-short, extreme squeeze potential, well below 50",
       "lean": "bull"
+    },
+    {
+      "label": "USD/JPY",
+      "reading": "161.6, +0.34 (rising, velocity 0.11) — yen weakening, carry trade intact, zero unwind risk",
+      "lean": "bull"
+    },
+    {
+      "label": "Iran Geopolitics",
+      "reading": "US-Iran 60-day MoU roadmap signed in Switzerland; US Treasury issues 60-day Iranian oil sanctions waiver; IAEA inspectors return; Hormuz deconfliction agreed — confirmed NPR, CNBC, Al Jazeera, Fox News",
+      "lean": "bull"
+    },
+    {
+      "label": "VIX / Cross-Asset",
+      "reading": "VIX 17.28 +0.5 but velocity decelerating (-0.28); BTC +$773; HYG -$0.07; oil flat/mild; DXY flat — no risk-off contagion, basket quiet",
+      "lean": "neutral"
     }
   ],
-  "open_type": "real_pump",
-  "open_type_label": "Real pump off the open",
+  "open_type": "manip_down_real_up",
+  "open_type_label": "Manipulation down → real move up",
   "expansion_direction": "up",
-  "targeted_level": 750,
-  "move_extent": "~10.2 pts (1.37%) from 739.8 to 750 call wall; above market's own 6.82-pt implied expected move — consistent with short-squeeze regime",
-  "completion_signal": "750 tag with call vol/OI ratios collapsing; fresh puts appearing AT 750; negative charm -13,017 at 750 triggers dealer delta-selling as 0DTE calls decay; price chops/stalls above 750 on first touch",
-  "next_target": 755,
-  "clean_or_choppy": "clean",
-  "manipulation_tell": "Massive put concentration at 738 (1049% vol/OI) and 739 (1006%) right at spot may script an opening stop-flush sweep to gamma flip 737.5; call buying INTO that sub-738 dip is the real_pump confirmation — do not short the flush",
+  "targeted_level": 745,
+  "move_extent": "~7 pts (738 → 745 primary leg); secondary leg 745 → 750 adds 5 pts",
+  "completion_signal": "15-min close above 740 with call vol/OI stabilizing at 736-738 — GEX flips positive at 740, confirms stop-hunt resolved and expansion underway",
+  "next_target": 750,
+  "clean_or_choppy": "choppy",
+  "manipulation_tell": "Call vol/OI 4278%/5231%/4819% at 736/737/738 (at-spot and below) while NQ futures print -0.24% AGAINST confirmed Iran deal — weakness against bullish-news with broad call loading across 3 consecutive strikes is the textbook dealer stop-hunt tell; fresh flow OPPOSITE to the overnight futures move = manipulation",
   "reversal_zones": [
-    {
-      "price": 750,
-      "side": "resistance",
-      "note": "Primary call wall; GEX 238.5M + charm -13,017; board 63% reversal prob; main stall and fade zone — expect heavy put buying and call selling at first touch"
-    },
-    {
-      "price": 745,
-      "side": "resistance",
-      "note": "Board 42% reversal prob; large negative charm cluster -9,113; interim test on the run to 750 — consolidation zone if squeeze loses steam early"
-    },
     {
       "price": 732,
       "side": "support",
-      "note": "Board 55% reversal prob; positive charm +3,759 at 733; fresh call flow 150% vol/OI; strong dealer DEX buy zone on any intraday dip — highest-probability bounce below spot"
+      "note": "58% board score; likely stop-hunt terminus — massive call accumulation at 732-738 makes this the expected manip-dip floor before real reversal"
     },
     {
-      "price": 728,
+      "price": 740,
+      "side": "resistance",
+      "note": "GEX flips to positive (+76.9M) at this strike; 52% board score — 15-min close above here triggers the confirmed expansion leg toward 745"
+    },
+    {
+      "price": 730,
       "side": "support",
-      "note": "Board 40% reversal prob; GEX -126.9M (large negative = dealers buy aggressively); downside anchor if 732 fails under a Trump/Iran escalation headline shock"
+      "note": "Secondary gamma shelf (-99.3M GEX), 27% board score — secondary floor if the opening shake-out overshoots 732"
+    },
+    {
+      "price": 720,
+      "side": "support",
+      "note": "Major put wall (-300.4M GEX), 20% board score — ultimate backstop in a true breakdown; not the base case given COT extreme short and Iran bid"
     }
   ],
-  "summary": "Macro gravity is firmly bullish into Monday June 22: the 2-year yield eased 2bp to 3.80 (10-year flat at 4.451, clean bull steepener), the TGA shed $24.6B this week injecting cash while the RRP drained to near-zero at $0.25B — full liquidity depletion — and NASDAQ speculative positioning sits at the 2nd COT percentile, the most crowded short read in years; critically, that short book was positioned for the ongoing Iran war, and the June 15-17 interim MOU (Strait reopened, Iran selling oil again, $6B frozen assets releasing) catches every war-short wrong-footed at once — Vance is in Switzerland right now working on deal details, which is the forced-cover catalyst. Monday has zero scheduled data releases (PCE not until Thursday June 25), making it a clean tape day for flow mechanics to dominate. The options structure confirms real_pump: spot 739.8 is 2.3 pts above the gamma flip at 737.5, DEX is strongly positive at +7,552 (dealers buy every dip), GEX is positive (cushions drops), and fresh call flow spans 31 strikes from 731 to 758 with monster vol/OI ratios concentrated at 737.5 (858%), 741 (468%), 737 (489%), and 738 (469%) — too broad and too coordinated for one trader, this is institutional squeeze positioning. ATM IV of 14.54 and VIX at 16.78 (low, slight uptick) point to a clean trending day. True expansion is up to 750 (board 63% reversal, GEX 238.5M, charm -13,017 — the primary stall and fade zone) from 739.8 = 10.2 pts (1.37%), above the 6.82-pt implied expected move, with 745 (42% reversal, charm -9,113) as the interim resistance test; above 750 the next cluster is 755. Opening tell: the enormous put concentration at 738 (1049% vol/OI) and 739 (1006%) right at spot may engineer a brief stop-flush sweep to the 737.5 gamma flip at the open — call buying into that sub-738 dip is the real_pump confirmation signal and the key tell for the day. Reversal support below: 732 (board 55%, positive charm, strong fresh call flow) then 728 (40%, GEX -126.9M = hard dealer buy). Cross-asset confirms risk-on: gold is falling $73 (no haven bid), HYG is firming, and the Brent rise to $80.59 (+$0.74) is Trump-threat deal-fragility premium — NOT a new supply disruption (the Strait is physically open) — so if Switzerland talks deliver any progress today, oil fades and the squeeze accelerates. Primary tail risks: Trump escalates publicly and deal collapses (Strait re-closes, oil spikes above $85, fast reversal from 750); BOJ double-hike risk (USD/JPY 161.23) is the week-level systemic overhang but has no Monday meeting catalyst.",
+  "summary": "Macro bias is bullish (+35): the dominant catalyst is the US-Iran 60-day roadmap signed in Switzerland and confirmed by NPR, CNBC, Al Jazeera, and Fox News — IAEA inspectors return, Strait-of-Hormuz deconfliction agreed, and the US Treasury issued a 60-day Iranian oil sanctions waiver, collectively deflating the geopolitical risk premium that has been sitting under NQ. COT is at the 2nd percentile (historically maximum crowded-short, extreme squeeze potential) and USD/JPY rising to 161.6 keeps the carry trade intact. Headwinds are structural-slow: TGA +$52.6B and RRP +$3.67B both tightening net liquidity, 10Y yield +5.8bps without 2Y follow-through adding mild duration pressure. Open type is manip_down_real_up: QQQ spot (738.115) is pinned at the 738 major put wall and gamma flip (737.5), where the largest GEX node in the chain (-596.1M) creates an explosive amplifier in a negative GEX regime. The manipulation tell is unambiguous — call vol/OI of 4278%/5231%/4819% at 736/737/738 (at and below spot) shows massive call accumulation into dealer-driven weakness, while NQ futures are printing -0.24% AGAINST the confirmed Iran de-escalation; price fighting positive DEX (+4,751.9M) and loading calls into three consecutive strikes below spot is the canonical stop-hunt setup. Expect Monday's open to probe 732 (58% board score, highest-probability stop-hunt terminus); once 740 reclaims on a 15-min close (GEX turns positive, 52% board resistance), the true expansion leg is confirmed toward 745 (GEX +150.9M) then the 750 call wall (GEX +273.5M, ~12 pts total from current spot). Day is choppy through the initial phase given negative net GEX amplifying swings and VIX at 17.28; clean trending only after 740 holds on a close.",
   "news_events": [
     {
-      "headline": "BOJ hiked to 1.0% at June meeting (highest since 1995); headline warns two more possible hikes; ~$500B yen carry positions at systemic risk",
-      "impact": "bearish",
-      "source": "asiabulletin.com"
-    },
-    {
-      "headline": "US-Iran interim MOU signed June 15-17; Strait of Hormuz reopened; Iran oil sales resumed; 12.5M bbl/night transiting per Vance June 20",
+      "headline": "US-Iran 60-day roadmap signed in Switzerland; IAEA inspectors to return; Hormuz deconfliction mechanism agreed — Vance: very productive 36 hours",
       "impact": "bullish",
-      "source": "cnbc.com"
+      "source": "npr.org, cnbc.com, foxnews.com, aljazeera.com"
     },
     {
-      "headline": "Vance in Switzerland June 21 meeting Iranian officials on deal details; $6B frozen Qatar assets to be released — ceasefire framework advancing",
+      "headline": "US Treasury issues 60-day Iranian oil sanctions waiver, paving way for Iranian crude exports in US dollars",
       "impact": "bullish",
-      "source": "abcnews.com"
+      "source": "aljazeera.com, inquirer.com"
     },
     {
-      "headline": "Trump threatens to 'hit Iran very hard again' while Vance negotiates; Iran negotiating team protests, cites MOU violation — deal fragility risk",
-      "impact": "bearish",
-      "source": "news.wfsu.org"
+      "headline": "Trump: Iran negotiations working out very well",
+      "impact": "bullish",
+      "source": "wsyr.iheart.com"
     },
     {
-      "headline": "Fed held 3.5-3.75% June 17 (Warsh debut); dot plot erased 2026 cuts; next reductions 2027-28 on Iran-war inflation spike (PCE est. +4.1% YoY due Thursday June 25)",
+      "headline": "Russia open to Ukraine talks without ultimatums — second independent geopolitical de-escalation signal same session",
+      "impact": "bullish",
+      "source": "africaleader.com"
+    },
+    {
+      "headline": "NQ E-mini futures -0.24% (-72.75 pts) pre-market despite Iran deal confirmation — weakness against bullish news confirms manipulation setup",
       "impact": "neutral",
-      "source": "cnbc.com"
+      "source": "barchart.com"
     },
     {
-      "headline": "Monday June 22 carries zero major US economic data releases — clean tape day for flow to dominate",
-      "impact": "bullish",
-      "source": "kiplinger.com"
-    },
-    {
-      "headline": "OPEC cut 2026 demand growth to 970,000 bpd; May production 190,000 bpd below April partly from Strait closure disruptions — supply picture still adjusting to reopening",
+      "headline": "PCE inflation report Thursday 8:30am ET + Micron earnings Wednesday — intraweek tail-risk events",
       "impact": "neutral",
-      "source": "inspenet.com"
+      "source": "ts2.tech"
+    },
+    {
+      "headline": "Alan Greenspan dies at age 100",
+      "impact": "neutral",
+      "source": "lasvegassun.com"
     }
   ],
   "scoring_method": "ai",
   "macro": {
-    "asOf": "2026-06-21T16:55:28",
+    "asOf": "2026-06-22T18:27:44",
     "us2y": {
-      "last": 3.8,
-      "prev": 3.82,
-      "chg": -0.02,
-      "dir": "falling",
-      "asOf": "2026-06-21T16:55:16"
-    },
-    "us10y": {
-      "last": 4.451,
-      "prev": 4.451,
+      "last": 3.84,
+      "prev": 3.84,
       "chg": 0,
       "dir": "flat",
-      "asOf": "2026-06-21T16:55:16"
+      "asOf": "2026-06-22T18:27:36"
     },
-    "curve2s10s": 0.651,
+    "us10y": {
+      "last": 4.509,
+      "prev": 4.451,
+      "chg": 0.058,
+      "velocity": 0,
+      "dir": "rising",
+      "asOf": "2026-06-22T18:27:37"
+    },
+    "curve2s10s": 0.669,
     "usdjpy": {
-      "last": 161.23,
-      "prev": 161.348,
-      "chg": -0.118,
-      "dir": "falling",
-      "asOf": "2026-06-21T16:55:16"
+      "last": 161.624,
+      "prev": 161.28,
+      "chg": 0.344,
+      "velocity": 0.112,
+      "dir": "rising",
+      "asOf": "2026-06-22T18:27:37"
     },
     "tga": {
-      "last": 956502,
-      "prev": 981113,
-      "chg": -24611,
-      "dir": "falling",
+      "last": 880713,
+      "prev": 828122,
+      "chg": 52591,
+      "dir": "rising",
       "asOf": "2026-06-17"
     },
     "rrp": {
-      "last": 0.25,
-      "prev": 6.83,
-      "chg": -6.58,
-      "dir": "falling",
-      "asOf": "2026-06-18"
+      "last": 3.93,
+      "prev": 0.25,
+      "chg": 3.67,
+      "dir": "rising",
+      "asOf": "2026-06-22"
     },
     "cot": {
-      "netPct": -3.3,
+      "netPct": -5.6,
       "percentile": 2,
       "market": "NASDAQ-100 Consolidated"
     },
     "cross": {
       "brent": {
-        "last": 80.59,
-        "prev": 79.85,
-        "chg": 0.74,
-        "dir": "rising",
-        "asOf": "2026-06-21T16:55:16"
+        "last": 78.05,
+        "prev": 77.9,
+        "chg": 0.15,
+        "velocity": 0,
+        "dir": "flat",
+        "asOf": "2026-06-22T18:27:37"
       },
       "wti": {
-        "last": 76.54,
-        "prev": 75.85,
-        "chg": 0.69,
+        "last": 74.13,
+        "prev": 73.86,
+        "chg": 0.27,
+        "velocity": 0.17,
         "dir": "rising",
-        "asOf": "2026-06-21T16:55:16"
+        "asOf": "2026-06-22T18:27:37"
       },
       "gold": {
-        "last": 4172.9,
-        "prev": 4245.9,
-        "chg": -73,
-        "dir": "falling",
-        "asOf": "2026-06-21T16:55:16"
+        "last": 4209.6,
+        "prev": 4202.7,
+        "chg": 6.9,
+        "velocity": 0.5,
+        "dir": "flat",
+        "asOf": "2026-06-22T18:27:37"
       },
       "copper": {
-        "last": 6.337,
-        "prev": 6.3855,
-        "chg": -0.0485,
-        "dir": "falling",
-        "asOf": "2026-06-21T16:55:16"
+        "last": 6.36,
+        "prev": 6.3655,
+        "chg": -0.0055,
+        "velocity": 0.0235,
+        "dir": "flat",
+        "asOf": "2026-06-22T18:27:37"
       },
       "dxy": {
-        "last": 100.76,
+        "last": 100.996,
         "prev": 100.849,
-        "chg": -0.089,
+        "chg": 0.147,
+        "velocity": -0.005,
         "dir": "flat",
-        "asOf": "2026-06-21T16:55:16"
+        "asOf": "2026-06-22T18:27:37"
       },
       "vix": {
-        "last": 16.78,
-        "prev": 16.4,
-        "chg": 0.38,
+        "last": 17.28,
+        "prev": 16.78,
+        "chg": 0.5,
+        "velocity": -0.28,
         "dir": "rising",
-        "asOf": "2026-06-21T16:55:16"
+        "asOf": "2026-06-22T18:27:37"
       },
       "btc": {
-        "last": 63766.13,
-        "prev": 64240.906,
-        "chg": -474.776,
-        "velocity": -272.332,
-        "dir": "falling",
-        "asOf": "2026-06-21T16:55:16"
+        "last": 64016.02,
+        "prev": 63242.258,
+        "chg": 773.762,
+        "velocity": -199.2422,
+        "dir": "rising",
+        "asOf": "2026-06-22T18:27:37"
       },
       "hyg": {
-        "last": 80.01,
-        "prev": 79.73,
-        "chg": 0.28,
-        "dir": "rising",
-        "asOf": "2026-06-21T16:55:16"
+        "last": 79.94,
+        "prev": 80.01,
+        "chg": -0.07,
+        "velocity": -0.1139,
+        "dir": "flat",
+        "asOf": "2026-06-22T18:27:37"
       }
     },
     "headlines": [
       {
-        "title": "BOJ may raise rates twice more as inflation risks grow",
-        "source": "asiabulletin.com",
-        "when": "20260621T203000Z",
-        "url": "http://www.asiabulletin.com/news/279134402/boj-may-raise-rates-twice-more-as-inflation-risks-grow"
+        "title": "NorthStandard partners Sailor Society to put seafarer wellbeing at heart of maritime safety",
+        "source": "hellenicshippingnews.com",
+        "when": "20260622T214500Z",
+        "url": "https://www.hellenicshippingnews.com/northstandard-partners-sailors-society-to-put-seafarer-wellbeing-at-heart-of-maritime-safety/"
       },
       {
-        "title": "2 Reasons to Wait Before Buying SpaceX Shares , and 1 Reason to Buy Right Now",
-        "source": "finance.yahoo.com",
-        "when": "20260621T203000Z",
-        "url": "https://finance.yahoo.com/markets/stocks/articles/2-reasons-wait-buying-spacex-195900079.html"
+        "title": "USA & Canada Intelligence Brief Monday , June 22 , 2026",
+        "source": "riotimesonline.com",
+        "when": "20260622T214500Z",
+        "url": "https://www.riotimesonline.com/usa-canada-intelligence-brief-american-machine-in-motion-june-22/"
       },
       {
-        "title": "Vance meets top Iranian officials as US urges Iran to  turn over a new leaf",
-        "source": "borehamwoodtimes.co.uk",
-        "when": "20260621T203000Z",
-        "url": "https://www.borehamwoodtimes.co.uk/news/national/26214502.vance-meets-top-iranian-officials-us-urges-iran-turn-new-leaf/"
+        "title": "Vice President JD Vance Gives Update on U . S - Iran Ceasefire Discussion",
+        "source": "theconservativetreehouse.com",
+        "when": "20260622T214500Z",
+        "url": "https://theconservativetreehouse.com/blog/2026/06/22/vice-president-jd-vance-gives-update-on-u-s-iran-ceasefire-discussion/comment-page-1/"
       },
       {
-        "title": "Iran says Switzerland talks with US focus on ending war , easing sanctions , releasing frozen assets",
-        "source": "aa.com.tr",
-        "when": "20260621T203000Z",
-        "url": "https://aa.com.tr/en/middle-east/iran-says-switzerland-talks-with-us-focus-on-ending-war-easing-sanctions-releasing-frozen-assets/3973911"
+        "title": "Open to talks , says Russia , but without ultimatums",
+        "source": "africaleader.com",
+        "when": "20260622T214500Z",
+        "url": "http://www.africaleader.com/news/279136145/russia-says-it-is-open-to-talks-without-ultimatums"
       },
       {
-        "title": "Labor reform outlook cools before long winter break",
-        "source": "southcoastregister.com.au",
-        "when": "20260621T203000Z",
-        "url": "https://www.southcoastregister.com.au/story/9296313/labors-reform-outlook-cools-before-long-winter-break/"
+        "title": "Mexico president seeks to restart oil shipments to Cuba as island crises deepen",
+        "source": "isp.netscape.com",
+        "when": "20260622T214500Z",
+        "url": "https://isp.netscape.com:443/pf/story/0001/20260622/1c4e1b2c17185cd3e3e924c6dd963b0c"
       },
       {
-        "title": "Full transcript of  Face the Nation with Margaret Brennan , June 21 , 2026",
-        "source": "yahoo.com",
-        "when": "20260621T203000Z",
-        "url": "https://www.yahoo.com/news/politics/articles/full-transcript-face-nation-margaret-190332117.html"
+        "title": "Former Federal Reserve Chairman Alan Greenspan dies at 100 - Las Vegas Sun News",
+        "source": "lasvegassun.com",
+        "when": "20260622T214500Z",
+        "url": "https://lasvegassun.com/news/2026/jun/22/former-federal-reserve-chairman-alan-greenspan-die/"
       },
       {
-        "title": "Iranian President Pezeshkian says USD 6 billion frozen in Qatar to be released",
-        "source": "asiabulletin.com",
-        "when": "20260621T203000Z",
-        "url": "http://www.asiabulletin.com/news/279137872/iranian-president-pezeshkian-says-usd-6-billion-frozen-in-qatar-to-be-released"
+        "title": "US lifts sanctions on Iranian oil",
+        "source": "beijingbulletin.com",
+        "when": "20260622T214500Z",
+        "url": "http://www.beijingbulletin.com/news/279140082/us-lifts-sanctions-on-iranian-oil"
       },
       {
-        "title": "Iran chief negotiator urges US to be  cautiou after Trump threats",
-        "source": "aa.com.tr",
-        "when": "20260621T203000Z",
-        "url": "https://aa.com.tr/en/middle-east/iran-s-chief-negotiator-urges-us-to-be-cautious-after-trump-threats/3973893"
+        "title": "Top 5 All - in - One AI Quant Trading Platforms in 2026 for Cryptocurrency , Forex , and Stock Markets",
+        "source": "theportugalnews.com",
+        "when": "20260622T213000Z",
+        "url": "https://www.theportugalnews.com/news/2026-06-22/top-5-all-in-one-ai-quant-trading-platforms-in-2026-for-cryptocurrency-forex-and-stock-markets/1044334"
       },
       {
-        "title": "As Vance meets top Iranian officials in Switzerland , Trump threatens Tehran from afar",
-        "source": "kake.com",
-        "when": "20260621T203000Z",
-        "url": "https://www.kake.com/news/national/as-vance-meets-top-iranian-officials-in-switzerland-trump-threatens-tehran-from-afar/article_755fc282-211f-4d1a-bfec-d5d3f736ec01.html"
+        "title": "Vance says talks with Iranian officials set  good foundation  for a deal to end the war - WINDFM",
+        "source": "windfm.com",
+        "when": "20260622T213000Z",
+        "url": "https://windfm.com/news/030030-vance-says-talks-with-iranian-officials-set-good-foundation-for-a-deal-to-end-the-war/"
       },
       {
-        "title": "US willing to",
-        "source": "malaysiasun.com",
-        "when": "20260621T203000Z",
-        "url": "http://www.malaysiasun.com/news/279137905/us-willing-to-fundamentally-transform-relations-with-iran-jd-vance"
+        "title": "Trump : Iran Negotiations Working Out  Very Well",
+        "source": "wsyr.iheart.com",
+        "when": "20260622T213000Z",
+        "url": "https://wsyr.iheart.com/content/2026-06-22-trump-iran-negotiations-working-out-very-well/"
       },
       {
-        "title": "Iran negotiating team protests Trump  threats , says they violate memorandum of understanding",
-        "source": "aa.com.tr",
-        "when": "20260621T203000Z",
-        "url": "https://aa.com.tr/en/world/irans-negotiating-team-protests-trump-threats-says-they-violate-memorandum-of-understanding/3973863"
+        "title": "The Internet , Beyond a Right : A Critical Infrastructure",
+        "source": "circleid.com",
+        "when": "20260622T213000Z",
+        "url": "https://circleid.com/posts/the-internet-beyond-a-right-a-critical-infrastructure"
       },
       {
-        "title": "Trump threatens to  hit Iran very hard again  while Vance in Switzerland for talks",
-        "source": "news.wfsu.org",
-        "when": "20260621T203000Z",
-        "url": "https://news.wfsu.org/npr-news/2026-06-21/trump-threatens-to-hit-iran-very-hard-again-while-vance-in-switzerland-for-talks"
+        "title": "Very productive 36 hours : US VP Vance as he departs from Switzerland after talks with Iran",
+        "source": "austinglobe.com",
+        "when": "20260622T213000Z",
+        "url": "http://www.austinglobe.com/news/279140727/very-productive-36-hours-us-vp-vance-as-he-departs-from-switzerland-after-talks-with-iran"
       }
     ],
     "notes": []

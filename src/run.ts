@@ -8,7 +8,8 @@ import { fetchSessionBars, liveQqqEquivSpot } from "./market.js";
 import { buildNarrative, narrativeJsonPath, writeNarrative } from "./narrative.js";
 import { deploySite, publish } from "./publish.js";
 import { dayContextFromNarrative, scoreBoard, scoreBoardDeterministic } from "./score.js";
-import type { Board, CaptureRecord, DataSnapshot, DetectedLevel, Narrative } from "./types.js";
+import { fetchCloudCaptures, type CloudTick } from "./cloudCaptures.js";
+import type { Board, CaptureRecord, DataSnapshot, DetectedLevel, GreekTimeseries, Narrative } from "./types.js";
 
 /** ~90 min of context at a 15-min cadence — enough to read trend without diluting deltas. */
 const LOOKBACK = 6;
@@ -106,16 +107,24 @@ async function effectiveSpot(session: SessionDef, altarisSpot: number): Promise<
   }
 }
 
-/** One full scoring cycle for a given capture history (oldest..current). */
-async function scoreFromHistory(date: string, history: CaptureRecord[], session: SessionDef) {
+/**
+ * One full scoring cycle for a given capture history (oldest..current).
+ *
+ * Options let the backfill path override the live defaults: an explicit `prior` board (so a
+ * recovered morning tick chains off the *previous morning* board, never a later afternoon one),
+ * an explicit `greek` (the tick's as-of timeseries, not whatever's on disk now), and `publish:
+ * false` (score many recovered ticks, deploy once at the end instead of per tick).
+ */
+interface ScoreOpts { prior?: Board | null; greek?: GreekTimeseries | null; publish?: boolean }
+async function scoreFromHistory(date: string, history: CaptureRecord[], session: SessionDef, opts: ScoreOpts = {}) {
   const cur = history[history.length - 1]!.data;
-  const prior = await loadLatestBoard(date);
+  const prior = opts.prior !== undefined ? opts.prior : await loadLatestBoard(date);
 
   const candidateStrikes = [...named(cur), ...(prior?.levels.map((l) => l.strike) ?? [])];
   const [detected, spot, greek, narrative] = await Promise.all([
     detectForSession(session, candidateStrikes),
     effectiveSpot(session, cur.spot),
-    loadDayGreek(date),
+    opts.greek !== undefined ? Promise.resolve(opts.greek) : loadDayGreek(date),
     loadTodayNarrative(date),
   ]);
   const dayContext = dayContextFromNarrative(narrative); // tilt scoring toward the pre-open call
@@ -132,10 +141,12 @@ async function scoreFromHistory(date: string, history: CaptureRecord[], session:
 
   // Hybrid model: scoring is local, the board auto-publishes to the phone dashboard.
   // A publish/deploy hiccup must never lose us a scored board.
-  try {
-    await publish(board, detected, session.name);
-  } catch (err) {
-    console.warn("publish failed (board still saved locally):", err instanceof Error ? err.message : err);
+  if (opts.publish !== false) {
+    try {
+      await publish(board, detected, session.name);
+    } catch (err) {
+      console.warn("publish failed (board still saved locally):", err instanceof Error ? err.message : err);
+    }
   }
   return board;
 }
@@ -222,8 +233,119 @@ async function narrativeTick(session: SessionDef) {
   }
 }
 
+// --- Backfill: recover a window the PC missed from the cloud-captured snapshots ---------------
+
+async function loadBoardsForDate(date: string): Promise<Board[]> {
+  try {
+    const txt = await fs.readFile(path.join(config.paths.scored, `${date}.boards.jsonl`), "utf8");
+    return txt.split("\n").filter(Boolean).map((l) => JSON.parse(l) as Board);
+  } catch {
+    return [];
+  }
+}
+
+/** The board immediately preceding `asOf` on `date` — the correct `prior` for a recovered tick. */
+async function priorBoardBefore(date: string, asOf: string): Promise<Board | null> {
+  const before = (await loadBoardsForDate(date))
+    .filter((b) => b.as_of < asOf)
+    .sort((a, b) => a.as_of.localeCompare(b.as_of));
+  return before.at(-1) ?? null;
+}
+
+/** Fold cloud snapshots into data/raw, union-by-time, so the local stages see the full day. */
+async function mergeCloudIntoRaw(date: string, cloud: CloudTick[]) {
+  await fs.mkdir(config.paths.raw, { recursive: true });
+  const existing = await loadDaySnapshots(date); // pre-merge local records
+  const byTime = new Map(existing.map((r) => [r.capturedAt, r]));
+  for (const t of cloud) if (!byTime.has(t.record.capturedAt)) byTime.set(t.record.capturedAt, t.record);
+  const merged = [...byTime.values()].sort((a, b) => a.capturedAt.localeCompare(b.capturedAt));
+  await fs.writeFile(path.join(config.paths.raw, `${date}.data.jsonl`), merged.map((r) => JSON.stringify(r)).join("\n") + "\n", "utf8");
+
+  // greek.json is cumulative-for-day — keep the most complete copy (the latest tick's greek).
+  const haveLocal = await loadDayGreek(date);
+  const latestCloudGreek = [...cloud].reverse().find((t) => t.greek)?.greek ?? null;
+  const cloudIsNewer = (cloud.at(-1)?.record.capturedAt ?? "") >= (existing.at(-1)?.capturedAt ?? "");
+  if (latestCloudGreek && (!haveLocal || cloudIsNewer)) {
+    await fs.writeFile(path.join(config.paths.raw, `${date}.greek.json`), JSON.stringify(latestCloudGreek), "utf8");
+  }
+}
+
+/** Recovered boards get appended after the day's existing ones — re-sort the logs into time order. */
+async function resortDayLogs(date: string) {
+  for (const suffix of ["boards.jsonl", "calibration.jsonl"]) {
+    const file = path.join(config.paths.scored, `${date}.${suffix}`);
+    try {
+      const rows = (await fs.readFile(file, "utf8")).split("\n").filter(Boolean).map((l) => JSON.parse(l));
+      rows.sort((a, b) => String(a.as_of).localeCompare(String(b.as_of)));
+      await fs.writeFile(file, rows.map((o) => JSON.stringify(o)).join("\n") + "\n", "utf8");
+    } catch {
+      /* log may not exist for this date — nothing to sort */
+    }
+  }
+}
+
+/**
+ * Recover a day the PC missed. Pulls the cloud-captured snapshots (netlify/functions/capture.mjs),
+ * merges them into data/raw, then AI-scores ONLY the ticks that have no board yet — grading
+ * reversals against Yahoo OHLC, which is historical and complete. Each recovered tick chains off
+ * the chronologically-previous board (never look-ahead from a board that came later in the day).
+ * Finally it re-sorts the day's logs into time order and publishes the latest board.
+ *
+ * Same-day is the design target ("I was out this morning, the box is on now"): reversal detection
+ * reads today's session bars. Backfilling an older date still recovers + scores the snapshots, but
+ * grades their reversals on the current tape — flagged with a warning.
+ */
+async function backfillDay(dateArg?: string) {
+  const today = nowInSessionTz().date;
+  const date = dateArg ?? today;
+  if (date !== today) {
+    console.warn(`Backfilling ${date} (not today): snapshots + scores recover, but reversal grading uses today's bars.`);
+  }
+
+  const cloud = await fetchCloudCaptures(date);
+  if (!cloud.length) {
+    console.log(`No cloud captures for ${date}. (Is capture.mjs deployed, and were you in the 09:00-16:00 ET window?)`);
+    return;
+  }
+  console.log(`Found ${cloud.length} cloud snapshot(s) for ${date}.`);
+
+  await mergeCloudIntoRaw(date, cloud);
+
+  const existing = new Set((await loadBoardsForDate(date)).map((b) => b.as_of));
+  const gap = cloud.filter((t) => !existing.has(t.record.capturedAt));
+  if (!gap.length) {
+    console.log("Every cloud tick already has a board — raw merged, nothing to score.");
+    return;
+  }
+  console.log(`Scoring ${gap.length} recovered tick(s) the box missed...`);
+
+  const merged = await loadDaySnapshots(date); // now includes the cloud ticks, chronological
+  const session = activeSession() ?? US_SESSION;
+  let prior = await priorBoardBefore(date, gap[0]!.record.capturedAt);
+  for (const tick of gap) {
+    const history = merged.filter((r) => r.capturedAt <= tick.record.capturedAt);
+    prior = await scoreFromHistory(date, history, session, { prior, greek: tick.greek, publish: false });
+  }
+
+  await resortDayLogs(date);
+  const final = (await loadBoardsForDate(date)).at(-1);
+  if (final) {
+    await fs.writeFile(path.join(config.paths.scored, "latest.json"), JSON.stringify(final, null, 2), "utf8");
+    try {
+      const detected = await detectForSession(session, final.levels.map((l) => l.strike));
+      await publish(final, detected, session.name);
+      console.log("Published the recovered day's latest board.");
+    } catch (err) {
+      console.warn("publish failed (boards still saved locally):", err instanceof Error ? err.message : err);
+    }
+  }
+  console.log(`Backfill complete: ${gap.length} tick(s) recovered + scored for ${date}.`);
+}
+
 async function main() {
   const arg = process.argv[2];
+
+  if (arg === "--backfill") return backfillDay(process.argv[3]);
 
   if (arg === "--fixture") return fixtureRun();
   if (arg === "--once") return liveTick(activeSession() ?? US_SESSION, true); // manual run always scores

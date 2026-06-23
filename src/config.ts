@@ -76,9 +76,10 @@ export const config = {
   // (~4 MNQ pts) is a clean, near-to-the-tick reversal; beyond the stop = broken.
   hardStopPts: num("HARD_STOP_PTS", 0.48),
   cleanReversalPts: num("CLEAN_REVERSAL_PTS", 0.10),
-  // How close price must actually trade to a level to count as TESTED — a resting limit
-  // only fills if price reaches the strike. Coming within ~a point is not a touch.
-  fillTolPts: num("FILL_TOL_PTS", 0.08),
+  // How close price must actually trade to a level to count as TESTED. Expanded to 0.15 pts
+  // to catch near-miss reversals (e.g. price reaches 743.85 before reversing off a 744 strike).
+  // Reversals 0.5+ pts short of a strike belong to the next nearby strike, not this one.
+  fillTolPts: num("FILL_TOL_PTS", 0.15),
 
   // Reversal detection uses Yahoo OHLC bars (wicks), not the Altaris spot tape.
   marketInterval: process.env.MARKET_INTERVAL?.trim() || "1m",
