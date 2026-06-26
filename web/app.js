@@ -7,7 +7,7 @@ const STALE_MS    = 30 * 60_000;
 const SPOT_URL    = "/.netlify/functions/spot";
 const CANDLES_URL = "/.netlify/functions/altaris-candles";
 const BOARD_FN    = "/.netlify/functions/board"; // cloud deterministic board (box-off fallback)
-const NARR_URL    = "narrative.json";
+const NARR_URL    = "/.netlify/functions/narrative";
 const MACRO_URL   = "/.netlify/functions/macro";
 
 // ── palette (kept in sync with styles.css) ──

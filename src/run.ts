@@ -1,6 +1,7 @@
 import fs, { open } from "node:fs/promises";
 import path from "node:path";
 import cron from "node-cron";
+import { getStore } from "@netlify/blobs";
 import { activeSession, config, isAiScoreTime, nowInSessionTz, RTH_MIN, type SessionDef } from "./config.js";
 import { captureTick, compactSnapshot, loadDayGreek, loadDaySnapshots } from "./capture.js";
 import { detectMany } from "./detect.js";
@@ -298,6 +299,17 @@ async function narrativeTick(session: SessionDef) {
   });
   await writeNarrative(narrative);
   console.log(`  narrative: ${narrative.macro_bias} bias · ${narrative.open_type_label} · expansion ${narrative.expansion_direction}`);
+  // Push to Netlify Blobs so the cloud /narrative endpoint stays live even when the deploy is stale.
+  try {
+    const siteID = process.env.NETLIFY_SITE_ID?.trim();
+    const token = process.env.NETLIFY_AUTH_TOKEN?.trim();
+    if (siteID && token) {
+      await getStore({ name: "narrative", siteID, token }).setJSON("latest", narrative);
+      console.log("  narrative → Netlify Blobs");
+    }
+  } catch (err) {
+    console.warn("narrative Blobs write failed (static file still updated):", err instanceof Error ? err.message : err);
+  }
   try {
     await deploySite();
   } catch (err) {
