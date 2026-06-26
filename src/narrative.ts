@@ -9,7 +9,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { config } from "./config.js";
 import { fetchMacro } from "./macro.js";
-import type { Board, DataSnapshot, MacroSnapshot, Narrative } from "./types.js";
+import type { Board, DataSnapshot, EntropySummary, GarchSummary, HurstSummary, MacroSnapshot, Narrative } from "./types.js";
 
 const CLAUDE_BIN = process.env.CLAUDE_BIN?.trim() || (process.platform === "win32" ? "claude.exe" : "claude");
 const round = (n: number, p = 0) => { const f = 10 ** p; return Math.round(n * f) / f; };
@@ -26,27 +26,40 @@ const OPEN_TYPE_LABELS: Record<Narrative["open_type"], string> = {
 const SYSTEM = `You are dxrk's pre-open analyst for QQQ (=NQ). You produce ONE pre-market day narrative by combining two methods exactly as written. Reason like a dealer-flow + macro desk; use the numbers as evidence.
 
 METHOD 1 — MARKET OPEN PREDICTION (classify the day into ONE of four open types):
-1) "manip_down_real_up": price sits just below/at the put wall (obvious stops to trigger); DEX positive (dealers must BUY further drops); max pain well above; chain shows CALL buying at strikes above price while weak; clean air down to the put wall then strong support there. Tell: call buying DURING weakness.
-2) "manip_up_real_down": price sits just below the call wall (shorts to squeeze); DEX negative (dealers must SELL rallies); max pain well below; chain shows PUT buying below price while futures strong overnight; clean air up to the call wall then strong resistance. VEX elevated → sharp reversal. Tell: put buying DURING strength.
+1) "manip_down_real_up": price sits just below/at the put wall (obvious stops to trigger); DEX POSITIVE (dealers must BUY further drops — this is REQUIRED; negative DEX disqualifies this type); max pain well above; chain shows CALL buying at strikes above price while weak; clean air down to the put wall then strong support there. Tell: call buying DURING weakness WITH positive DEX.
+2) "manip_up_real_down": price sits just below/at a call wall OR near gamma flip; DEX NEGATIVE (dealers must SELL rallies — this is the defining signal); max pain below; VEX elevated → sharp reversal after the squeeze. Tell: ANY fresh call buying DURING weakness with negative DEX is actually front-running the fake opening pump (smart money rides the squeeze up then exits) — this is the manip_up tell, NOT manip_down_real_up. The real move is DOWN because dealers cap every rally and bearish macro gravity resumes.
 3) "real_pump": price well ABOVE gamma flip, call wall far above (room); DEX strongly positive (dealers fuel rallies); max pain above; BROAD overnight call buying across MULTIPLE strikes/expiries (not one strike); clean air above; charm drifts up; VEX low → smooth trend.
 4) "real_dump": price well BELOW gamma flip; DEX strongly negative (dealers sell every bounce); max pain below; BROAD overnight put buying across multiple strikes; clean air below; VEX high → fast sharp, convincing-but-failing bounces.
+
+DEX WEIGHTING CONTEXT — use as reasoning context, not a rigid rule:
+- When DEX is negative, dealers sell every rally. This is a structural headwind against any sustained move up. A genuine "real move up" into sustained dealer selling is rare — more often the open pump is the manipulation leg and the real move is down.
+- When fresh call buying is concentrated on many strikes AND DEX is negative AND macro is bearish: this is an ambiguous signal. One interpretation is that call buyers are positioning for a real squeeze (manip_down_real_up). The more common reality in this configuration is that the call buying is front-running the fake opening pump — smart money rides the forced short-covering up, then dealers sell it back down (manip_up_real_down). Weigh the macro gravity and the strength of the negative DEX to decide which interpretation fits.
+- COT crowded-short can fuel the manipulation leg UP (short-covering creates the pump), but short-covering alone does not sustain a real move up against strong dealer selling. If COT is extreme short AND DEX is negative AND macro is bearish, the squeeze is likely the manipulation, not the real move.
+- Be willing to call "unclear" when the signals genuinely conflict.
+
 MANIPULATION TEST: does the opening move AGREE with DEX or FIGHT it? Fighting DEX = likely manipulation (dealer rehedging overpowers it). Does fresh chain flow CONFIRM the move or position OPPOSITE? Opposite fresh flow = manipulation. One strike of flow = one trader (ignore); flow across many strikes = real conviction.
 
 METHOD 2 — RTH MACRO BIAS:
 - 2Y yield: leads stocks. Higher this morning vs prior close = bearish NQ; lower = bullish. FAST move in the pre-open is the real signal; slow drift = nothing. Fast-rising 2Y (esp. WITHOUT the 10Y following) = bearish; fast-falling = bullish.
 - Net liquidity: TGA falling (Treasury spending) = cash in = bullish; RRP draining = cash to work = bullish. Rising TGA / building RRP = tightening = bearish.
+- Reserve balances (macro.reserve_bal): weekly Fed H.4.1. Rising = banks have more reserves = bullish; falling = tightening = bearish.
+- Fed balance sheet (macro.walcl): WALCL rising = QE/expansion = bullish background; shrinking = QT = bearish background. Slow-moving monthly layer.
+- OAS credit spreads (macro.oas): ICE BofA High Yield OAS — YYY guide Ch.12.2 weekly layer. CREDIT LEADS EQUITIES. <3% = healthy/bullish; 3-4% = mild caution/neutral; 4-5% = elevated stress/bearish; >5% = crisis/maximum bearish. Use this as a background risk-on/risk-off read.
+- VIX term structure (macro.vix_term): "contango" (9-day VIX < 1-month VIX) = normal vol, range levels reliable. "backwardation" (9-day > 1-month) = stressed regime — DO NOT fade large directional moves; GEX levels are more likely to get run through; momentum is more likely to persist.
+- Auction day (macro.auction_today): if true, a 10Y/20Y/30Y note/bond auctions today. SIZE DOWN regardless of bias — large auctions temporarily pull liquidity, raising intraday vol without directional clarity. Mention this in the summary.
 - Surprise mechanism: gap between expectation and print drives big moves; first 15min after a release is noise, real institutional move is 30–90min later.
 - BOJ/carry: fast YEN STRENGTHENING (USD/JPY falling hard) forces carry unwind → sell equities regardless of US data.
 - Crowding/COT: speculators at extremes (>80 = crowded long, no buyers left, reversal risk; <20 = crowded short). Below 50 = room for buyers.
-BIAS RULE: bullish when 2Y stable/falling AND liquidity flowing in (TGA down / RRP draining) AND COT < 50. Bearish when 2Y rising fast (esp. without 10Y) AND liquidity tightening AND COT > 80. Otherwise neutral, and say which factors conflict.
+BIAS RULE: bullish when 2Y stable/falling AND liquidity flowing in (TGA down / RRP draining) AND COT < 50 AND OAS healthy. Bearish when 2Y rising fast (esp. without 10Y) AND liquidity tightening AND COT > 80 AND/OR OAS elevated/crisis. Otherwise neutral, and say which factors conflict.
 
 METHOD 2.5 — CROSS-ASSET & EVENT OVERLAY (macro.cross):
 Read the cross-asset basket as the market pricing geopolitics/commodities in real time — a fast move here can OVERRIDE the yield-curve bias toward risk-off. Each reading has dir computed on a 0.2% threshold, so "rising"/"falling" already means a real move.
 - Oil (brent/wti) spiking = energy/geopolitics shock (e.g. supply disruption). Sharp oil up → inflation + growth fear → RISK-OFF, bearish NQ, regardless of yields. This is the Strait-of-Hormuz / Middle-East-flare case: oil leads, equities follow down.
 - VIX rising fast = fear bid → bearish, expect chop/sharp reversals (raise VEX weighting). VIX falling = calm → supports clean trend.
+- VIX term structure (macro.vix_term): backwardation (front 9d VIX > 1m VIX) = stressed vol regime, near-term risk priced in. In backwardation: DO NOT fade large directional moves; GEX walls are more likely to get run through on strong catalysts; momentum more likely to persist. Contango = normal; range levels more reliable.
 - DXY (dollar) rising fast = tightening / haven flight → bearish NQ. Falling dollar = bullish.
 - Gold rising WITH oil/VIX = haven rotation confirming risk-off. Gold rising alone (dollar flat) = softer read.
-- Copper falling = global-growth fear (bearish); rising = reflation (bullish).
+- Copper (macro.cross.copper): rising = global growth / reflation (bullish); falling = growth fear (bearish). Copper/gold ratio direction (macro.copper_gold_ratio) confirms: rising = reflation, falling = haven rotation + growth fear.
 - HYG (credit) falling = risk-off confirmation; BTC falling = risk appetite draining (bearish), both corroborate equity direction.
 - CONFLUENCE: when oil↑ + VIX↑ + dollar↑ + gold↑ all align, that is a strong risk-off event regime — let it dominate the bias and call clean_or_choppy "choppy". When the basket is quiet, lean on Methods 1–2. Name the specific cross-asset tell in macro_drivers and the summary; if a basket member is missing (macro.notes), weight what's present.
 
@@ -134,12 +147,118 @@ function parseJson<T>(cliStdout: string): T {
 
 export const narrativeJsonPath = path.join(config.paths.root, "web", "narrative.json");
 
+type SizeTopology = Pick<Narrative,
+  "size_rule" | "size_rule_reason" | "entropy_state" | "entropy_ratio" |
+  "topology_alignment" | "topology_note" | "pca1_dir" | "pca2_dir" |
+  "vol_trigger_position" | "gex_key_levels">;
+
+/**
+ * YYY guide Ch.12.4: deterministically compute the entropy gate + topology alignment → size rule.
+ * Entropy is the gate (CRITICAL = ZERO); topology sets conviction (conflicted = HALF not FULL).
+ * PCA1 proxy = Hurst rolling_50 direction + macro lean; PCA2 proxy = GEX regime + GARCH state.
+ */
+function computeSizeAndTopology(
+  entropy: EntropySummary | undefined,
+  hurst: HurstSummary | undefined,
+  garch: GarchSummary | undefined,
+  snap: DataSnapshot,
+  spot: number,
+  macroBias: "bullish" | "bearish" | "neutral",
+): SizeTopology {
+  // Entropy gate ----------------------------------------------------------------
+  let entropy_state: Narrative["entropy_state"] = "NORMAL";
+  let entropy_ratio: number | undefined;
+  if (entropy && entropy.threshold > 0) {
+    entropy_ratio = Math.round((entropy.current_entropy / entropy.threshold) * 100) / 100;
+    entropy_state = entropy_ratio >= 1.2 ? "CRITICAL" : entropy_ratio >= 1.0 ? "ELEVATED" : "NORMAL";
+  }
+
+  // PCA1 proxy — trend character (Hurst) + direction from macro bias -----------
+  const h50 = hurst?.rolling_50 ?? hurst?.hurst ?? 0.5;
+  const trending = h50 >= 0.55;
+  const meanRev = h50 <= 0.45;
+  const pca1_dir: Narrative["pca1_dir"] =
+    macroBias === "bullish" ? "up" : macroBias === "bearish" ? "down" : "flat";
+
+  // PCA2 proxy — vol/gamma structural axis: GEX regime + GARCH persistence -----
+  const negGex = (snap.gex_regime ?? "").toLowerCase().includes("neg");
+  const highVol = garch ? (garch.current_regime === "elevated" || garch.current_regime === "large") : false;
+  let pca2_dir: Narrative["pca2_dir"] = "neutral";
+  if (negGex || highVol) pca2_dir = "amplify";
+  else if (!negGex && !highVol && (garch?.current_regime === "low" || garch?.current_regime === "normal")) pca2_dir = "suppress";
+
+  // Topology alignment: trend axis vs structural axis agree ---------------------
+  let topology_alignment: Narrative["topology_alignment"] = "unclear";
+  let topology_note = "insufficient signal data";
+  if (hurst) {
+    if (trending && pca2_dir === "amplify") {
+      topology_alignment = "aligned";
+      topology_note = `Hurst ${h50.toFixed(2)} trending + GEX ${negGex ? "neg" : ""}/GARCH ${garch?.current_regime ?? "?"} amplifying — trust direction`;
+    } else if (meanRev && pca2_dir === "suppress") {
+      topology_alignment = "aligned";
+      topology_note = `Hurst ${h50.toFixed(2)} mean-reverting + structure suppressing — fade the range`;
+    } else if (trending && pca2_dir === "suppress") {
+      topology_alignment = "conflicted";
+      topology_note = `Hurst ${h50.toFixed(2)} trending but gamma suppressing — fade bias, lean bullish caution`;
+    } else if (meanRev && pca2_dir === "amplify") {
+      topology_alignment = "conflicted";
+      topology_note = `Hurst ${h50.toFixed(2)} mean-reverting but gamma amplifying — chop with tails`;
+    } else {
+      topology_alignment = "unclear";
+      topology_note = `Hurst ${h50.toFixed(2)}, ${pca2_dir} gamma — mixed signal`;
+    }
+  }
+
+  // Size rule: entropy gate first, then topology conviction --------------------
+  let size_rule: Narrative["size_rule"];
+  let size_rule_reason: string;
+  if (entropy_state === "CRITICAL") {
+    size_rule = "ZERO";
+    size_rule_reason = `entropy critical (ρ=${entropy_ratio?.toFixed(2)}) — flow is too disordered, no trades this session`;
+  } else if (entropy_state === "ELEVATED" && topology_alignment === "conflicted") {
+    size_rule = "ZERO";
+    size_rule_reason = `elevated entropy + conflicted topology — double signal risk, sit out`;
+  } else if (entropy_state === "ELEVATED") {
+    size_rule = "HALF";
+    size_rule_reason = `entropy elevated (ρ=${entropy_ratio?.toFixed(2)}) — noise in the flow, half size`;
+  } else if (topology_alignment === "conflicted") {
+    size_rule = "HALF";
+    size_rule_reason = `topology conflicted (${topology_note.split("—")[0]?.trim() ?? topology_note}) — size conservatively`;
+  } else if (topology_alignment === "aligned") {
+    size_rule = "FULL";
+    size_rule_reason = `entropy normal + topology aligned — full size`;
+  } else {
+    size_rule = "HALF";
+    size_rule_reason = `topology unclear — default to half size until structure confirms`;
+  }
+
+  return {
+    size_rule,
+    size_rule_reason,
+    entropy_state,
+    entropy_ratio,
+    topology_alignment,
+    topology_note,
+    pca1_dir,
+    pca2_dir,
+    vol_trigger_position: snap.vol_trigger != null ? (spot >= snap.vol_trigger ? "above" : "below") : undefined,
+    gex_key_levels: {
+      call_wall: snap.call_wall || undefined,
+      put_wall: snap.put_wall || undefined,
+      vol_trigger: snap.vol_trigger || undefined,
+      max_pain: snap.max_pain || undefined,
+      expected_move: snap.expected_move || undefined,
+    },
+  };
+}
+
 /** Build the full pre-open narrative from the latest snapshot + macro + board levels. */
 export async function buildNarrative(
   snap: DataSnapshot,
   spot: number,
   board: Board | null,
   asOf: string,
+  capture?: { entropy?: EntropySummary; hurst?: HurstSummary; garch?: GarchSummary },
 ): Promise<Narrative> {
   const macro = await fetchMacro();
   const flow = buildFlowInput(snap, spot);
@@ -165,12 +284,16 @@ export async function buildNarrative(
   }
 
   const open_type = (parsed.open_type ?? "unclear") as Narrative["open_type"];
+  const macroBias = (parsed.macro_bias ?? "neutral") as Narrative["macro_bias"];
+  const sizeTopology = computeSizeAndTopology(
+    capture?.entropy, capture?.hurst, capture?.garch, snap, spot, macroBias,
+  );
   return {
     as_of: asOf,
     generated_at: new Date().toISOString(),
     scored_at: Date.now(),
     spot,
-    macro_bias: parsed.macro_bias ?? "neutral",
+    macro_bias: macroBias,
     macro_bias_score: parsed.macro_bias_score,
     macro_drivers: parsed.macro_drivers ?? [],
     open_type,
@@ -187,6 +310,7 @@ export async function buildNarrative(
     news_events: parsed.news_events ?? [],
     scoring_method: method,
     macro,
+    ...sizeTopology,
   };
 }
 
@@ -214,24 +338,40 @@ function fallbackNarrative(
   if (macro.tga) { const bull = macro.tga.dir === "falling"; score += bull ? 15 : -10; drivers.push({ label: "TGA", reading: `${macro.tga.last} (${macro.tga.dir})`, lean: bull ? "bull" : "bear" }); }
   if (macro.rrp) { const bull = macro.rrp.dir === "falling"; score += bull ? 15 : -10; drivers.push({ label: "RRP", reading: `${macro.rrp.last} (${macro.rrp.dir})`, lean: bull ? "bull" : "bear" }); }
   if (macro.cot) { const bear = macro.cot.percentile > 80; score += bear ? -15 : macro.cot.percentile < 50 ? 10 : 0; drivers.push({ label: "COT", reading: `${macro.cot.percentile}th pct`, lean: bear ? "bear" : "neutral" }); }
+  // OAS credit spreads (YYY Ch.12.2)
+  if (macro.oas) {
+    if (macro.oas.level === "crisis") { score -= 20; drivers.push({ label: "OAS", reading: `${macro.oas.last}% CRISIS`, lean: "bear" }); }
+    else if (macro.oas.level === "elevated") { score -= 12; drivers.push({ label: "OAS", reading: `${macro.oas.last}% elevated`, lean: "bear" }); }
+    else if (macro.oas.level === "healthy") { score += 12; drivers.push({ label: "OAS", reading: `${macro.oas.last}% healthy`, lean: "bull" }); }
+    else { drivers.push({ label: "OAS", reading: `${macro.oas.last}% mild`, lean: "neutral" }); }
+  }
+  // VIX term structure (backwardation = stressed)
+  if (macro.vix_term?.structure === "backwardation") { score -= 8; drivers.push({ label: "VIX Term", reading: `backwardation (stressed)`, lean: "bear" }); }
+  else if (macro.vix_term?.structure === "contango") { score += 5; drivers.push({ label: "VIX Term", reading: `contango (normal)`, lean: "bull" }); }
+  // Reserve balances
+  if (macro.reserve_bal && macro.reserve_bal.dir !== "flat") {
+    const bull = macro.reserve_bal.dir === "rising";
+    score += bull ? 8 : -8;
+    drivers.push({ label: "Reserve Bal", reading: `${macro.reserve_bal.dir}`, lean: bull ? "bull" : "bear" });
+  }
   // Cross-asset risk-off overlay: a fast oil/VIX/dollar move is bearish NQ even if yields are calm.
   const oil = macro.cross?.brent ?? macro.cross?.wti;
   if (oil?.dir === "rising") { score -= 15; drivers.push({ label: "Oil", reading: `${oil.last} (rising)`, lean: "bear" }); }
   if (macro.cross?.vix) { const bear = macro.cross.vix.dir === "rising"; score += bear ? -15 : macro.cross.vix.dir === "falling" ? 8 : 0; drivers.push({ label: "VIX", reading: `${macro.cross.vix.last} (${macro.cross.vix.dir})`, lean: bear ? "bear" : "neutral" }); }
   if (macro.cross?.dxy?.dir === "rising") { score -= 10; drivers.push({ label: "Dollar", reading: `${macro.cross.dxy.last} (rising)`, lean: "bear" }); }
+  if (macro.cross?.copper && macro.cross.copper.dir !== "flat") { const bull = macro.cross.copper.dir === "rising"; score += bull ? 8 : -8; drivers.push({ label: "Copper", reading: `${macro.cross.copper.last} (${macro.cross.copper.dir})`, lean: bull ? "bull" : "bear" }); }
 
-  const negRegime = (flow.net_gex_regime || "").toLowerCase().includes("neg");
-  const open_type: Narrative["open_type"] = negRegime ? "real_dump" : flow.price_vs_flip === "above" ? "real_pump" : "unclear";
   const macro_bias = score > 15 ? "bullish" : score < -15 ? "bearish" : "neutral";
   const res = boardLevels.filter((l) => l.side === "resistance").sort((a, b) => b.reversal_prob - a.reversal_prob)[0];
   const sup = boardLevels.filter((l) => l.side === "support").sort((a, b) => b.reversal_prob - a.reversal_prob)[0];
 
   return {
     macro_bias, macro_bias_score: score, macro_drivers: drivers,
-    open_type, expansion_direction: macro_bias === "bullish" ? "up" : macro_bias === "bearish" ? "down" : "two-sided",
-    clean_or_choppy: negRegime ? "choppy" : "clean",
+    open_type: "unclear",
+    expansion_direction: "two-sided",
+    clean_or_choppy: "choppy",
     reversal_zones: [res, sup].filter(Boolean).map((l) => ({ price: l!.strike, side: l!.side as "support" | "resistance", note: "top board level" })),
-    summary: `Rule-based pre-open read (AI offline): macro ${macro_bias}, gamma regime ${flow.net_gex_regime}. Watch ${res ? "$" + res.strike : "n/a"} resistance / ${sup ? "$" + sup.strike : "n/a"} support.`,
+    summary: `Rule-based pre-open read (AI offline): macro ${macro_bias}. Open type requires AI — wait for AI to be available. Watch ${res ? "$" + res.strike : "n/a"} resistance / ${sup ? "$" + sup.strike : "n/a"} support.`,
   };
 }
 

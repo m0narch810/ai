@@ -107,6 +107,16 @@ function oiChangeToBar(oc) {
   return Object.keys(out).length ? out : undefined;
 }
 function compactSnapshot(raw) {
+  const gex_0dte_bar = zeroDteSlice(raw.gex_hm);
+  // P/C ratio: total put volume / total call volume — sentiment read.
+  let totC = 0, totP = 0;
+  for (const v of Object.values(raw.vol_bar ?? {})) { totC += v?.calls ?? 0; totP += v?.puts ?? 0; }
+  const pc_ratio = totC > 0 ? Math.round((totP / totC) * 100) / 100 : undefined;
+  // 0DTE GEX ratio: 0DTE slice / all expirations |GEX|.
+  let totalGexAbs = 0, total0dteAbs = 0;
+  for (const v of Object.values(raw.gex_bar ?? {})) totalGexAbs += Math.abs(v ?? 0);
+  for (const v of Object.values(gex_0dte_bar)) total0dteAbs += Math.abs(v ?? 0);
+  const gex_0dte_ratio = totalGexAbs > 0 ? Math.round((total0dteAbs / totalGexAbs) * 100) / 100 : undefined;
   return {
     ticker: raw.ticker, spot: raw.spot, timestamp: raw.timestamp,
     call_wall: raw.call_wall, put_wall: raw.put_wall, major_wall: raw.major_wall,
@@ -117,9 +127,11 @@ function compactSnapshot(raw) {
     oi_bar: raw.oi_bar, vol_bar: raw.vol_bar,
     gex_bar: raw.gex_bar, dex_bar: raw.dex_bar, vex_bar: raw.vex_bar, rex_bar: raw.rex_bar,
     charm_bar: aggregateHm(raw.cex_hm), tex_bar: aggregateHm(raw.tex_hm), vanna_bar: aggregateHm(raw.vannex_hm),
-    gex_0dte_bar: zeroDteSlice(raw.gex_hm), charm_0dte_bar: zeroDteSlice(raw.cex_hm), vanna_0dte_bar: zeroDteSlice(raw.vannex_hm),
+    gex_0dte_bar, charm_0dte_bar: zeroDteSlice(raw.cex_hm), vanna_0dte_bar: zeroDteSlice(raw.vannex_hm),
     atm_iv: raw.atm_iv, expected_move: raw.expected_move, atm_iv_avg: raw.atm_iv_avg,
     gex_regime: raw.gex_regime, realized_vol: raw.realized_vol, net_vanna: raw.net_vanna,
+    pc_ratio,
+    gex_0dte_ratio,
   };
 }
 /** Collapse /api/vol_skew_multi to a per-strike IV map for the nearest expiration (mirrors capture.ts). */

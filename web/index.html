@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Noto+Sans+JP:wght@500;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=16" />
+  <link rel="stylesheet" href="styles.css?v=23" />
 </head>
 <body>
 
@@ -29,7 +29,7 @@
       <span class="status-dot" id="statusDot"></span>
       <span class="status-text" id="statusText">BOOT</span>
       <span class="status-sep"></span>
-      <span class="next-score" id="nextScore" title="Time until the next scheduled scoring tick">
+      <span class="next-score" id="nextScore" data-tip="Time until the next scheduled scoring tick">
         <span class="ns-label" id="nsLabel">NEXT SCORE</span>
         <span class="ns-time" id="nsTime">--:--</span>
       </span>
@@ -157,7 +157,14 @@
   <!-- ════════════ NARRATIVE VIEW ════════════ -->
   <section id="viewNarrative" class="view" hidden>
 
-    <div class="specbar" id="narrSpec">PRE-OPEN DAY NARRATIVE — dxrk MACRO BIAS × OPEN-TYPE</div>
+    <div class="specbar" id="narrSpec">YYY SYNTHESIS — ENTROPY GATE × TOPOLOGY × GEX LEVELS × MACRO BIAS</div>
+
+    <!-- SIZE RULE — the gate, first thing visible -->
+    <div class="size-rule-banner" id="sizeRuleBanner" hidden>
+      <span class="srb-label">SIZE RULE</span>
+      <span class="srb-rule" id="sizeRuleVal">—</span>
+      <span class="srb-reason" id="sizeRuleReason"></span>
+    </div>
 
     <div class="open-countdown" id="openCountdown">
       <span class="oc-label">NEXT OPEN</span>
@@ -165,11 +172,23 @@
       <span class="oc-time" id="ocTime">--:--:--</span>
     </div>
 
+    <!-- VERDICT: 4-cell row — LEAN | ENTROPY | TOPOLOGY | OPEN TYPE -->
     <section class="sec narr-hero">
       <div class="sec-label"><span><i class="ix">00</i> VERDICT</span><span class="jp">予想</span></div>
       <div class="sec-body" id="narrHero">
         <div class="narr-empty">No narrative yet. It generates automatically before the open (≈09:00 ET), or run <code>npm run narrative</code>.</div>
       </div>
+    </section>
+
+    <!-- GEX KEY LEVELS: call wall · put wall · vol trigger · max pain · exp move -->
+    <section class="sec" id="gexLevelsWrap" hidden>
+      <div class="sec-label"><span><i class="ix">G</i> KEY LEVELS</span><span class="jp">重要水準</span></div>
+      <div class="sec-body" id="gexLevelsBody"></div>
+    </section>
+
+    <section class="sec" id="liveMacroWrap" hidden>
+      <div class="sec-label"><span><i class="ix">M</i> LIVE MACRO</span><span class="jp">生マクロ · YYY</span></div>
+      <div class="sec-body" id="liveMacro"></div>
     </section>
 
     <div class="topgrid">
@@ -186,12 +205,30 @@
   </section>
 
   <footer class="foot">
-    <span id="asOf"></span>
-    <button id="refresh" type="button" aria-label="Refresh">SYNC ↻</button>
+    <div class="feeds-row">
+      <span class="feed-hdr">FEEDS</span>
+      <span class="feed-sep">·</span>
+      <span class="feed-item">SPOT <span class="feed-val" id="feedSpot">--</span></span>
+      <span class="feed-sep">·</span>
+      <span class="feed-item">BOARD <span class="feed-val" id="feedBoard">--</span></span>
+      <span class="feed-sep">·</span>
+      <span class="feed-item">CANDLES <span class="feed-val" id="feedCandles">--</span></span>
+      <span class="feed-sep">·</span>
+      <span class="feed-item">NARR <span class="feed-val" id="feedNarr">--</span></span>
+      <span class="feed-sep">·</span>
+      <span class="feed-item">REGIME <span class="feed-val" id="feedRegime">--</span></span>
+      <span class="feed-sep">·</span>
+      <span class="feed-item">MACRO <span class="feed-val" id="feedMacro">--</span></span>
+    </div>
+    <div class="foot-bar">
+      <span id="asOf"></span>
+      <button id="refresh" type="button" aria-label="Refresh">SYNC ↻</button>
+    </div>
   </footer>
 
 </main>
 
-<script src="app.js?v=26"></script>
+<div id="tip" class="tip" hidden></div>
+<script src="app.js?v=37"></script>
 </body>
 </html>

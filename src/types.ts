@@ -67,6 +67,18 @@ export interface DataSnapshot {
   vanna_0dte_bar?: StrikeMap<number>;
   /** Day-over-day OI change per strike (calls/puts) from /api/oi_change — where walls are BUILDING. */
   oi_day_bar?: StrikeMap<StrikePair>;
+  /**
+   * Put/call volume ratio across all strikes — total puts vol / total calls vol.
+   * >1.2 = heavy put hedging (fear; supports hold harder); <0.7 = speculative call chasing
+   * (resistance faces more buying pressure). YYY guide: sentiment modifier on directional bias.
+   */
+  pc_ratio?: number;
+  /**
+   * Fraction of total |GEX| that expires today (0DTE slice / all expirations), 0-1.
+   * >0.6 = most of today's gamma is same-day → strong close-of-day pinning;
+   * <0.3 = multi-expiry book → less same-day sensitivity.
+   */
+  gex_0dte_ratio?: number;
 }
 
 /** /api/oi_change — day-over-day OI by strike (where positioning is building/unwinding). */
@@ -115,12 +127,43 @@ export interface IvSummary {
   vanna_note: string;
 }
 
+/** Flow entropy from /api/entropy — measures disorder of the options positioning path. */
+export interface EntropySummary {
+  current_entropy: number;
+  threshold: number;
+  /** "STABLE FLOW" = orderly positioning (walls more reliable); "CHAOTIC FLOW" = erratic. */
+  status: string;
+}
+
+/** Hurst exponent from /api/hurst — persistent/trending vs mean-reverting character. */
+export interface HurstSummary {
+  hurst: number;
+  label: string; // "Strong Trend" | "Mild Trend" | "Random Walk" | "Mean Reverting"
+  rolling_50: number | null;  // most recent 50-period rolling value
+  rolling_100: number | null;
+}
+
+/** GARCH vol summary from /api/garch — conditional volatility + persistence. */
+export interface GarchSummary {
+  daily_vol_pct: number;
+  annual_vol_pct: number;
+  alpha: number;
+  beta: number;
+  persistence: number; // α+β — near 1 = long-lived vol clustering, walls need more confluence
+  half_life: number;   // days for a vol shock to decay to half
+  z_score: number;     // current conditional vol vs its own GARCH mean (±sigma)
+  current_regime: string; // "low" | "normal" | "elevated" | "large"
+}
+
 /** One captured poll, appended to data/raw/<date>.data.jsonl. */
 export interface CaptureRecord {
   /** Our capture time, normalized to ET ISO. */
   capturedAt: string;
   data: DataSnapshot;
   iv?: IvSummary;
+  entropy?: EntropySummary;
+  hurst?: HurstSummary;
+  garch?: GarchSummary;
 }
 
 /** One OHLCV bar, timestamped in ET. Delta is net buyer-minus-seller volume for the bar (from Altaris). */
@@ -222,6 +265,20 @@ export interface Board {
   gex_profile?: { strike: number; gex_m: number }[];
   /** Per-strike reversal score for EVERY near-spot strike (precision coverage; see CoverageLevel). */
   coverage?: CoverageLevel[];
+  /** Gamma flip (zero-gamma) level — spot above = positive gamma regime, below = negative. */
+  zero_gamma?: number;
+  /** Vol trigger level — spot below = dealers net short underlying (procyclical sellers). */
+  vol_trigger?: number;
+  /** Net aggregate GEX across all strikes ($, signed). From greek_timeseries latest point. */
+  net_gex?: number;
+  /** Flow entropy state at score time — from /api/entropy. CRITICAL = size zero per YYY guide. */
+  entropy_state?: "NORMAL" | "ELEVATED" | "CRITICAL";
+  /** current_entropy / threshold ratio. */
+  entropy_ratio?: number;
+  /** Put/call volume ratio at score time — >1.2 = fear/hedging; <0.7 = call chasing. */
+  pc_ratio?: number;
+  /** Fraction of total |GEX| in the 0DTE slice at score time (0-1). */
+  gex_0dte_ratio?: number;
 }
 
 // ── Pre-open narrative (dxrk: market-open prediction + RTH macro bias) ────────────
@@ -250,8 +307,11 @@ export interface CrossAssetSnapshot {
   copper?: MacroReading;  // HG=F  — global-growth proxy
   dxy?: MacroReading;     // DX-Y.NYB — US dollar (up = risk-off / tightening)
   vix?: MacroReading;     // ^VIX  — equity fear gauge
+  vxn?: MacroReading;     // ^VXN  — Nasdaq-specific vol (VXN/VIX spread = tech premium)
   btc?: MacroReading;     // BTC-USD — risk appetite
   hyg?: MacroReading;     // HYG   — high-yield credit (down = risk-off)
+  /** CBOE SKEW index (^SKEW) — tail risk premium. >135 = elevated; >145 = extreme tail hedging. */
+  skew_index?: MacroReading;
 }
 
 /** One recent market-moving headline (GDELT keyless news feed). */
@@ -276,6 +336,25 @@ export interface MacroSnapshot {
   rrp?: MacroReading;
   /** COT speculator crowding for Nasdaq-100, as a 0–100 percentile of net positioning. */
   cot?: { netPct: number; percentile: number; market: string } | null;
+  /**
+   * ICE BofA High Yield OAS (FRED BAMLH0A0HYM2) — YYY guide Ch.12.2 weekly layer.
+   * <3% = healthy; 3-4% = mild; 4-5% = elevated stress; >5% = crisis. Credit leads equities.
+   */
+  oas?: MacroReading & { level: "healthy" | "mild" | "elevated" | "crisis" };
+  /**
+   * VIX term structure: 9-day vs 1-month VIX ratio.
+   * Backwardation = front > back = stressed, don't fade large moves (YYY Ch.9.2).
+   * Contango = normal vol regime, range levels more reliable.
+   */
+  vix_term?: { front: number; back: number; ratio: number; structure: "contango" | "backwardation" | "flat" };
+  /** True if today has a 10Y/20Y/30Y treasury note/bond auction — YYY Ch.12.2: size down. */
+  auction_today?: boolean;
+  /** Weekly Federal Reserve bank reserve balances (FRED WRESBAL) — rising = more bank liquidity. */
+  reserve_bal?: MacroReading;
+  /** Federal Reserve total assets (FRED WALCL) — rising = QE/expansion; shrinking = QT. */
+  walcl?: MacroReading;
+  /** Copper/gold ratio — rising = growth/reflation; falling = growth fear + haven rotation. */
+  copper_gold_ratio?: number;
   /** Cross-asset / commodity basket — correlation + event (geopolitics) overlay. */
   cross?: CrossAssetSnapshot;
   /** Recent market-moving headlines (GDELT, keyless) — the deterministic event backstop. */
@@ -331,6 +410,20 @@ export interface Narrative {
   news_events?: { headline: string; impact: "bullish" | "bearish" | "neutral"; source?: string }[];
   scoring_method: "ai" | "unavailable";
   macro?: MacroSnapshot;
+  /** YYY guide Ch.12.4 — entropy gate + topology alignment → FULL / HALF / ZERO. */
+  size_rule?: "FULL" | "HALF" | "ZERO";
+  size_rule_reason?: string;
+  /** Flow entropy gate state (CRITICAL = size zero per YYY guide). */
+  entropy_state?: "NORMAL" | "ELEVATED" | "CRITICAL";
+  /** current_entropy / threshold ratio (> 1.0 = ELEVATED, > 1.2 = CRITICAL). */
+  entropy_ratio?: number;
+  /** Topology axis alignment (PCA1 proxy = Hurst+direction; PCA2 proxy = GEX regime). */
+  topology_alignment?: "aligned" | "conflicted" | "unclear";
+  topology_note?: string;
+  pca1_dir?: "up" | "down" | "flat";
+  pca2_dir?: "amplify" | "suppress" | "neutral";
+  vol_trigger_position?: "above" | "below";
+  gex_key_levels?: { call_wall?: number; put_wall?: number; vol_trigger?: number; max_pain?: number; expected_move?: number };
 }
 
 // ── Market regime (topology + GARCH + dealer-gamma) ──────────────────────────────
@@ -406,7 +499,7 @@ export interface Regime {
 }
 
 /** Detector outcome for a level over the day's spot path. */
-export type ReversalOutcome = "reversed" | "broke" | "pending" | "untouched";
+export type ReversalOutcome = "reversed" | "retested" | "broke" | "pending" | "untouched";
 
 export interface DetectedLevel {
   strike: number;
@@ -417,7 +510,9 @@ export interface DetectedLevel {
   touchedAt?: string;
   /** ET ISO the outcome resolved, if resolved. */
   resolvedAt?: string;
-  /** For a reversed level: how far price retraced off it, as a fraction of the level. */
+  /** ET ISO of the second touch (retest), when outcome is "retested" or pending-retest. */
+  retestAt?: string;
+  /** For a reversed/retested level: how far price retraced off it, as a fraction of the level. */
   reversalPct?: number;
   /** Worst adverse excursion BEYOND the level, in points (how far price overshot it). */
   overshoot?: number;

@@ -2,8 +2,7 @@
 // with the detector's per-level outcomes. Pure builder + a writer; no network.
 import fs from "node:fs/promises";
 import path from "node:path";
-import { config } from "./config.js";
-import { activeSession } from "./config.js";
+import { activeSession, config } from "./config.js";
 import type { Board, CoverageLevel, DetectedLevel, ReversalOutcome, ScoredLevel, Side } from "./types.js";
 
 /** A scored level annotated with how it has played out on today's tape. */
@@ -12,6 +11,8 @@ export interface DashboardLevel extends ScoredLevel {
   outcome: ReversalOutcome | "none";
   touched: boolean;
   touchedAt?: string;
+  /** ET ISO of the second touch when outcome is "retested" or pending-retest. */
+  retestAt?: string;
   /** Adverse overshoot beyond the level, in points (for the clean/grind display). */
   overshoot?: number;
   /** Whether the reversal/hold stayed within the clean tolerance. */
@@ -41,14 +42,28 @@ export interface DashboardData {
   gex_profile?: { strike: number; gex_m: number }[];
   /** Per-strike reversal score for EVERY near-spot strike (precision coverage). */
   coverage?: CoverageLevel[];
+  /** Gamma flip level — spot above = positive gamma regime, below = negative. */
+  zero_gamma?: number;
+  /** Vol trigger — spot below = dealers net short underlying. */
+  vol_trigger?: number;
+  /** Net aggregate GEX ($, signed). Negative = dealers amplify moves. */
+  net_gex?: number;
+  /** Put/call volume ratio across all strikes at score time (>1.2 = fear; <0.7 = call chasing). */
+  pc_ratio?: number;
+  /** Fraction of total |GEX| expiring today (0DTE ratio). >0.6 = strong close pin. */
+  gex_0dte_ratio?: number;
+  /** Entropy gate state at score time ("NORMAL" | "ELEVATED" | "CRITICAL"). */
+  entropy_state?: "NORMAL" | "ELEVATED" | "CRITICAL";
+  /** Entropy ratio at score time (current / threshold, rounded to 2 dp). */
+  entropy_ratio?: number;
   levels: DashboardLevel[];
 }
 
 /** Board strikes are round (735); detector strikes can be exact (730.24) — match by nearest. */
 const MATCH_TOL_PTS = 0.75;
-const OUTCOME_RANK: Record<ReversalOutcome, number> = { reversed: 4, broke: 3, pending: 2, untouched: 1 };
+const OUTCOME_RANK: Record<ReversalOutcome, number> = { reversed: 5, retested: 4, broke: 3, pending: 2, untouched: 1 };
 
-type LevelOutcome = Pick<DashboardLevel, "outcome" | "touched" | "touchedAt" | "overshoot" | "clean">;
+type LevelOutcome = Pick<DashboardLevel, "outcome" | "touched" | "touchedAt" | "retestAt" | "overshoot" | "clean">;
 
 /**
  * Pick the most-resolved detector outcome at a board strike — but only when the detector
@@ -59,7 +74,7 @@ function outcomeFor(strike: number, side: Side, detected: DetectedLevel[]): Leve
   const near = detected.filter((d) => d.side === side && Math.abs(d.strike - strike) <= MATCH_TOL_PTS);
   if (near.length === 0) return { outcome: "none", touched: false };
   const best = near.reduce((a, b) => (OUTCOME_RANK[b.outcome] > OUTCOME_RANK[a.outcome] ? b : a));
-  return { outcome: best.outcome, touched: best.touched, touchedAt: best.touchedAt, overshoot: best.overshoot, clean: best.clean };
+  return { outcome: best.outcome, touched: best.touched, touchedAt: best.touchedAt, retestAt: best.retestAt, overshoot: best.overshoot, clean: best.clean };
 }
 
 export function buildDashboard(board: Board, detected: DetectedLevel[], session?: string | null): DashboardData {
@@ -78,6 +93,13 @@ export function buildDashboard(board: Board, detected: DetectedLevel[], session?
     scoring_method: board.scoring_method,
     gex_profile: board.gex_profile,
     coverage: board.coverage,
+    zero_gamma: board.zero_gamma,
+    vol_trigger: board.vol_trigger,
+    net_gex: board.net_gex,
+    pc_ratio: board.pc_ratio,
+    gex_0dte_ratio: board.gex_0dte_ratio,
+    entropy_state: board.entropy_state,
+    entropy_ratio: board.entropy_ratio,
     levels: board.levels.map((l) => ({ ...l, ...outcomeFor(l.strike, l.side, detected) })),
   };
 }

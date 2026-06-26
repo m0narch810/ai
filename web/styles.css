@@ -455,6 +455,7 @@ body { overflow-x: hidden; min-height: 100vh; }
 }
 .badge.held     { color: var(--green); border-color: var(--green); }
 .badge.broke    { color: var(--red);   border-color: var(--red); }
+.badge.retested { color: var(--amber); border-color: var(--amber); }
 .badge.grinding,
 .badge.testing  { color: var(--amber); border-color: var(--amber); }
 .badge.resting  { color: var(--ink3);  border-color: var(--line); }
@@ -499,8 +500,24 @@ body { overflow-x: hidden; min-height: 100vh; }
 .cov-row.broke .cov-strike { text-decoration: line-through; text-decoration-color: var(--red); }
 .target-inline { color: var(--blue); font-family: var(--mono); }
 
+/* ── custom tooltip ── */
+.tip {
+  position: fixed; z-index: 9000; pointer-events: none;
+  font-family: var(--mono); font-size: 10px; letter-spacing: .04em; line-height: 1.55;
+  color: var(--ink); background: var(--bg);
+  border: 1px solid var(--line2);
+  padding: 5px 9px;
+  max-width: 300px; white-space: normal;
+  box-shadow: 0 2px 12px rgba(0,0,0,.10);
+}
+.tip::before {
+  content: ""; display: block; height: 1px;
+  background: var(--red); margin-bottom: 4px;
+}
+
 .rung.broke { opacity: .42; }
 .rung.broke .strike { text-decoration: line-through; text-decoration-color: var(--red); }
+.rung.retested .strike { color: var(--amber); }
 .rung.grinding::before, .rung.testing::before { animation: breathe 1.6s var(--ease) infinite; }
 @keyframes breathe { 0%,100%{ opacity:1; } 50%{ opacity:.3; } }
 .ladder.prev .rung { opacity: .5; }
@@ -517,10 +534,21 @@ body { overflow-x: hidden; min-height: 100vh; }
 
 /* ── FOOTER ── */
 .foot {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 16px 2px 0; margin-top: 14px;
+  display: flex; flex-direction: column; gap: 7px;
+  padding: 12px 2px 0; margin-top: 14px;
   border-top: 1px solid var(--line);
 }
+.foot-bar {
+  display: flex; align-items: center; justify-content: space-between;
+}
+.feeds-row {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 0 10px;
+  font-family: var(--mono); font-size: 9px; letter-spacing: .12em; text-transform: uppercase;
+}
+.feed-hdr  { color: var(--ink3); }
+.feed-sep  { color: var(--line2); }
+.feed-item { color: var(--ink2); display: inline-flex; align-items: baseline; gap: 4px; }
+.feed-val  { color: var(--ink); font-variant-numeric: tabular-nums; }
 #asOf {
   font-family: var(--mono);
   font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink3);
@@ -667,6 +695,62 @@ body { overflow-x: hidden; min-height: 100vh; }
 .ms-ev.bull { color: var(--green); }
 .ms-ev.bear { color: var(--red); }
 
+/* live macro section */
+.live-tag {
+  display: inline-block;
+  padding: 1px 5px;
+  background: color-mix(in srgb, var(--green) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--green) 28%, transparent);
+  color: var(--green);
+  font-family: var(--mono);
+  font-size: 8px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  border-radius: 2px;
+}
+.macro-keys {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  padding: 9px 0;
+  border-top: 1px solid var(--line2);
+}
+.mk {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  font-family: var(--mono);
+}
+.mk-label {
+  font-size: 9px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--ink3);
+}
+.mk-val {
+  font-size: 11px;
+  color: var(--ink2);
+  font-variant-numeric: tabular-nums;
+}
+
+/* treasury auction day warning */
+.auction-warn {
+  font: 700 10px/1.5 var(--mono);
+  color: var(--amber);
+  border-left: 2px solid var(--amber);
+  padding: 4px 9px;
+  margin: 0 0 6px;
+  background: color-mix(in srgb, var(--amber) 6%, transparent);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+/* amber xar direction arrow (VIX term backwardation) */
+.xar.amber { color: var(--amber); }
+
+.narr-line .nv.bull { color: var(--green); }
+.narr-line .nv.bear { color: var(--red); }
+
 /* open-type body */
 .narr-line {
   display: flex;
@@ -692,6 +776,106 @@ body { overflow-x: hidden; min-height: 100vh; }
   background: var(--red-soft);
   border-left: 2px solid var(--red);
   font-size: 12px; line-height: 1.5; color: var(--ink2);
+}
+
+/* topology note: different visual weight from a manipulation tell */
+.topo-note {
+  background: color-mix(in srgb, var(--blue) 6%, transparent);
+  border-left-color: var(--blue);
+}
+
+/* ── SIZE RULE BANNER (entropy gate — YYY Ch.12.4) ── */
+.size-rule-banner {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 18px;
+  margin: 0 0 2px 0;
+  border-bottom: 1px solid var(--line);
+  font-family: var(--mono);
+}
+.size-rule-banner[data-rule="FULL"]  { background: color-mix(in srgb, var(--green) 8%, transparent); border-left: 3px solid var(--green); }
+.size-rule-banner[data-rule="HALF"]  { background: color-mix(in srgb, var(--amber) 8%, transparent); border-left: 3px solid var(--amber); }
+.size-rule-banner[data-rule="ZERO"]  { background: color-mix(in srgb, var(--red)   8%, transparent); border-left: 3px solid var(--red); }
+.srb-label {
+  font-size: 9px; letter-spacing: .18em; text-transform: uppercase;
+  color: var(--ink3); flex: none;
+}
+.srb-rule {
+  font-size: 22px; font-weight: 700; letter-spacing: .06em;
+  flex: none;
+}
+.size-rule-banner[data-rule="FULL"] .srb-rule { color: var(--green); }
+.size-rule-banner[data-rule="HALF"] .srb-rule { color: var(--amber); }
+.size-rule-banner[data-rule="ZERO"] .srb-rule { color: var(--red); }
+.srb-reason {
+  font-size: 11px; color: var(--ink3); letter-spacing: .04em;
+  flex: 1;
+}
+
+/* ── VERDICT amber tone (elevated entropy cell) ── */
+.vv.amber { color: var(--amber); }
+
+/* ── GEX KEY LEVELS STRIP ── */
+.key-levels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 4px 0 10px;
+}
+.kl-chip {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 7px 12px;
+  background: var(--panel-bg);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  min-width: 88px;
+}
+.kl-chip.kl-res { border-color: color-mix(in srgb, var(--red)   30%, var(--line)); }
+.kl-chip.kl-sup { border-color: color-mix(in srgb, var(--green) 30%, var(--line)); }
+.kl-chip.kl-warn { border-color: color-mix(in srgb, var(--amber) 40%, var(--line)); background: color-mix(in srgb, var(--amber) 5%, transparent); }
+.kl-label {
+  font-family: var(--mono);
+  font-size: 8px; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--ink3);
+}
+.kl-val {
+  font-family: var(--mono);
+  font-size: 14px; font-weight: 600;
+  color: var(--ink); font-variant-numeric: tabular-nums;
+}
+.kl-chip.kl-res .kl-val { color: var(--red); }
+.kl-chip.kl-sup .kl-val { color: var(--green); }
+.kl-chip.kl-warn .kl-val { color: var(--amber); }
+.kl-vtp {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  margin-top: 2px;
+  border-radius: 2px;
+  font-family: var(--mono);
+  font-size: 10px;
+}
+.kl-vtp-pos { background: color-mix(in srgb, var(--green) 8%, transparent); }
+.kl-vtp-neg { background: color-mix(in srgb, var(--red)   8%, transparent); }
+.kl-vtp-label { color: var(--ink3); letter-spacing: .1em; text-transform: uppercase; font-size: 8px; }
+.kl-vtp-pos .kl-vtp-val { color: var(--green); }
+.kl-vtp-neg .kl-vtp-val { color: var(--red); }
+
+/* ── AI NARRATIVE SUMMARY PARAGRAPH ── */
+.narr-summary {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line2);
+}
+.narr-summary-text {
+  font-size: 13px; line-height: 1.65;
+  color: var(--ink2);
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 /* macro drivers */

@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { config, nowInSessionTz } from "./config.js";
-import { fetchData, fetchGreekTimeseries, fetchIvTracker, fetchOiChange, fetchVolSkewMulti } from "./altaris.js";
+import { compactEntropy, compactGarch, compactHurst, fetchData, fetchEntropy, fetchGarch, fetchGreekTimeseries, fetchHurst, fetchIvTracker, fetchOiChange, fetchVolSkewMulti } from "./altaris.js";
 import type { CaptureRecord, DataSnapshot, GreekTimeseries, IvSummary, OiChangeResponse, StrikeMap, StrikePair, VolSkewResponse } from "./types.js";
 
 interface Heatmap { expirations?: { label: string; dte: number }[]; rows?: { strike: number; cells: number[] }[] }
@@ -36,6 +36,21 @@ function zeroDteSlice(hm: Heatmap | undefined): StrikeMap<number> {
  * theta (tex_hm) have no per-strike *_bar, so we aggregate them to per-strike totals.
  */
 export function compactSnapshot(raw: DataSnapshot & Record<string, unknown>): DataSnapshot {
+  const gex_0dte_bar = zeroDteSlice(raw.gex_hm as Heatmap);
+
+  // P/C ratio: total put volume / total call volume across all strikes (market sentiment read).
+  const volBar = raw.vol_bar as StrikeMap<StrikePair> | undefined;
+  let totC = 0, totP = 0;
+  for (const v of Object.values(volBar ?? {})) { totC += v?.calls ?? 0; totP += v?.puts ?? 0; }
+  const pc_ratio = totC > 0 ? Math.round((totP / totC) * 100) / 100 : undefined;
+
+  // 0DTE GEX ratio: |sum(0DTE slice)| / |sum(all expirations)| — pinning concentration today.
+  const gexBar = raw.gex_bar as StrikeMap<number> | undefined;
+  let totalGexAbs = 0, total0dteAbs = 0;
+  for (const v of Object.values(gexBar ?? {})) totalGexAbs += Math.abs(v ?? 0);
+  for (const v of Object.values(gex_0dte_bar)) total0dteAbs += Math.abs(v ?? 0);
+  const gex_0dte_ratio = totalGexAbs > 0 ? Math.round((total0dteAbs / totalGexAbs) * 100) / 100 : undefined;
+
   return {
     ticker: raw.ticker, spot: raw.spot, timestamp: raw.timestamp,
     call_wall: raw.call_wall, put_wall: raw.put_wall, major_wall: raw.major_wall,
@@ -48,11 +63,13 @@ export function compactSnapshot(raw: DataSnapshot & Record<string, unknown>): Da
     charm_bar: aggregateHm(raw.cex_hm as Heatmap), tex_bar: aggregateHm(raw.tex_hm as Heatmap),
     vanna_bar: aggregateHm(raw.vannex_hm as Heatmap),
     // 0DTE-isolated gamma/charm/vanna (the slice that dominates pinning into the close).
-    gex_0dte_bar: zeroDteSlice(raw.gex_hm as Heatmap),
+    gex_0dte_bar,
     charm_0dte_bar: zeroDteSlice(raw.cex_hm as Heatmap),
     vanna_0dte_bar: zeroDteSlice(raw.vannex_hm as Heatmap),
     atm_iv: raw.atm_iv, expected_move: raw.expected_move, atm_iv_avg: raw.atm_iv_avg,
     gex_regime: raw.gex_regime, realized_vol: raw.realized_vol, net_vanna: raw.net_vanna,
+    pc_ratio,
+    gex_0dte_ratio,
   };
 }
 
@@ -106,12 +123,15 @@ export async function captureTick(): Promise<{ record: CaptureRecord; greek: Gre
   await fs.mkdir(config.paths.raw, { recursive: true });
   const { date, iso } = nowInSessionTz();
 
-  const [rawData, greek, ivRaw, skewRaw, oiChangeRaw] = await Promise.all([
+  const [rawData, greek, ivRaw, skewRaw, oiChangeRaw, entropyRaw, hurstRaw, garchRaw] = await Promise.all([
     fetchData(),
     fetchGreekTimeseries(),
-    fetchIvTracker().catch(() => null), // IV regime is enrichment; don't fail the tick on it
-    fetchVolSkewMulti().catch(() => null), // per-strike IV skew is enrichment too
-    fetchOiChange().catch(() => null), // day-over-day OI change is enrichment too
+    fetchIvTracker().catch(() => null),
+    fetchVolSkewMulti().catch(() => null),
+    fetchOiChange().catch(() => null),
+    fetchEntropy().catch(() => null),
+    fetchHurst().catch(() => null),
+    fetchGarch().catch(() => null),
   ]);
   const data = compactSnapshot(rawData as DataSnapshot & Record<string, unknown>);
   data.iv_skew = skewToStrikeMap(skewRaw);
@@ -120,6 +140,9 @@ export async function captureTick(): Promise<{ record: CaptureRecord; greek: Gre
     capturedAt: iso,
     data,
     iv: ivRaw ? summarizeIv(ivRaw) : undefined,
+    entropy: entropyRaw ? compactEntropy(entropyRaw) : undefined,
+    hurst: hurstRaw ? compactHurst(hurstRaw) : undefined,
+    garch: garchRaw ? compactGarch(garchRaw) : undefined,
   };
 
   await fs.appendFile(rawDataFile(date), JSON.stringify(record) + "\n", "utf8");

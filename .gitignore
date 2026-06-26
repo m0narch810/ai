@@ -16,6 +16,9 @@ _board_preview.png
 # NOTE: web/dashboard.json IS tracked so the git-connected Netlify site has a board
 # to render. It refreshes when you commit a new capture (or via netlify CLI deploy).
 
+# PDF knowledge base — extracted text from local PDFs, not committed (re-extract with npm run extract-knowledge)
+knowledge/
+
 # node
 node_modules/
 dist/

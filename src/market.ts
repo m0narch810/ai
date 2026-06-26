@@ -74,11 +74,13 @@ export async function liveQqqEquivSpot(): Promise<number> {
  *  US   — Altaris /api/candles (15-min, same source as the chart the user watches; includes delta per bar).
  *  Asia — NQ=F OHLC from Yahoo converted to QQQ-equiv via smoothed ratio (Altaris doesn't serve futures).
  */
-export async function fetchSessionBars(session: SessionDef): Promise<Bar[]> {
+export async function fetchSessionBars(session: SessionDef, date?: string): Promise<Bar[]> {
   if (session.source === "QQQ") {
     const resp = await fetchCandles(1);
     return resp.candles
       .filter((c) => {
+        // Guard against Altaris returning a rolling 24h window that bleeds yesterday's bars.
+        if (date && !c.t.startsWith(date)) return false;
         const m = /T(\d{2}):(\d{2})/.exec(c.t);
         if (!m) return false;
         return inWindow(Number(m[1]) * 60 + Number(m[2]), session.startMin, session.endMin);

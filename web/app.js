@@ -2,11 +2,13 @@ const POLL_MS     = 60_000;
 const SPOT_MS     = 60_000;
 const CANDLE_MS   = 5 * 60_000;
 const NARR_MS     = 5 * 60_000;
+const MACRO_MS    = 5 * 60_000;
 const STALE_MS    = 30 * 60_000;
 const SPOT_URL    = "/.netlify/functions/spot";
 const CANDLES_URL = "/.netlify/functions/altaris-candles";
 const BOARD_FN    = "/.netlify/functions/board"; // cloud deterministic board (box-off fallback)
 const NARR_URL    = "narrative.json";
+const MACRO_URL   = "/.netlify/functions/macro";
 
 // ── palette (kept in sync with styles.css) ──
 const C = {
@@ -262,6 +264,29 @@ function tickOpenCountdown() {
   elKind.textContent = best.o.kind;
 }
 
+// ── feed refresh timers ───────────────────────────────────────────────────────
+// Each load function sets feedNext.X = Date.now() + interval at its start,
+// so the countdown always reflects time until the NEXT fire of that source.
+const feedNext = { spot: 0, board: 0, candles: 0, narr: 0, regime: 0, macro: 0 };
+
+function fmtFeed(ms) {
+  const s = Math.max(0, Math.ceil(ms / 1000));
+  if (s === 0) return "now";
+  if (s < 60)  return `${s}s`;
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+}
+
+function tickFeedTimers() {
+  const now = Date.now();
+  const set = (id, next) => { const e = $(id); if (e) e.textContent = fmtFeed(next - now); };
+  set("#feedSpot",    feedNext.spot);
+  set("#feedBoard",   feedNext.board);
+  set("#feedCandles", feedNext.candles);
+  set("#feedNarr",    feedNext.narr);
+  set("#feedRegime",  feedNext.regime);
+  set("#feedMacro",   feedNext.macro);
+}
+
 // ── next-score countdown ──────────────────────────────────────────────────────
 // Time until the next scheduled scoring tick. Both the local loop (cron */15) and the cloud
 // capture function fire on clock-aligned 15-min boundaries (:00/:15/:30/:45). During the RTH
@@ -403,7 +428,7 @@ function drawSparkline() {
 }
 
 // ── GEX profile chart ────────────────────────────────────────────────────────
-function renderGexChart(gexProfile, spot) {
+function renderGexChart(gexProfile, spot, expectedMove) {
   const svg = $("#gexChart");
   if (!svg) return;
   svg.innerHTML = "";
@@ -448,30 +473,53 @@ function renderGexChart(gexProfile, spot) {
   txt(ML - 3, MT + 8, "+", C.ink3, "end");
   txt(ML - 3, H - MB - 2, "−", C.ink3, "end");
 
+  // NGA sigma bands (±1σ = ±expected_move, ±2σ = ±2×expected_move) — reference zones
+  // drawn as faint vertical bands before the spot marker so the spot line renders on top.
+  const strikes = gexProfile.map(p => p.strike);
+  const priceToX = (price) => {
+    if (n < 2) return null;
+    let idxF;
+    if (price <= strikes[0]) idxF = 0;
+    else if (price >= strikes[n - 1]) idxF = n - 1;
+    else { let i = 0; while (i < n - 1 && strikes[i + 1] < price) i++; const span = strikes[i + 1] - strikes[i] || 1; idxF = i + (price - strikes[i]) / span; }
+    const x = ML + (idxF / n) * IW + (IW / n) / 2;
+    return x >= ML && x <= W - MR ? x : null;
+  };
+  if (typeof spot === "number" && typeof expectedMove === "number" && expectedMove > 0) {
+    for (const [mult, opacity, color] of [[1, 0.10, C.blue], [2, 0.06, C.amber]]) {
+      for (const dir of [1, -1]) {
+        const x = priceToX(spot + dir * mult * expectedMove);
+        if (x != null) {
+          svg.appendChild(svgEl("line", { x1: x, y1: MT, x2: x, y2: H - MB, stroke: color, "stroke-width": 1, "stroke-dasharray": "3 3", opacity }));
+        }
+      }
+    }
+    // Label the 1σ bands
+    const x1up = priceToX(spot + expectedMove), x1dn = priceToX(spot - expectedMove);
+    if (x1up != null) txt(clamp(x1up + 3, ML, W - MR - 4), H - MB - 3, "1σ", C.blue, "start");
+    if (x1dn != null) txt(clamp(x1dn - 3, ML + 4, W - MR), H - MB - 3, "1σ", C.blue, "end");
+  }
+
   // spot marker + its value — positioned on the SAME index scale as the bars (bars are
   // index-spaced, not value-spaced), so it lines up even when strikes aren't evenly spaced.
   if (typeof spot === "number" && gexProfile.length > 1) {
-    const strikes = gexProfile.map(p => p.strike);
-    let idxF;
-    if (spot <= strikes[0]) idxF = 0;
-    else if (spot >= strikes[n - 1]) idxF = n - 1;
-    else { let i = 0; while (i < n - 1 && strikes[i + 1] < spot) i++; const span = strikes[i + 1] - strikes[i] || 1; idxF = i + (spot - strikes[i]) / span; }
-    const sx = ML + (idxF / n) * IW + (IW / n) / 2;
-    if (sx >= ML && sx <= W - MR) {
+    const sx = priceToX(spot);
+    if (sx != null) {
       svg.appendChild(svgEl("line", { x1: sx, y1: MT, x2: sx, y2: H - MB, stroke: C.red, "stroke-width": 1.5, "stroke-dasharray": "4 2" }));
       txt(clamp(sx, ML + 14, W - MR - 14), MT + 7, spot.toFixed(2), C.red, "middle", 600);
     }
   }
 
-  // color key lives in the panel subtitle, off the plot (red = +GEX/pin, dark = −GEX)
+  // color key lives in the panel subtitle, off the plot
   const sub = $("#gexChartSub");
-  if (sub) sub.textContent = "red +gex · dark −gex · ┊ spot";
+  if (sub) sub.textContent = "red +gex · dark −gex · ┊ spot · blue 1σ · amber 2σ";
 }
 
 // ── Candle + VWAP chart ──────────────────────────────────────────────────────
 let candleData = null;
 
 async function loadCandles() {
+  feedNext.candles = Date.now() + CANDLE_MS;
   try {
     const res = await fetch(`${CANDLES_URL}?t=${Date.now()}`, { cache: "no-store" });
     if (!res.ok) return;
@@ -599,7 +647,9 @@ function renderCoverage(data, spot) {
   grid.replaceChildren();
 
   const keyOf = (s) => Math.round(s * 10) / 10;
-  const picks = new Set((data.levels || []).map((l) => keyOf(l.strike)));
+  // Map strike → AI reversal_prob for picked levels (so we can show the regime-adjusted score alongside structure)
+  const aiProb = new Map((data.levels || []).map((l) => [keyOf(l.strike), l.reversal_prob]));
+  const picks = new Set(aiProb.keys());
 
   const col = (title, items, sideCls) => {
     const c = el("div", "cov-col");
@@ -607,7 +657,7 @@ function renderCoverage(data, spot) {
     for (const it of items) {
       const pick = picks.has(keyOf(it.strike));
       const row = el("div",
-        `cov-row ${sideCls}${pick ? " pick" : ""}${it.broken ? " broke" : ""}${it.prob < 15 && !pick ? " faint" : ""}`);
+        `cov-row ${sideCls}${pick ? " pick" : ""}${it.prob < 15 && !pick ? " faint" : ""}`);
       row.appendChild(el("span", "cov-strike", it.strike % 1 === 0 ? String(it.strike) : it.strike.toFixed(1)));
       const bar = el("span", "cov-bar");
       const fill = el("span", "cov-fill");
@@ -616,8 +666,10 @@ function renderCoverage(data, spot) {
       row.appendChild(bar);
       row.appendChild(el("span", "cov-prob", String(it.prob)));
       row.appendChild(el("span", "cov-iv", typeof it.iv === "number" ? `${it.iv}` : "·"));
-      const meta = [it.reaction, typeof it.iv === "number" ? `IV ${it.iv}` : "", ...(it.tags || [])].filter(Boolean).join(" · ");
-      if (meta) row.title = meta;
+      // For board picks: surface AI% in the hover tooltip so the regime discount is visible
+      const ai = pick ? aiProb.get(keyOf(it.strike)) : undefined;
+      const meta = [it.reaction, ai != null ? `AI ${ai}%` : "", typeof it.iv === "number" ? `IV ${it.iv}` : "", ...(it.tags || [])].filter(Boolean).join(" · ");
+      if (meta) row.dataset.tip = meta;
       c.appendChild(row);
     }
     return c;
@@ -630,7 +682,7 @@ function renderCoverage(data, spot) {
   grid.appendChild(col("支持 SUP", sup, "sup"));
 
   const sub = $("#coverageSub");
-  if (sub) sub.textContent = `全価格 · ${cov.length} strikes scored`;
+  if (sub) sub.textContent = `全価格 · structure score / AI% for board picks · ${cov.length} strikes`;
 }
 
 // ── time ──────────────────────────────────────────────────────────────────────
@@ -676,10 +728,16 @@ function liveStatusFor(level) {
 function outcomeView(level) {
   const live = liveStatusFor(level);
   const o = level.outcome || "none";
-  if (o === "broke" || live === "broke") return { cls: "broke",    text: "broke" };
+  if (o === "retested") return { cls: "retested", text: level.clean === false ? "retested loose" : "retested" };
   if (o === "reversed")  return { cls: "held",     text: level.clean === false ? "held loose" : "held" };
+  // Spot actively past the hard stop right now — true live break.
+  if (live === "broke")  return { cls: "broke",    text: "broke" };
+  // Stored outcome is broke, but price has come back to the level — live retest setup.
+  // Keep the level visible and treat it like a second touch, not an invalidation.
+  if (o === "broke" && live !== null) return { cls: "testing", text: "retest" };
+  if (o === "broke")     return { cls: "broke",    text: "broke" };
   if (live === "grind")  return { cls: "grinding", text: "grinding" };
-  if (o === "pending")   return level.clean === false ? { cls: "grinding", text: "grinding" } : { cls: "testing", text: "testing" };
+  if (o === "pending")   return level.clean === false ? { cls: "grinding", text: "grinding" } : { cls: "testing", text: level.retestAt ? "retesting" : "testing" };
   return { cls: "resting", text: "resting" };
 }
 
@@ -735,6 +793,7 @@ function buildRung(level, i) {
 function applyOutcome(entry) {
   const v = outcomeView(entry.level);
   entry.el.classList.toggle("broke",    v.cls === "broke");
+  entry.el.classList.toggle("retested", v.cls === "retested");
   entry.el.classList.toggle("grinding", v.cls === "grinding");
   entry.el.classList.toggle("testing",  v.cls === "testing");
   entry.badgeEl.className   = `badge ${v.cls}`;
@@ -755,11 +814,39 @@ function renderMetrics(data) {
   const reg = data.regime || "";
   const cells = [];
   if (reg) cells.push({ k: "Gamma", v: reg === "positive" ? "Positive" : reg === "negative" ? "Negative" : reg, cls: reg === "negative" ? "neg" : reg === "positive" ? "pos" : "" });
+
+  // Gamma flip: show the level + distance from spot so you can see how far you are
+  if (typeof data.zero_gamma === "number" && typeof data.spot === "number") {
+    const dist = data.spot - data.zero_gamma;
+    const sign = dist >= 0 ? "+" : "−";
+    const absDist = Math.abs(dist).toFixed(2);
+    const cls = dist >= 0 ? "pos" : "neg";
+    cells.push({ k: "γ FLIP", v: `${data.zero_gamma.toFixed(2)} · ${sign}${absDist}`, cls });
+  }
+
+  // Net GEX — shows the aggregate dealer gamma ($B), signed
+  if (typeof data.net_gex === "number") {
+    const gB = data.net_gex / 1e9;
+    const sign = gB >= 0 ? "+" : "−";
+    const cls = gB >= 0 ? "pos" : "neg";
+    cells.push({ k: "Net GEX", v: `${sign}$${Math.abs(gB).toFixed(1)}B`, cls });
+  }
+
   if (typeof data.expected_move === "number") cells.push({ k: "Exp Move", v: `±${data.expected_move.toFixed(1)}`, cls: "" });
   if (data.iv && typeof data.iv.current === "number") {
     const dir   = (data.iv.direction || "").toUpperCase();
     const arrow = dir.startsWith("RIS") ? "▲" : dir.startsWith("FALL") ? "▼" : "→";
     cells.push({ k: "IV", v: `${data.iv.current.toFixed(1)} ${arrow}`, cls: "" });
+  }
+  // P/C ratio — >1.2 = heavy put hedging (fear); <0.7 = call chasing
+  if (typeof data.pc_ratio === "number") {
+    const pcc = data.pc_ratio > 1.2 ? "neg" : data.pc_ratio < 0.7 ? "pos" : "";
+    cells.push({ k: "P/C", v: data.pc_ratio.toFixed(2), cls: pcc });
+  }
+  // 0DTE fraction — % of today's gamma expiring same-day (pinning intensity)
+  if (typeof data.gex_0dte_ratio === "number") {
+    const pct = Math.round(data.gex_0dte_ratio * 100);
+    cells.push({ k: "0DTE", v: `${pct}%`, cls: pct >= 60 ? "neg" : "" });
   }
   if (data.session) cells.push({ k: "Session", v: data.session, cls: "" });
 
@@ -810,7 +897,7 @@ function repaintLive() {
 
   for (const e of rungEls) { paintDist(e, spot); applyOutcome(e); }
   renderLevelMap(lastData, spot);
-  renderGexChart(lastData.gex_profile, spot);
+  renderGexChart(lastData.gex_profile, spot, lastData.expected_move);
 }
 
 // ── banner ────────────────────────────────────────────────────────────────────
@@ -865,7 +952,7 @@ function render(data) {
     empty.append("Run a capture to map the levels.");
     $("#asOf").textContent = "";
     renderLevelMap(data, currentSpot());
-    renderGexChart(data.gex_profile, currentSpot());
+    renderGexChart(data.gex_profile, currentSpot(), data.expected_move);
     renderCoverage(data, currentSpot());
     return;
   }
@@ -885,7 +972,7 @@ function render(data) {
   sup.forEach((l, i) => { const e = buildRung(l, i); floor.appendChild(e.el); rungEls.push(e); });
 
   renderLevelMap(data, currentSpot());
-  renderGexChart(data.gex_profile, currentSpot());
+  renderGexChart(data.gex_profile, currentSpot(), data.expected_move);
   renderCoverage(data, currentSpot());
   if (candleData) renderCandleChart(candleData);
 
@@ -911,13 +998,14 @@ async function loadCloudBoard() {
 const freshnessOf = (d) => { const t = typeof d?.scored_at === "number" ? d.scored_at : Date.parse(d?.generated_at ?? ""); return Number.isFinite(t) ? t : 0; };
 
 async function load() {
+  feedNext.board = Date.now() + POLL_MS;
   try {
     const res = await fetch(`dashboard.json?t=${Date.now()}`, { cache: "no-store" });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     let data = await res.json();
-    // Box offline during RTH → the published board is frozen. Pull the cloud-calculated
-    // rule-based board so the levels keep moving (flagged lower-confidence) instead of going stale.
-    if (isRthNow() && freshnessOf(data) < Date.now() - STALE_MS) {
+    // Box offline (any session) → published board is frozen. Pull the cloud rule board so
+    // levels keep moving at all hours, not just RTH.
+    if (freshnessOf(data) < Date.now() - STALE_MS) {
       const cloud = await loadCloudBoard();
       if (cloud && freshnessOf(cloud) > freshnessOf(data)) data = cloud;
     }
@@ -935,6 +1023,7 @@ async function load() {
 }
 
 async function loadSpot() {
+  feedNext.spot = Date.now() + SPOT_MS;
   try {
     const res = await fetch(`${SPOT_URL}?t=${Date.now()}`, { cache: "no-store" });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -962,8 +1051,70 @@ function narrAgo(n) {
   return agoMs(t);
 }
 
+// ── size rule banner (entropy gate — YYY guide Ch.12.4) ──────────────────────
+function renderSizeRule() {
+  const banner = $("#sizeRuleBanner");
+  if (!banner) return;
+  // Source priority: narrative (computed at 9AM from live entropy) → board (computed every 15min)
+  const rule   = narrData?.size_rule   || (lastData?.entropy_state === "CRITICAL" ? "ZERO" : lastData?.entropy_state === "ELEVATED" ? "HALF" : lastData?.entropy_state ? "FULL" : null);
+  const reason = narrData?.size_rule_reason || (lastData?.entropy_state ? `entropy ${(lastData.entropy_state || "").toLowerCase()} (board ρ=${lastData?.entropy_ratio ?? "?"})` : "");
+  if (!rule) { banner.hidden = true; return; }
+  banner.hidden = false;
+  banner.dataset.rule = rule;
+  const rv = $("#sizeRuleVal"), rr = $("#sizeRuleReason");
+  if (rv) rv.textContent = rule;
+  if (rr) rr.textContent = reason;
+}
+
+// ── GEX key levels strip ──────────────────────────────────────────────────────
+function renderGexKeyLevels() {
+  const wrap = $("#gexLevelsWrap"), body = $("#gexLevelsBody");
+  if (!wrap || !body) return;
+  const kl = narrData?.gex_key_levels || {};
+  const vt  = lastData?.vol_trigger  ?? kl.vol_trigger;
+  const zg  = lastData?.zero_gamma;
+  const spot = lastData?.spot;
+  if (!kl.call_wall && !kl.put_wall && !vt) { wrap.hidden = true; return; }
+  wrap.hidden = false;
+  body.replaceChildren();
+
+  const levels = el("div", "key-levels");
+  const chip = (label, val, tag) => {
+    if (val == null || !Number.isFinite(val) || val === 0) return;
+    const c = el("div", `kl-chip ${tag || ""}`.trim());
+    c.appendChild(el("span", "kl-label", label));
+    c.appendChild(el("span", "kl-val", `$${fmtPrice(val)}`));
+    levels.appendChild(c);
+  };
+  chip("CALL WALL", kl.call_wall, "kl-res");
+  chip("PUT WALL", kl.put_wall, "kl-sup");
+  chip("VOL TRIGGER", vt, spot != null && vt && spot < vt ? "kl-warn" : "");
+  chip("ZERO GAMMA", zg, "");
+  chip("MAX PAIN", kl.max_pain, "");
+  if (kl.expected_move) {
+    const c = el("div", "kl-chip");
+    c.appendChild(el("span", "kl-label", "EXP MOVE"));
+    c.appendChild(el("span", "kl-val", `±$${fmtPrice(kl.expected_move)}`));
+    levels.appendChild(c);
+  }
+  body.appendChild(levels);
+
+  // Vol trigger position tag: above = positive gamma (dealers suppress), below = negative (amplify)
+  if (vt && spot) {
+    const above = spot >= vt;
+    const pos = el("div", `kl-vtp ${above ? "kl-vtp-pos" : "kl-vtp-neg"}`);
+    pos.appendChild(el("span", "kl-vtp-label", "SPOT VS VOL TRIGGER"));
+    pos.appendChild(el("span", "kl-vtp-val", above
+      ? "ABOVE — dealers positive gamma · suppresses moves"
+      : "BELOW — dealers negative gamma · amplifies moves"));
+    body.appendChild(pos);
+  }
+}
+
 function renderNarrative(n) {
   const hero = $("#narrHero");
+  renderSizeRule();
+  renderGexKeyLevels();
   if (!n || !n.open_type) {
     hero.replaceChildren(el("div", "narr-empty"));
     hero.querySelector(".narr-empty").innerHTML =
@@ -972,30 +1123,58 @@ function renderNarrative(n) {
     return;
   }
 
-  // 30-second macro scan: status line · cross-asset arrows · NOW · NEWS
+  const GLYPH = { rising: "▲", falling: "▼", flat: "►", up: "▲", down: "▼", neutral: "►" };
   const biasTone = n.macro_bias === "bullish" ? "bull" : n.macro_bias === "bearish" ? "bear" : "";
   const dirTone  = n.expansion_direction === "up" ? "up" : n.expansion_direction === "down" ? "down" : "";
-  const GLYPH    = { rising: "▲", falling: "▼", flat: "►", up: "▲", down: "▼", neutral: "►" };
   hero.replaceChildren();
-  const scan = el("div", "mscan");
 
-  // status line
-  const status = el("div", "mscan-status");
-  status.appendChild(el("span", `ms-bias ${biasTone}`.trim(), (n.macro_bias || "neutral").toUpperCase()));
-  if (typeof n.macro_bias_score === "number")
-    status.appendChild(el("span", "ms-score", `${n.macro_bias_score > 0 ? "+" : ""}${n.macro_bias_score}`));
-  status.appendChild(el("span", "ms-sep", "·"));
-  status.appendChild(el("span", "ms-day", (n.clean_or_choppy || "—").toUpperCase()));
-  status.appendChild(el("span", "ms-sep", "·"));
-  status.appendChild(el("span", `ms-expand ${dirTone}`.trim(), `EXPAND ${GLYPH[n.expansion_direction] || "►"}`));
-  status.appendChild(el("span", "ms-sep", "·"));
-  const sAbs = Math.abs(n.macro_bias_score ?? 0);
-  status.appendChild(el("span", "ms-conf", sAbs >= 50 ? "●●● high" : sAbs >= 25 ? "●●○ med" : "●○○ low"));
-  status.appendChild(el("span", "ms-stamp", n.scoring_method === "ai" ? `scored ${narrAgo(n)}` : "rule-based"));
-  scan.appendChild(status);
+  // ── 4-cell verdict row: LEAN | ENTROPY | TOPOLOGY | OPEN TYPE ────────────────
+  const v = el("div", "verdict");
+  const cell = (k, val, cls, sub) => {
+    const c = el("div", "verdict-cell");
+    c.appendChild(el("span", "vk", k));
+    c.appendChild(el("div", `vv ${cls}`.trim(), val));
+    if (sub) c.appendChild(el("div", "vsub", sub));
+    return c;
+  };
 
-  // cross-asset arrow strip (one glance: which way each leg is moving)
-  const mac = n.macro || {}, cx = mac.cross || {};
+  // Cell 1: LEAN (macro bias + direction)
+  const leanSub = [
+    typeof n.macro_bias_score === "number" ? `${n.macro_bias_score > 0 ? "+" : ""}${n.macro_bias_score} score` : null,
+    n.clean_or_choppy || null,
+  ].filter(Boolean).join(" · ");
+  const leanCls = `${biasTone} ${dirTone}`.trim();
+  v.appendChild(cell("Lean", (n.macro_bias || "neutral").toUpperCase(), leanCls, leanSub || null));
+
+  // Cell 2: ENTROPY (from narrData or live board)
+  const entState = n.entropy_state || lastData?.entropy_state;
+  const entRatio = n.entropy_ratio ?? lastData?.entropy_ratio;
+  const entCls   = entState === "CRITICAL" ? "bear" : entState === "ELEVATED" ? "amber" : entState === "NORMAL" ? "bull" : "";
+  const entSub   = entRatio != null ? `ρ = ${entRatio.toFixed(2)}` : (entState ? "" : "no entropy data");
+  v.appendChild(cell("Entropy", entState || "—", entCls, entSub));
+
+  // Cell 3: TOPOLOGY (PCA1/PCA2 alignment proxy)
+  const topoAlign  = n.topology_alignment || "unclear";
+  const topoCls    = topoAlign === "aligned" ? "bull" : topoAlign === "conflicted" ? "bear" : "";
+  const topoSub    = [
+    n.pca1_dir ? `P1 ${n.pca1_dir}` : null,
+    n.pca2_dir ? `P2 ${n.pca2_dir}` : null,
+  ].filter(Boolean).join(" · ") || null;
+  v.appendChild(cell("Topology", topoAlign.toUpperCase(), topoCls, topoSub));
+
+  // Cell 4: OPEN TYPE
+  const otToneC = OPEN_TYPE_TONE[n.open_type] || "";
+  const otSub   = n.expansion_direction ? `expand ${GLYPH[n.expansion_direction] || "►"} · ${n.scoring_method === "ai" ? narrAgo(n) : "rule-based"}` : null;
+  v.appendChild(cell("Open Type", (n.open_type_label || n.open_type || "—").replace("→", "→"), otToneC, otSub));
+
+  hero.appendChild(v);
+
+  // ── cross-asset strip (live macro overrides stale 9AM) ────────────────────────
+  const mac = n.macro || {};
+  const cx = macroData?.cross ?? mac.cross ?? {};
+  const liveUs2y = macroData?.us2y;
+  const rateData = liveUs2y || mac.us10y;
+  const rateLabel = liveUs2y ? "2Y" : "RATE";
   const cross = el("div", "mscan-cross");
   const xa = (key, dir, val, tone) => {
     const x = el("div", "xa");
@@ -1004,15 +1183,20 @@ function renderNarrative(n) {
     if (val != null) x.appendChild(el("span", "xv", String(val)));
     return x;
   };
-  cross.appendChild(xa("EQ", n.expansion_direction || "neutral", null, dirTone)); // equity stance = bias
-  if (mac.us10y) cross.appendChild(xa("RATE", mac.us10y.dir, mac.us10y.last));
-  if (cx.brent)  cross.appendChild(xa("OIL", cx.brent.dir, cx.brent.last));
-  if (cx.gold)   cross.appendChild(xa("GOLD", cx.gold.dir, cx.gold.last));
-  if (cx.dxy)    cross.appendChild(xa("USD", cx.dxy.dir, cx.dxy.last));
-  if (cx.vix)    cross.appendChild(xa("VOL", cx.vix.dir, cx.vix.last, cx.vix.dir === "rising" ? "amber" : ""));
-  if (cross.childElementCount) scan.appendChild(cross);
+  cross.appendChild(xa("EQ", n.expansion_direction || "neutral", null, dirTone));
+  if (rateData) cross.appendChild(xa(rateLabel, rateData.dir, rateData.last));
+  if (cx.brent)  cross.appendChild(xa("OIL",  cx.brent.dir, cx.brent.last));
+  if (cx.gold)   cross.appendChild(xa("GOLD", cx.gold.dir,  cx.gold.last));
+  if (cx.copper) cross.appendChild(xa("COPP", cx.copper.dir, cx.copper.last, cx.copper.dir === "falling" ? "down" : ""));
+  if (cx.dxy)    cross.appendChild(xa("USD",  cx.dxy.dir,   cx.dxy.last));
+  if (cx.vix)    cross.appendChild(xa("VOL",  cx.vix.dir,   cx.vix.last, cx.vix.dir === "rising" ? "amber" : ""));
+  const narrVt = macroData?.vix_term;
+  if (narrVt) cross.appendChild(xa("VIX-T", "flat", narrVt.structure === "backwardation" ? "BACK" : narrVt.structure === "contango" ? "CNTGO" : "FLAT", narrVt.structure === "backwardation" ? "amber" : ""));
+  if (cx.btc)    cross.appendChild(xa("BTC",  cx.btc.dir,   `${Math.round(cx.btc.last / 1000)}k`));
+  if (cx.hyg)    cross.appendChild(xa("HYG",  cx.hyg.dir,   cx.hyg.last));
+  if (cross.childElementCount) hero.appendChild(cross);
 
-  // NEWS — top live headlines, impact-coloured
+  // ── news ──────────────────────────────────────────────────────────────────────
   const evs = (Array.isArray(n.news_events) ? n.news_events : []).filter((e) => e?.headline).slice(0, 3);
   if (evs.length) {
     const watch = el("div", "mscan-watch");
@@ -1022,22 +1206,27 @@ function renderNarrative(n) {
       if (idx) list.appendChild(el("span", "ms-sep", " · "));
       const tone = ev.impact === "bullish" ? "bull" : ev.impact === "bearish" ? "bear" : "";
       const item = el("span", `ms-ev ${tone}`.trim(), ev.headline);
-      item.title = `${ev.source ? ev.source + " — " : ""}${ev.headline}`;
+      item.dataset.tip = `${ev.source ? ev.source + " — " : ""}${ev.headline}`;
       list.appendChild(item);
     });
     watch.appendChild(list);
-    scan.appendChild(watch);
+    hero.appendChild(watch);
   }
-  hero.appendChild(scan);
 
-  // open type
+  // ── AI summary paragraph ──────────────────────────────────────────────────────
+  if (n.summary && n.scoring_method === "ai") {
+    const sumWrap = el("div", "narr-summary");
+    sumWrap.appendChild(el("p", "narr-summary-text", n.summary));
+    hero.appendChild(sumWrap);
+  }
+
+  // ── open type ─────────────────────────────────────────────────────────────────
   const open = $("#narrOpen");
   open.replaceChildren();
   const otTone = OPEN_TYPE_TONE[n.open_type] || "";
   const otHead = el("div", `vv ${otTone}`.trim(), n.open_type_label || n.open_type);
   otHead.style.fontSize = "17px"; otHead.style.marginBottom = "6px";
   open.appendChild(otHead);
-  // Build nodes explicitly — never innerHTML (move_extent/completion_signal are LLM-sourced).
   const line = (k, val, nodes) => {
     if (!nodes && (val == null || val === "")) return;
     const r = el("div", "narr-line");
@@ -1052,12 +1241,11 @@ function renderNarrative(n) {
   line("Extent", n.move_extent);
   line("Confirms done", n.completion_signal);
   if (n.next_target != null) line("Then", null, [el("b", null, `$${fmtPrice(n.next_target)}`)]);
-  if (n.manipulation_tell) {
-    const tell = el("div", "tell", n.manipulation_tell);
-    open.appendChild(tell);
-  }
+  // Topology note as a contextual caveat below the mechanics
+  if (n.topology_note) open.appendChild(el("div", "tell topo-note", n.topology_note));
+  if (n.manipulation_tell) open.appendChild(el("div", "tell", n.manipulation_tell));
 
-  // reversal zones
+  // ── reversal zones ────────────────────────────────────────────────────────────
   const zones = $("#narrZones");
   zones.replaceChildren();
   const zs = Array.isArray(n.reversal_zones) ? n.reversal_zones : [];
@@ -1070,10 +1258,10 @@ function renderNarrative(n) {
     row.appendChild(el("span", "zone-note", z.note || ""));
     zones.appendChild(row);
   }
-
 }
 
 async function loadNarrative() {
+  feedNext.narr = Date.now() + NARR_MS;
   try {
     const res = await fetch(`${NARR_URL}?t=${Date.now()}`, { cache: "no-store" });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -1081,6 +1269,136 @@ async function loadNarrative() {
     renderNarrative(narrData);
   } catch {
     renderNarrative(null);
+  }
+}
+
+// ── live macro (YYY guide bias — self-refreshing) ───────────────────────────────
+let macroData = null;
+
+function renderLiveMacro(m) {
+  const wrap = $("#liveMacroWrap");
+  const body = $("#liveMacro");
+  if (!m || !m.bias) { if (wrap) wrap.hidden = true; return; }
+  if (wrap) wrap.hidden = false;
+  body.replaceChildren();
+
+  const GLYPH = { rising: "▲", falling: "▼", flat: "►" };
+
+  // Auction day warning — shown first (sizing override beats directional bias)
+  if (m.auction_today) {
+    body.appendChild(el("div", "auction-warn", "⚑ AUCTION DAY (10Y/20Y/30Y) — size down regardless of bias"));
+  }
+
+  // Status line: live bias + score + confidence
+  const status = el("div", "mscan-status");
+  const biasTone = m.bias === "bullish" ? "bull" : m.bias === "bearish" ? "bear" : "";
+  status.appendChild(el("span", `ms-bias ${biasTone}`.trim(), m.bias.toUpperCase()));
+  if (typeof m.bias_score === "number")
+    status.appendChild(el("span", "ms-score", `${m.bias_score > 0 ? "+" : ""}${m.bias_score}`));
+  status.appendChild(el("span", "ms-sep", "·"));
+  status.appendChild(el("span", "live-tag", "LIVE"));
+  const sAbs = Math.abs(m.bias_score ?? 0);
+  status.appendChild(el("span", "ms-sep", "·"));
+  status.appendChild(el("span", "ms-conf", sAbs >= 50 ? "●●● high" : sAbs >= 25 ? "●●○ med" : "●○○ low"));
+  status.appendChild(el("span", "ms-stamp", `refreshed ${agoMs(m.scored_at)}`));
+  body.appendChild(status);
+
+  // YYY key inputs: 2Y, TGA, RRP, COT + OAS (Ch.12.2) + reserve_bal + walcl
+  const keys = el("div", "macro-keys");
+  const mkKey = (label, dir, val, lean) => {
+    const d = el("div", "mk");
+    d.appendChild(el("span", "mk-label", label));
+    const glyphTone = lean === "bull" ? "up" : lean === "bear" ? "down" : lean === "amber" ? "amber" : "";
+    d.appendChild(el("span", `xar ${glyphTone}`.trim(), GLYPH[dir] || "►"));
+    if (val != null) d.appendChild(el("span", "mk-val", String(val)));
+    return d;
+  };
+  if (m.us2y) keys.appendChild(mkKey("2Y YIELD", m.us2y.dir, m.us2y.last, m.us2y.dir === "rising" ? "bear" : m.us2y.dir === "falling" ? "bull" : ""));
+  if (m.tga)  keys.appendChild(mkKey("TGA", m.tga.dir, null, m.tga.dir === "falling" ? "bull" : "bear"));
+  if (m.rrp)  keys.appendChild(mkKey("RRP", m.rrp.dir, null, m.rrp.dir === "falling" ? "bull" : "bear"));
+  if (m.cot)  keys.appendChild(mkKey("COT", "flat", `${m.cot.percentile}th pct`, m.cot.percentile > 80 ? "bear" : m.cot.percentile < 50 ? "bull" : ""));
+  if (m.oas)  {
+    const oasTone = m.oas.level === "healthy" ? "bull" : m.oas.level === "crisis" ? "bear" : m.oas.level === "elevated" ? "amber" : "";
+    const oasLabel = m.oas.level === "crisis" ? "CRISIS" : m.oas.level === "elevated" ? "ELEV" : m.oas.level === "mild" ? "MILD" : "OK";
+    keys.appendChild(mkKey("OAS HY", m.oas.dir || "flat", `${m.oas.last}% · ${oasLabel}`, oasTone));
+  }
+  if (m.reserve_bal && m.reserve_bal.dir !== "flat")
+    keys.appendChild(mkKey("RESV BAL", m.reserve_bal.dir, null, m.reserve_bal.dir === "rising" ? "bull" : "bear"));
+  if (m.walcl && m.walcl.dir !== "flat")
+    keys.appendChild(mkKey("FED BS", m.walcl.dir, null, m.walcl.dir === "rising" ? "bull" : "bear"));
+  if (keys.childElementCount) body.appendChild(keys);
+
+  // Cross-asset strip — live values + copper + VIX term structure
+  const cx = m.cross || {};
+  const cross = el("div", "mscan-cross");
+  const xa = (key, dir, val, tone) => {
+    const x = el("div", "xa");
+    x.appendChild(el("span", "xk", key));
+    x.appendChild(el("span", `xar ${tone || ""}`.trim(), GLYPH[dir] || "·"));
+    if (val != null) x.appendChild(el("span", "xv", String(val)));
+    return x;
+  };
+  if (m.us10y)  cross.appendChild(xa("10Y", m.us10y.dir, m.us10y.last));
+  if (cx.brent) cross.appendChild(xa("OIL", cx.brent.dir, cx.brent.last));
+  if (cx.gold)  cross.appendChild(xa("GOLD", cx.gold.dir, cx.gold.last));
+  if (cx.copper) cross.appendChild(xa("COPP", cx.copper.dir, cx.copper.last, cx.copper.dir === "falling" ? "down" : ""));
+  if (cx.dxy)   cross.appendChild(xa("USD", cx.dxy.dir, cx.dxy.last));
+  if (cx.vix)   cross.appendChild(xa("VOL", cx.vix.dir, cx.vix.last, cx.vix.dir === "rising" ? "amber" : ""));
+  if (m.vix_term) {
+    const vtTone = m.vix_term.structure === "backwardation" ? "amber" : "";
+    const vtLabel = m.vix_term.structure === "backwardation" ? "BACK" : m.vix_term.structure === "contango" ? "CNTGO" : "FLAT";
+    cross.appendChild(xa("VIX-T", "flat", vtLabel, vtTone));
+  }
+  // VXN — Nasdaq-specific vol; VXN > VIX by a wide margin = tech-specific fear premium
+  if (cx.vxn) cross.appendChild(xa("VXN", cx.vxn.dir, cx.vxn.last.toFixed(1), cx.vxn.dir === "rising" ? "amber" : ""));
+  // CBOE SKEW — tail risk premium; >135 = elevated tail hedging; >145 = extreme
+  if (cx.skew_index) {
+    const skTone = cx.skew_index.last > 145 ? "bear" : cx.skew_index.last > 135 ? "amber" : "";
+    cross.appendChild(xa("SKEW", cx.skew_index.dir, Math.round(cx.skew_index.last), skTone));
+  }
+  if (cx.btc)   cross.appendChild(xa("BTC", cx.btc.dir, `${Math.round(cx.btc.last / 1000)}k`));
+  if (cx.hyg)   cross.appendChild(xa("HYG", cx.hyg.dir, cx.hyg.last));
+  if (typeof m.curve2s10s === "number")
+    cross.appendChild(xa("2s10s", m.curve2s10s >= 0 ? "rising" : "falling", `${m.curve2s10s > 0 ? "+" : ""}${m.curve2s10s?.toFixed(2)}`, m.curve2s10s < -0.1 ? "bear" : ""));
+  // Copper/gold ratio — rising = reflation/growth; falling = haven rotation
+  if (typeof m.copper_gold_ratio === "number") {
+    // Ratio = Cu / Au: rises when copper rises OR gold falls; falls when copper falls OR gold rises.
+    const cgDir = (cx.copper?.dir === "rising" || cx.gold?.dir === "falling") ? "rising"
+               : (cx.copper?.dir === "falling" || cx.gold?.dir === "rising")  ? "falling" : "flat";
+    cross.appendChild(xa("Cu/Au", cgDir, m.copper_gold_ratio.toFixed(4), cgDir === "falling" ? "amber" : ""));
+  }
+  if (cross.childElementCount) body.appendChild(cross);
+
+  // YYY driver list — each factor with its reading and lean
+  if (m.drivers?.length) {
+    const dl = el("div", null);
+    for (const d of m.drivers) {
+      const row = el("div", "narr-line");
+      row.appendChild(el("span", "nk", d.label));
+      const nvTone = d.lean === "bull" ? "bull" : d.lean === "bear" ? "bear" : "";
+      const nv = el("span", `nv ${nvTone}`.trim());
+      nv.textContent = d.reading;
+      row.appendChild(nv);
+      dl.appendChild(row);
+    }
+    body.appendChild(dl);
+  }
+
+  // Re-render the narrative verdict strip so the cross-asset arrows and entropy update with live data.
+  renderSizeRule();
+  renderGexKeyLevels();
+  if (narrData) renderNarrative(narrData);
+}
+
+async function loadMacro() {
+  feedNext.macro = Date.now() + MACRO_MS;
+  try {
+    const res = await fetch(`${MACRO_URL}?t=${Date.now()}`, { cache: "no-store" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    macroData = await res.json();
+    renderLiveMacro(macroData);
+  } catch {
+    renderLiveMacro(macroData || null);
   }
 }
 
@@ -1158,6 +1476,7 @@ function renderRegime(r) {
 }
 
 async function loadRegime() {
+  feedNext.regime = Date.now() + NARR_MS;
   // Prefer the cloud function (live even when the scoring box is off); fall back to the static
   // file for LAN viewing. Keep the last good read if both fail rather than blanking the tab.
   for (const url of [`${REGIME_FN}?t=${Date.now()}`, `${REGIME_URL}?t=${Date.now()}`]) {
@@ -1179,8 +1498,10 @@ function setView(view) {
   $("#viewNarrative").hidden = view !== "narrative";
   for (const t of document.querySelectorAll(".tab")) t.classList.toggle("active", t.dataset.view === view);
   try { localStorage.setItem("torii.view", view); } catch { /* ignore */ }
-  if (view === "narrative") loadNarrative();
-  if (view === "regime")    loadRegime();
+  // Re-render from cached data immediately (element is now visible → animations fire correctly),
+  // then kick off a background fetch to pick up any newer data.
+  if (view === "narrative") { renderSizeRule(); renderGexKeyLevels(); if (narrData) renderNarrative(narrData); if (macroData) renderLiveMacro(macroData); loadNarrative(); loadMacro(); }
+  if (view === "regime")    { if (regData)  renderRegime(regData);     loadRegime(); }
 }
 for (const t of document.querySelectorAll(".tab")) {
   t.addEventListener("click", () => setView(t.dataset.view));
@@ -1211,11 +1532,11 @@ $("#themeToggle")?.addEventListener("click", () => {
 
 // ── init ──────────────────────────────────────────────────────────────────────
 initBackground();
-tickClock(); tickOpenCountdown(); tickNextScore(); tickAgoStamps();
-setInterval(() => { tickClock(); tickOpenCountdown(); tickNextScore(); tickAgoStamps(); }, 1000);
-$("#refresh").addEventListener("click", () => { load(); loadSpot(); loadCandles(); loadNarrative(); loadRegime(); });
+tickClock(); tickOpenCountdown(); tickNextScore(); tickAgoStamps(); tickFeedTimers();
+setInterval(() => { tickClock(); tickOpenCountdown(); tickNextScore(); tickAgoStamps(); tickFeedTimers(); }, 1000);
+$("#refresh").addEventListener("click", () => { load(); loadSpot(); loadCandles(); loadNarrative(); loadRegime(); loadMacro(); });
 document.addEventListener("visibilitychange", () => {
-  if (!document.hidden) { load(); loadSpot(); loadCandles(); loadNarrative(); loadRegime(); }
+  if (!document.hidden) { load(); loadSpot(); loadCandles(); loadNarrative(); loadRegime(); loadMacro(); }
 });
 
 let startView = "board";
@@ -1227,8 +1548,47 @@ loadSpot();
 loadCandles();
 loadNarrative();
 loadRegime();
-setInterval(load,         POLL_MS);
-setInterval(loadSpot,     SPOT_MS);
-setInterval(loadCandles,  CANDLE_MS);
+loadMacro();
+setInterval(load,          POLL_MS);
+setInterval(loadSpot,      SPOT_MS);
+setInterval(loadCandles,   CANDLE_MS);
 setInterval(loadNarrative, NARR_MS);
-setInterval(loadRegime,   NARR_MS);
+setInterval(loadRegime,    NARR_MS);
+setInterval(loadMacro,     MACRO_MS);
+
+// ── custom tooltip ────────────────────────────────────────────────────────────
+(function () {
+  const tip = document.getElementById("tip");
+  if (!tip) return;
+  let target = null;
+
+  function place(x, y) {
+    const gap = 14;
+    tip.style.left = "0"; tip.style.top = "0";
+    const w = tip.offsetWidth, h = tip.offsetHeight;
+    const vw = window.innerWidth, vh = window.innerHeight;
+    const left = (x + gap + w > vw - 6) ? x - w - gap : x + gap;
+    const top  = (y + gap + h > vh - 6) ? y - h - gap : y + gap;
+    tip.style.left = `${left}px`;
+    tip.style.top  = `${top}px`;
+  }
+
+  document.addEventListener("mouseover", e => {
+    const el = e.target.closest("[data-tip]");
+    if (!el || el === target) return;
+    target = el;
+    tip.textContent = el.dataset.tip;
+    tip.hidden = false;
+    place(e.clientX, e.clientY);
+  });
+
+  document.addEventListener("mousemove", e => {
+    if (target) place(e.clientX, e.clientY);
+  });
+
+  document.addEventListener("mouseout", e => {
+    if (!target) return;
+    const el = e.target.closest("[data-tip]");
+    if (el && !el.contains(e.relatedTarget)) { tip.hidden = true; target = null; }
+  });
+})();

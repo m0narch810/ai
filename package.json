@@ -13,7 +13,8 @@
     "verify": "tsx src/verify.ts",
     "web": "tsx src/web.ts",
     "publish": "tsx src/publish.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "extract-knowledge": "python scripts/extract-knowledge.py"
   },
   "dependencies": {
     "@netlify/blobs": "^10.7.9",

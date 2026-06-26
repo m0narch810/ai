@@ -42,6 +42,7 @@ export async function fetchCloudCaptures(date: string): Promise<CloudTick[]> {
       if (!v) return null;
       return {
         key,
+        // entropy/hurst/garch not captured by capture.mjs — backfilled boards score without regime endpoints
         record: { capturedAt: v.capturedAt, data: v.data, iv: v.iv } as CaptureRecord,
         greek: v.greek ?? null,
       } satisfies CloudTick;

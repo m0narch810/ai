@@ -2,8 +2,14 @@ import "dotenv/config";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = path.resolve(__dirname, "..");
+// import.meta.url may be absent in CJS-bundled environments (e.g. Netlify esbuild output).
+// Fall back to cwd() — board.mts never writes files so config.paths is unused there.
+let ROOT: string;
+try {
+  ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+} catch {
+  ROOT = process.cwd();
+}
 
 function req(name: string): string {
   const v = process.env[name];

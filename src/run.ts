@@ -1,4 +1,4 @@
-import fs from "node:fs/promises";
+import fs, { open } from "node:fs/promises";
 import path from "node:path";
 import cron from "node-cron";
 import { activeSession, config, isAiScoreTime, nowInSessionTz, RTH_MIN, type SessionDef } from "./config.js";
@@ -14,11 +14,45 @@ import type { Board, CaptureRecord, DataSnapshot, DetectedLevel, GreekTimeseries
 /** ~90 min of context at a 15-min cadence — enough to read trend without diluting deltas. */
 const LOOKBACK = 6;
 
+// Cross-process file lock: prevents two concurrent npm start instances from double-scoring
+// the same tick. O_EXCL is atomic on Windows NTFS — only one process can create the file.
+const LOCK_FILE = path.join(path.resolve("data", "scored"), ".scoring.lock");
+
+async function acquireLock(): Promise<boolean> {
+  // Check for a stale lock from a dead process before trying to create a fresh one.
+  try {
+    const existing = JSON.parse(await fs.readFile(LOCK_FILE, "utf8")) as { pid: number; ts: number };
+    const ageMs = Date.now() - existing.ts;
+    if (ageMs < config.scoreIntervalMin * 2 * 60_000) {
+      try {
+        process.kill(existing.pid, 0); // throws if PID is gone
+        return false; // lock is held by a live process
+      } catch {
+        // stale lock — dead process, fall through to take it
+      }
+    }
+  } catch {
+    // no lock file exists yet
+  }
+  try {
+    const fh = await open(LOCK_FILE, "wx"); // O_EXCL: fails if file already exists
+    await fh.writeFile(JSON.stringify({ pid: process.pid, ts: Date.now() }));
+    await fh.close();
+    return true;
+  } catch {
+    return false; // another process created it between our check and our write
+  }
+}
+
+async function releaseLock() {
+  await fs.unlink(LOCK_FILE).catch(() => {});
+}
+
 /** Manual --once / --fixture runs outside any session default to a US frame. */
 const US_SESSION: SessionDef = { name: "US", source: "QQQ", startMin: RTH_MIN.start, endMin: RTH_MIN.end };
 
 // Unlisted strikes with |GEX| >= this rival the named walls and must be candidates.
-const GEX_WALL_THRESHOLD = 100e6;
+const GEX_WALL_THRESHOLD = 50e6;
 
 function named(snap: DataSnapshot): number[] {
   const explicit = [
@@ -85,9 +119,9 @@ function printBoard(board: Board, session: SessionDef, spot: number) {
 }
 
 /** Reversal detection runs on Yahoo OHLC bars (real wicks); a fetch failure must not block scoring. */
-async function detectForSession(session: SessionDef, strikes: number[]): Promise<DetectedLevel[]> {
+async function detectForSession(session: SessionDef, strikes: number[], date?: string): Promise<DetectedLevel[]> {
   try {
-    return detectMany(await fetchSessionBars(session), strikes);
+    return detectMany(await fetchSessionBars(session, date), strikes);
   } catch (err) {
     console.warn("market data unavailable, skipping reversal detection:", err instanceof Error ? err.message : err);
     return [];
@@ -122,7 +156,7 @@ async function scoreFromHistory(date: string, history: CaptureRecord[], session:
 
   const candidateStrikes = [...named(cur), ...(prior?.levels.map((l) => l.strike) ?? [])];
   const [detected, spot, greek, narrative] = await Promise.all([
-    detectForSession(session, candidateStrikes),
+    detectForSession(session, candidateStrikes, date),
     effectiveSpot(session, cur.spot),
     opts.greek !== undefined ? Promise.resolve(opts.greek) : loadDayGreek(date),
     loadTodayNarrative(date),
@@ -130,10 +164,14 @@ async function scoreFromHistory(date: string, history: CaptureRecord[], session:
   const dayContext = dayContextFromNarrative(narrative); // tilt scoring toward the pre-open call
 
   let board: Board;
-  try {
-    board = await scoreBoard(history.slice(-LOOKBACK), prior, detected, session, spot, greek ?? undefined, dayContext);
-  } catch (err) {
-    console.warn("AI scoring failed, falling back to rule-based scorer:", err instanceof Error ? err.message : err);
+  if (isAiScoreTime()) {
+    try {
+      board = await scoreBoard(history.slice(-LOOKBACK), prior, detected, session, spot, greek ?? undefined, dayContext);
+    } catch (err) {
+      console.warn("AI scoring failed, falling back to rule-based scorer:", err instanceof Error ? err.message : err);
+      board = await scoreBoardDeterministic(history.slice(-LOOKBACK), prior, detected, session, spot);
+    }
+  } else {
     board = await scoreBoardDeterministic(history.slice(-LOOKBACK), prior, detected, session, spot);
   }
   await persist(date, board, detected);
@@ -164,8 +202,9 @@ async function refreshTick(session: SessionDef) {
     return;
   }
   const strikes = prior.levels.map((l) => l.strike);
+  const today = nowInSessionTz().date;
   const [detected, spot] = await Promise.all([
-    detectForSession(session, strikes),
+    detectForSession(session, strikes, today),
     effectiveSpot(session, prior.spot),
   ]);
   const board: Board = { ...prior, spot }; // hold as_of / regime / levels; only spot moves
@@ -191,15 +230,43 @@ async function refreshTick(session: SessionDef) {
  * just refresh spot + reversal outcomes against the held board.
  */
 async function liveTick(session: SessionDef, force = false) {
-  const { date } = nowInSessionTz();
+  if (!await acquireLock()) {
+    console.warn(`[${new Date().toISOString()}] [${session.name}] another process holds the scoring lock — skipping tick`);
+    return;
+  }
+  try {
+    await liveTickInner(session, force);
+  } finally {
+    await releaseLock();
+  }
+}
+
+async function liveTickInner(session: SessionDef, force = false) {
+  let { date } = nowInSessionTz();
   if (force || isAiScoreTime()) {
     console.log(`[${new Date().toISOString()}] [${session.name}] capture + AI score (RTH)...`);
     await captureTick();
     const history = await loadDaySnapshots(date);
     await scoreFromHistory(date, history, session);
   } else {
-    console.log(`[${new Date().toISOString()}] [${session.name}] off-RTH refresh — spot + reversals only...`);
-    await refreshTick(session);
+    console.log(`[${new Date().toISOString()}] [${session.name}] off-RTH rule score...`);
+    try { await captureTick(); } catch (err) {
+      console.warn("off-RTH capture failed, scoring from last available data:", err instanceof Error ? err.message : err);
+    }
+    let history = await loadDaySnapshots(date);
+    if (!history.length) {
+      // Early-Asia after midnight ET — today has no captures yet; use prior day's data.
+      const yesterday = new Date(Date.now() - 86_400_000);
+      date = nowInSessionTz(yesterday).date;
+      history = await loadDaySnapshots(date);
+    }
+    if (history.length) {
+      await scoreFromHistory(date, history, session);
+    } else {
+      // Absolute fallback: no captures at all — hold the last board with live spot.
+      console.warn("no captures found for today or yesterday, falling back to refresh");
+      await refreshTick(session);
+    }
   }
 }
 
@@ -223,7 +290,12 @@ async function narrativeTick(session: SessionDef) {
   const cur = history[history.length - 1]?.data;
   if (!cur) { console.warn("narrative skipped — no snapshot captured."); return; }
   const [spot, board] = await Promise.all([effectiveSpot(session, cur.spot), loadLatestBoardAny()]);
-  const narrative = await buildNarrative(cur, spot, board, iso);
+  const lastCapture = history[history.length - 1]!;
+  const narrative = await buildNarrative(cur, spot, board, iso, {
+    entropy: lastCapture.entropy,
+    hurst: lastCapture.hurst,
+    garch: lastCapture.garch,
+  });
   await writeNarrative(narrative);
   console.log(`  narrative: ${narrative.macro_bias} bias · ${narrative.open_type_label} · expansion ${narrative.expansion_direction}`);
   try {
@@ -332,7 +404,7 @@ async function backfillDay(dateArg?: string) {
   if (final) {
     await fs.writeFile(path.join(config.paths.scored, "latest.json"), JSON.stringify(final, null, 2), "utf8");
     try {
-      const detected = await detectForSession(session, final.levels.map((l) => l.strike));
+      const detected = await detectForSession(session, final.levels.map((l) => l.strike), nowInSessionTz().date);
       await publish(final, detected, session.name);
       console.log("Published the recovered day's latest board.");
     } catch (err) {
@@ -354,13 +426,21 @@ async function main() {
   // Scheduled mode — runs in the US and Asia windows; AI-scores only during RTH.
   const expr = `*/${config.scoreIntervalMin} * * * *`;
   console.log(`Scheduler armed: every ${config.scoreIntervalMin}m. AI score ${config.aiScoreStart}-${config.aiScoreEnd} (RTH); off-RTH = spot+reversal refresh. Pre-open narrative ${config.narrativeTime} ET (Mon-Fri). Windows US ${config.sessionStart}-${config.sessionEnd}, Asia ${config.asiaStart}-${config.asiaEnd} ${config.sessionTz}.`);
+  let tickRunning = false;
   cron.schedule(expr, async () => {
     const session = activeSession();
     if (!session) return;
+    if (tickRunning) {
+      console.warn(`[${new Date().toISOString()}] previous tick still running — skipping this cron fire`);
+      return;
+    }
+    tickRunning = true;
     try {
       await liveTick(session);
     } catch (err) {
       console.error("tick failed:", err instanceof Error ? err.message : err);
+    } finally {
+      tickRunning = false;
     }
   }, { timezone: config.sessionTz });
 

@@ -1,161 +1,176 @@
 {
-  "as_of": "2026-06-22T18:27:23",
-  "generated_at": "2026-06-22T22:33:41.445Z",
-  "scored_at": 1782167621445,
-  "spot": 738.115,
-  "macro_bias": "bullish",
-  "macro_bias_score": 35,
+  "as_of": "2026-06-23T18:45:00",
+  "generated_at": "2026-06-23T22:49:59.009Z",
+  "scored_at": 1782254999009,
+  "spot": 715.105,
+  "macro_bias": "bearish",
+  "macro_bias_score": -72,
   "macro_drivers": [
     {
       "label": "2Y Yield",
-      "reading": "3.84%, flat (+0.00bps) — no near-term rate shock from the short end",
-      "lean": "neutral"
+      "reading": "+5bps to 4.24% vs 10Y -1.6bps to 4.493% — 2Y rising without 10Y confirming; classic pre-hike bear signal",
+      "lean": "bear"
     },
     {
-      "label": "10Y Yield",
-      "reading": "4.509%, +5.8bps vs prior close — long end rising without 2Y follow, mild duration pressure on NQ",
+      "label": "Fed / FOMC (Warsh)",
+      "reading": "Held 3.50-3.75% Jun 17; 9 of 17 officials favor at least one hike by year-end; PCE 2026 forecast lifted to 3.6%; market pricing October hike",
       "lean": "bear"
     },
     {
       "label": "TGA",
-      "reading": "$880.7B, +$52.6B week-over-week — Treasury absorbing cash, draining system liquidity",
+      "reading": "+$27.7B to $942.8B — Treasury building cash reserves, draining system liquidity",
       "lean": "bear"
     },
     {
       "label": "RRP",
-      "reading": "$3.93B, +$3.67B day-over-day — money migrating to Fed overnight, tightening net liquidity",
+      "reading": "+$2.56B to $6.48B — cash parking at Fed, not flowing into risk assets",
       "lean": "bear"
     },
     {
-      "label": "COT / NQ Positioning",
-      "reading": "Net speculative at 2nd percentile — historically maximum crowded-short, extreme squeeze potential, well below 50",
+      "label": "DXY",
+      "reading": "+0.37 to 101.39, rising — dollar strengthening is a structural headwind for NQ",
+      "lean": "bear"
+    },
+    {
+      "label": "VIX",
+      "reading": "+3.09 to 19.49 vs 16.41 Jun 16 close — significant fear-bid spike this week; chop and sharp reversals",
+      "lean": "bear"
+    },
+    {
+      "label": "BTC",
+      "reading": "-$1,478 to $62,473 — risk appetite draining, corroborates equity downside",
+      "lean": "bear"
+    },
+    {
+      "label": "AI Valuation Selloff",
+      "reading": "Global chipmaker/memory selloff on AI return doubts; NQ -2.69% RTH; Kospi -10%, Nikkei -3% overnight; $2.5B Kospi foreign outflow",
+      "lean": "bear"
+    },
+    {
+      "label": "COT / Positioning",
+      "reading": "NASDAQ-100 specs at 2nd percentile — extreme crowded short; massive short-covering squeeze fuel but does not change structural direction",
       "lean": "bull"
+    },
+    {
+      "label": "Oil (Brent/WTI)",
+      "reading": "Flat, -$0.09/$0.08 — no geopolitical supply shock layering onto risk-off",
+      "lean": "neutral"
     },
     {
       "label": "USD/JPY",
-      "reading": "161.6, +0.34 (rising, velocity 0.11) — yen weakening, carry trade intact, zero unwind risk",
-      "lean": "bull"
-    },
-    {
-      "label": "Iran Geopolitics",
-      "reading": "US-Iran 60-day MoU roadmap signed in Switzerland; US Treasury issues 60-day Iranian oil sanctions waiver; IAEA inspectors return; Hormuz deconfliction agreed — confirmed NPR, CNBC, Al Jazeera, Fox News",
-      "lean": "bull"
-    },
-    {
-      "label": "VIX / Cross-Asset",
-      "reading": "VIX 17.28 +0.5 but velocity decelerating (-0.28); BTC +$773; HYG -$0.07; oil flat/mild; DXY flat — no risk-off contagion, basket quiet",
+      "reading": "161.54, flat, velocity -0.012 — no carry unwind trigger",
       "lean": "neutral"
+    },
+    {
+      "label": "Gold",
+      "reading": "-$32.9 to $4,116, falling — no safe-haven bid confirming risk-off; absence weakens the full haven signal",
+      "lean": "neutral"
+    },
+    {
+      "label": "Copper",
+      "reading": "-$0.024 to $6.12, falling — mild global growth fear corroboration",
+      "lean": "bear"
     }
   ],
-  "open_type": "manip_down_real_up",
-  "open_type_label": "Manipulation down → real move up",
-  "expansion_direction": "up",
-  "targeted_level": 745,
-  "move_extent": "~7 pts (738 → 745 primary leg); secondary leg 745 → 750 adds 5 pts",
-  "completion_signal": "15-min close above 740 with call vol/OI stabilizing at 736-738 — GEX flips positive at 740, confirms stop-hunt resolved and expansion underway",
-  "next_target": 750,
+  "open_type": "manip_up_real_down",
+  "open_type_label": "Manipulation up → real move down",
+  "expansion_direction": "down",
+  "targeted_level": 710,
+  "move_extent": "Manipulation pump from 715 put wall to 720-722.48 (gamma flip zone); true expansion down to 710 first, then 705-700 next leg",
+  "completion_signal": "Price tags 720-722.48 and is rejected; volume dries above 720; multiple failed pushes above gamma flip with DEX -18,851 capping every attempt",
+  "next_target": 700,
   "clean_or_choppy": "choppy",
-  "manipulation_tell": "Call vol/OI 4278%/5231%/4819% at 736/737/738 (at-spot and below) while NQ futures print -0.24% AGAINST confirmed Iran deal — weakness against bullish-news with broad call loading across 3 consecutive strikes is the textbook dealer stop-hunt tell; fresh flow OPPOSITE to the overnight futures move = manipulation",
+  "manipulation_tell": "COT at 2nd percentile (extreme crowded short) + price sitting at put wall 715 forces a short-covering squeeze at the open; massive fresh call buying across 17 strikes from 716-732 (719 at 14,943% vol/OI, 717 at 9,386%, 718 at 8,782%, 722 at 8,200%) is smart money front-running the pump — NOT directional conviction; DEX -18,851 means dealers sell every tick above 720; Warsh-era hike pricing + global AI selloff + TGA/RRP double tightening confirm real direction is down once squeeze exhausts",
   "reversal_zones": [
     {
-      "price": 732,
-      "side": "support",
-      "note": "58% board score; likely stop-hunt terminus — massive call accumulation at 732-738 makes this the expected manip-dip floor before real reversal"
-    },
-    {
-      "price": 740,
-      "side": "resistance",
-      "note": "GEX flips to positive (+76.9M) at this strike; 52% board score — 15-min close above here triggers the confirmed expansion leg toward 745"
-    },
-    {
-      "price": 730,
-      "side": "support",
-      "note": "Secondary gamma shelf (-99.3M GEX), 27% board score — secondary floor if the opening shake-out overshoots 732"
-    },
-    {
       "price": 720,
+      "side": "resistance",
+      "note": "Board top-scored resistance (65% reversal prob) + gamma flip zone at 722.48; prime squeeze-exhaustion point — dealer selling intensifies above here and fresh call vol/OI cluster 717-722 marks smart money exit zone"
+    },
+    {
+      "price": 722,
+      "side": "resistance",
+      "note": "Exact gamma flip at 722.48; above this DEX would briefly flip positive but net -18,851 overwhelms; if bounce overshoots 720, this is the hard ceiling and key short trigger"
+    },
+    {
+      "price": 710,
       "side": "support",
-      "note": "Major put wall (-300.4M GEX), 20% board score — ultimate backstop in a true breakdown; not the base case given COT extreme short and Iran bid"
+      "note": "Board support (55% reversal prob); major put cluster ~50K OI, -$237M GEX; tradeable bounce expected here before resuming down — do not add shorts into this level"
+    },
+    {
+      "price": 700,
+      "side": "support",
+      "note": "Major put wall: 108K puts OI, -$459M GEX, -$1,520M DEX; second real leg target after 710 gives way; max pain at 670 pulls through here over the session"
     }
   ],
-  "summary": "Macro bias is bullish (+35): the dominant catalyst is the US-Iran 60-day roadmap signed in Switzerland and confirmed by NPR, CNBC, Al Jazeera, and Fox News — IAEA inspectors return, Strait-of-Hormuz deconfliction agreed, and the US Treasury issued a 60-day Iranian oil sanctions waiver, collectively deflating the geopolitical risk premium that has been sitting under NQ. COT is at the 2nd percentile (historically maximum crowded-short, extreme squeeze potential) and USD/JPY rising to 161.6 keeps the carry trade intact. Headwinds are structural-slow: TGA +$52.6B and RRP +$3.67B both tightening net liquidity, 10Y yield +5.8bps without 2Y follow-through adding mild duration pressure. Open type is manip_down_real_up: QQQ spot (738.115) is pinned at the 738 major put wall and gamma flip (737.5), where the largest GEX node in the chain (-596.1M) creates an explosive amplifier in a negative GEX regime. The manipulation tell is unambiguous — call vol/OI of 4278%/5231%/4819% at 736/737/738 (at and below spot) shows massive call accumulation into dealer-driven weakness, while NQ futures are printing -0.24% AGAINST the confirmed Iran de-escalation; price fighting positive DEX (+4,751.9M) and loading calls into three consecutive strikes below spot is the canonical stop-hunt setup. Expect Monday's open to probe 732 (58% board score, highest-probability stop-hunt terminus); once 740 reclaims on a 15-min close (GEX turns positive, 52% board resistance), the true expansion leg is confirmed toward 745 (GEX +150.9M) then the 750 call wall (GEX +273.5M, ~12 pts total from current spot). Day is choppy through the initial phase given negative net GEX amplifying swings and VIX at 17.28; clean trending only after 740 holds on a close.",
+  "summary": "Macro is deeply bearish into the June 24 open. Fed Chair Warsh held at 3.50-3.75% on June 17 with a hawkish tilt — 9 of 17 FOMC officials favor at least one hike by year-end, the 2026 PCE forecast was lifted to 3.6%, and markets are now pricing a rate hike as early as October with zero-cut odds at 79.8%. The 2Y yield rose +5bps to 4.24% while the 10Y fell -1.6bps to 4.493%, the 2Y-outrunning-10Y structural bear signal firing cleanly. TGA built +$27.7B to $942.8B and RRP rose +$2.56B simultaneously — double liquidity tightening. Overnight, AI valuation concerns triggered a global tech purge: Kospi -10%, Nikkei -3%, $2.5B of foreign outflows from Korean equities; NQ futures have dragged the QQQ-equivalent to 715.105 — sitting directly at the put wall. DXY rising to 101.39, VIX spiked +3.09 to 19.49, BTC dropped -$1,478, and copper is falling — a coherent risk-off cross-asset basket. The sole bull wildcard is COT at the 2nd percentile (extreme crowded short), which is massive short-covering fuel — but that fuel powers the manipulation leg, not a genuine up move. Open type is manip_up_real_down: price is at the put wall (715) with 7 points of clean air to the gamma flip (722.48), DEX is a crushing -18,851 (dealers sell every rally). Massive fresh call buying across 17 strikes from 716-732 (719 at 14,943% vol/OI, 717 at 9,386%, 718 at 8,782%) is smart money front-running the forced short-covering squeeze — NOT directional conviction; heavy fresh put buying on those same strikes (716 at 3,231%, 717 at 2,777%) confirms the real move is being hedged as down. The manipulation pump targets 720-722.48; once that level tags and is rejected, negative DEX reasserts and the true expansion is down: first target 710 (board support 55% reversal prob, ~50K put OI), then 700 (108K put OI, -$459M GEX), with max pain at 670 as the long-range gravitational anchor. Session will be choppy (VIX 19.49, false pump/real dump structure, dealers capping every rally above 720); do not chase the open bounce — wait for the rejection at 720-722 to position the real move.",
   "news_events": [
     {
-      "headline": "US-Iran 60-day roadmap signed in Switzerland; IAEA inspectors to return; Hormuz deconfliction mechanism agreed — Vance: very productive 36 hours",
-      "impact": "bullish",
-      "source": "npr.org, cnbc.com, foxnews.com, aljazeera.com"
-    },
-    {
-      "headline": "US Treasury issues 60-day Iranian oil sanctions waiver, paving way for Iranian crude exports in US dollars",
-      "impact": "bullish",
-      "source": "aljazeera.com, inquirer.com"
-    },
-    {
-      "headline": "Trump: Iran negotiations working out very well",
-      "impact": "bullish",
-      "source": "wsyr.iheart.com"
-    },
-    {
-      "headline": "Russia open to Ukraine talks without ultimatums — second independent geopolitical de-escalation signal same session",
-      "impact": "bullish",
-      "source": "africaleader.com"
-    },
-    {
-      "headline": "NQ E-mini futures -0.24% (-72.75 pts) pre-market despite Iran deal confirmation — weakness against bullish news confirms manipulation setup",
-      "impact": "neutral",
+      "headline": "AI valuation concerns drive global tech selloff — chipmakers and memory stocks down sharply; Nasdaq-100 -2.69% June 23 RTH",
+      "impact": "bearish",
       "source": "barchart.com"
     },
     {
-      "headline": "PCE inflation report Thursday 8:30am ET + Micron earnings Wednesday — intraweek tail-risk events",
-      "impact": "neutral",
-      "source": "ts2.tech"
+      "headline": "Kospi -10%, Nikkei -3% overnight; foreign investors sold $2.5B of Kospi shares amid AI investment return doubts",
+      "impact": "bearish",
+      "source": "investing.com"
     },
     {
-      "headline": "Alan Greenspan dies at age 100",
+      "headline": "Fed Chair Warsh held 3.50-3.75% June 17; 9/17 FOMC members favor at least one hike by year-end; 2026 PCE forecast raised to 3.6%",
+      "impact": "bearish",
+      "source": "cnbc.com"
+    },
+    {
+      "headline": "Market pricing Fed rate hike as early as October 2026; zero-cut probability 79.8%; one cut or more seen as near-impossible",
+      "impact": "bearish",
+      "source": "polymarket.com"
+    },
+    {
+      "headline": "GDELT news feed unavailable — cross-asset basket and live web search used as primary catalyst reads",
       "impact": "neutral",
-      "source": "lasvegassun.com"
+      "source": ""
     }
   ],
   "scoring_method": "ai",
   "macro": {
-    "asOf": "2026-06-22T18:27:44",
+    "asOf": "2026-06-23T18:45:19",
     "us2y": {
-      "last": 3.84,
-      "prev": 3.84,
-      "chg": 0,
-      "dir": "flat",
-      "asOf": "2026-06-22T18:27:36"
-    },
-    "us10y": {
-      "last": 4.509,
-      "prev": 4.451,
-      "chg": 0.058,
-      "velocity": 0,
-      "dir": "rising",
-      "asOf": "2026-06-22T18:27:37"
-    },
-    "curve2s10s": 0.669,
-    "usdjpy": {
-      "last": 161.624,
-      "prev": 161.28,
-      "chg": 0.344,
-      "velocity": 0.112,
-      "dir": "rising",
-      "asOf": "2026-06-22T18:27:37"
-    },
-    "tga": {
-      "last": 880713,
-      "prev": 828122,
-      "chg": 52591,
-      "dir": "rising",
-      "asOf": "2026-06-17"
-    },
-    "rrp": {
-      "last": 3.93,
-      "prev": 0.25,
-      "chg": 3.67,
+      "last": 4.24,
+      "prev": 4.19,
+      "chg": 0.05,
       "dir": "rising",
       "asOf": "2026-06-22"
+    },
+    "us10y": {
+      "last": 4.493,
+      "prev": 4.509,
+      "chg": -0.016,
+      "velocity": -0.002,
+      "dir": "falling",
+      "asOf": "2026-06-23T18:45:11"
+    },
+    "curve2s10s": 0.253,
+    "usdjpy": {
+      "last": 161.535,
+      "prev": 161.516,
+      "chg": 0.019,
+      "velocity": -0.012,
+      "dir": "flat",
+      "asOf": "2026-06-23T18:45:11"
+    },
+    "tga": {
+      "last": 942815,
+      "prev": 915085,
+      "chg": 27730,
+      "dir": "rising",
+      "asOf": "2026-06-22"
+    },
+    "rrp": {
+      "last": 6.48,
+      "prev": 3.93,
+      "chg": 2.56,
+      "dir": "rising",
+      "asOf": "2026-06-23"
     },
     "cot": {
       "netPct": -5.6,
@@ -164,144 +179,73 @@
     },
     "cross": {
       "brent": {
-        "last": 78.05,
-        "prev": 77.9,
-        "chg": 0.15,
-        "velocity": 0,
+        "last": 76.99,
+        "prev": 77.08,
+        "chg": -0.09,
+        "velocity": -0.17,
         "dir": "flat",
-        "asOf": "2026-06-22T18:27:37"
+        "asOf": "2026-06-23T18:45:11"
       },
       "wti": {
-        "last": 74.13,
-        "prev": 73.86,
-        "chg": 0.27,
-        "velocity": 0.17,
-        "dir": "rising",
-        "asOf": "2026-06-22T18:27:37"
+        "last": 73.13,
+        "prev": 73.21,
+        "chg": -0.08,
+        "velocity": -0.02,
+        "dir": "flat",
+        "asOf": "2026-06-23T18:45:11"
       },
       "gold": {
-        "last": 4209.6,
-        "prev": 4202.7,
-        "chg": 6.9,
-        "velocity": 0.5,
-        "dir": "flat",
-        "asOf": "2026-06-22T18:27:37"
+        "last": 4116.5,
+        "prev": 4149.4,
+        "chg": -32.9,
+        "velocity": -14.3999,
+        "dir": "falling",
+        "asOf": "2026-06-23T18:45:11"
       },
       "copper": {
-        "last": 6.36,
-        "prev": 6.3655,
-        "chg": -0.0055,
-        "velocity": 0.0235,
-        "dir": "flat",
-        "asOf": "2026-06-22T18:27:37"
+        "last": 6.1235,
+        "prev": 6.148,
+        "chg": -0.0245,
+        "velocity": -0.001,
+        "dir": "falling",
+        "asOf": "2026-06-23T18:45:11"
       },
       "dxy": {
-        "last": 100.996,
-        "prev": 100.849,
-        "chg": 0.147,
-        "velocity": -0.005,
-        "dir": "flat",
-        "asOf": "2026-06-22T18:27:37"
+        "last": 101.39,
+        "prev": 101.02,
+        "chg": 0.37,
+        "velocity": 0.031,
+        "dir": "rising",
+        "asOf": "2026-06-23T18:45:11"
       },
       "vix": {
-        "last": 17.28,
-        "prev": 16.78,
-        "chg": 0.5,
-        "velocity": -0.28,
+        "last": 19.49,
+        "prev": 16.4,
+        "chg": 3.09,
+        "velocity": -0.02,
         "dir": "rising",
-        "asOf": "2026-06-22T18:27:37"
+        "asOf": "2026-06-23T18:45:11"
       },
       "btc": {
-        "last": 64016.02,
-        "prev": 63242.258,
-        "chg": 773.762,
-        "velocity": -199.2422,
-        "dir": "rising",
-        "asOf": "2026-06-22T18:27:37"
+        "last": 62473.22,
+        "prev": 63951.508,
+        "chg": -1478.288,
+        "velocity": -186.8906,
+        "dir": "falling",
+        "asOf": "2026-06-23T18:45:11"
       },
       "hyg": {
-        "last": 79.94,
-        "prev": 80.01,
+        "last": 79.87,
+        "prev": 79.94,
         "chg": -0.07,
-        "velocity": -0.1139,
+        "velocity": -0.015,
         "dir": "flat",
-        "asOf": "2026-06-22T18:27:37"
+        "asOf": "2026-06-23T18:45:11"
       }
     },
-    "headlines": [
-      {
-        "title": "NorthStandard partners Sailor Society to put seafarer wellbeing at heart of maritime safety",
-        "source": "hellenicshippingnews.com",
-        "when": "20260622T214500Z",
-        "url": "https://www.hellenicshippingnews.com/northstandard-partners-sailors-society-to-put-seafarer-wellbeing-at-heart-of-maritime-safety/"
-      },
-      {
-        "title": "USA & Canada Intelligence Brief Monday , June 22 , 2026",
-        "source": "riotimesonline.com",
-        "when": "20260622T214500Z",
-        "url": "https://www.riotimesonline.com/usa-canada-intelligence-brief-american-machine-in-motion-june-22/"
-      },
-      {
-        "title": "Vice President JD Vance Gives Update on U . S - Iran Ceasefire Discussion",
-        "source": "theconservativetreehouse.com",
-        "when": "20260622T214500Z",
-        "url": "https://theconservativetreehouse.com/blog/2026/06/22/vice-president-jd-vance-gives-update-on-u-s-iran-ceasefire-discussion/comment-page-1/"
-      },
-      {
-        "title": "Open to talks , says Russia , but without ultimatums",
-        "source": "africaleader.com",
-        "when": "20260622T214500Z",
-        "url": "http://www.africaleader.com/news/279136145/russia-says-it-is-open-to-talks-without-ultimatums"
-      },
-      {
-        "title": "Mexico president seeks to restart oil shipments to Cuba as island crises deepen",
-        "source": "isp.netscape.com",
-        "when": "20260622T214500Z",
-        "url": "https://isp.netscape.com:443/pf/story/0001/20260622/1c4e1b2c17185cd3e3e924c6dd963b0c"
-      },
-      {
-        "title": "Former Federal Reserve Chairman Alan Greenspan dies at 100 - Las Vegas Sun News",
-        "source": "lasvegassun.com",
-        "when": "20260622T214500Z",
-        "url": "https://lasvegassun.com/news/2026/jun/22/former-federal-reserve-chairman-alan-greenspan-die/"
-      },
-      {
-        "title": "US lifts sanctions on Iranian oil",
-        "source": "beijingbulletin.com",
-        "when": "20260622T214500Z",
-        "url": "http://www.beijingbulletin.com/news/279140082/us-lifts-sanctions-on-iranian-oil"
-      },
-      {
-        "title": "Top 5 All - in - One AI Quant Trading Platforms in 2026 for Cryptocurrency , Forex , and Stock Markets",
-        "source": "theportugalnews.com",
-        "when": "20260622T213000Z",
-        "url": "https://www.theportugalnews.com/news/2026-06-22/top-5-all-in-one-ai-quant-trading-platforms-in-2026-for-cryptocurrency-forex-and-stock-markets/1044334"
-      },
-      {
-        "title": "Vance says talks with Iranian officials set  good foundation  for a deal to end the war - WINDFM",
-        "source": "windfm.com",
-        "when": "20260622T213000Z",
-        "url": "https://windfm.com/news/030030-vance-says-talks-with-iranian-officials-set-good-foundation-for-a-deal-to-end-the-war/"
-      },
-      {
-        "title": "Trump : Iran Negotiations Working Out  Very Well",
-        "source": "wsyr.iheart.com",
-        "when": "20260622T213000Z",
-        "url": "https://wsyr.iheart.com/content/2026-06-22-trump-iran-negotiations-working-out-very-well/"
-      },
-      {
-        "title": "The Internet , Beyond a Right : A Critical Infrastructure",
-        "source": "circleid.com",
-        "when": "20260622T213000Z",
-        "url": "https://circleid.com/posts/the-internet-beyond-a-right-a-critical-infrastructure"
-      },
-      {
-        "title": "Very productive 36 hours : US VP Vance as he departs from Switzerland after talks with Iran",
-        "source": "austinglobe.com",
-        "when": "20260622T213000Z",
-        "url": "http://www.austinglobe.com/news/279140727/very-productive-36-hours-us-vp-vance-as-he-departs-from-switzerland-after-talks-with-iran"
-      }
-    ],
-    "notes": []
+    "headlines": [],
+    "notes": [
+      "news (GDELT) unavailable"
+    ]
   }
 }
