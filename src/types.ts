@@ -79,6 +79,18 @@ export interface DataSnapshot {
    * <0.3 = multi-expiry book → less same-day sensitivity.
    */
   gex_0dte_ratio?: number;
+  /**
+   * Net gamma-flip strike from /api/ladder net positioning — may differ from zero_gamma (which uses
+   * the raw heatmap). Both represent where net dealer gamma crosses zero; ladder version uses the
+   * full net calls/puts positioning across all greeks.
+   */
+  net_gex_flip?: number;
+  /**
+   * Dollar premium (calls + puts notional, $) per strike from /api/ladder — where real money is
+   * anchored. High premium_bar at a strike means significant capital has its P&L reference there;
+   * those participants have strong incentive to defend or react at this price.
+   */
+  premium_bar?: StrikeMap<number>;
 }
 
 /** /api/oi_change — day-over-day OI by strike (where positioning is building/unwinding). */
@@ -143,6 +155,18 @@ export interface HurstSummary {
   rolling_100: number | null;
 }
 
+/** Dealer hedge pressure from /api/hedge_pressure — which greek is mechanically driving dealer flows. */
+export interface HedgePressureSummary {
+  score: number;          // -1..1, negative = downside/put pressure, positive = upside/call
+  label: string;          // e.g. "Neutral Hedge Balance", "Gamma Dominated"
+  sensitivity: string;    // "gamma" | "vanna" | "charm" | "iv" — primary driver of dealer hedging
+  gamma_pct: number;      // % contribution from gamma hedging flow
+  vanna_pct: number;      // % contribution from vanna hedging flow
+  charm_pct: number;      // % contribution from charm hedging flow
+  momentum: number;       // velocity of hedge flow change (negative = building downside pressure)
+  acceleration: number;   // rate of change of momentum (negative = accelerating downward)
+}
+
 /** GARCH vol summary from /api/garch — conditional volatility + persistence. */
 export interface GarchSummary {
   daily_vol_pct: number;
@@ -155,6 +179,26 @@ export interface GarchSummary {
   current_regime: string; // "low" | "normal" | "elevated" | "large"
 }
 
+/**
+ * The cloud Regime tab's output (netlify/functions/regime.mjs, cached in Blobs).
+ * This is the SAME regime read the dashboard displays — fed to the AI scorer so the
+ * regime you see governs the board. Yang-Zhang RV, GARCH, VXN VRP, topology pivots.
+ */
+export interface RegimeSummary {
+  as_of: string;
+  scored_at: number;
+  state: string;   // e.g. "VOL EXPANSION · TREND", "RANGE · PINNED", "CHOP · UNSTABLE"
+  read: string;    // the narrative line shown on the tab
+  bias: string;    // "up" | "down" | "neutral"
+  confidence: number; // 0-100
+  vol: { rv: number; rvPercentile: number; garchAnn: number; persistence: number; trend: string; level: string; sticky: boolean };
+  impliedVol: { vxn: number; rv21: number; vrp: number; vrpPercentile: number; premium: string } | null;
+  trend: { er: number; hurst: number; direction: string };
+  gamma: { regime: string; note: string };
+  /** Topology (persistent-homology) support/resistance pivots — actual price levels. */
+  pivots: Array<{ price: number; side: string; persistence: number; confluence?: boolean }>;
+}
+
 /** One captured poll, appended to data/raw/<date>.data.jsonl. */
 export interface CaptureRecord {
   /** Our capture time, normalized to ET ISO. */
@@ -164,6 +208,8 @@ export interface CaptureRecord {
   entropy?: EntropySummary;
   hurst?: HurstSummary;
   garch?: GarchSummary;
+  /** Dealer hedge pressure from /api/hedge_pressure — which greek drives flows, directional score, momentum. */
+  hedge_pressure?: HedgePressureSummary;
 }
 
 /** One OHLCV bar, timestamped in ET. Delta is net buyer-minus-seller volume for the bar (from Altaris). */

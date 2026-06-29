@@ -1,6 +1,6 @@
 import { config } from "./config.js";
 import { getCookie, hasCredentials, refreshCookie } from "./auth.js";
-import type { AltarisCandlesResponse, DataSnapshot, EntropySummary, GarchSummary, GreekTimeseries, HurstSummary, OiChangeResponse, VolSkewResponse } from "./types.js";
+import type { AltarisCandlesResponse, DataSnapshot, EntropySummary, GarchSummary, GreekTimeseries, HedgePressureSummary, HurstSummary, OiChangeResponse, StrikeMap, VolSkewResponse } from "./types.js";
 
 const BROWSER_HEADERS = {
   accept: "*/*",
@@ -10,7 +10,13 @@ const BROWSER_HEADERS = {
 };
 
 const fetchRaw = (endpoint: string, cookie: string) =>
-  fetch(`${config.baseUrl}/${endpoint}`, { headers: { ...BROWSER_HEADERS, cookie } });
+  fetch(`${config.baseUrl}/${endpoint}`, {
+    headers: { ...BROWSER_HEADERS, cookie },
+    // Without a timeout a connected-but-silent endpoint hangs the whole capture
+    // (Promise.all waits forever) and holds the scoring lock. AbortSignal.timeout
+    // makes every endpoint self-limiting and lets the .catch(()=>null) guards work.
+    signal: AbortSignal.timeout(config.fetchTimeoutMs),
+  });
 
 /**
  * GET an Altaris endpoint. If the session cookie is missing or rejected (401/403)
@@ -67,4 +73,36 @@ export function compactHurst(raw: { hurst: number; label: string; rolling: Recor
 /** Distil the raw GARCH response into the compact summary. */
 export function compactGarch(raw: GarchSummary): GarchSummary {
   return { daily_vol_pct: raw.daily_vol_pct, annual_vol_pct: raw.annual_vol_pct, alpha: raw.alpha, beta: raw.beta, persistence: raw.persistence, half_life: raw.half_life, z_score: raw.z_score, current_regime: raw.current_regime };
+}
+
+/** GET /api/ladder — per-strike greek ladder by DTE; includes net_gex_flip + dollar premium per strike. */
+export const fetchLadder = () => getJson<Record<string, unknown>>("ladder");
+/** GET /api/hedge_pressure — composite dealer hedge flow: which greek drives hedging, directional score, momentum. */
+export const fetchHedgePressure = () => getJson<HedgePressureSummary & { timeseries: unknown[]; color: string; gamma_raw: number; vanna_raw: number; charm_raw: number; rv: number; per_interval: number }>("hedge_pressure");
+
+/** Extract net_gex_flip and dollar premium per strike from the raw /api/ladder response. */
+export function compactLadder(raw: Record<string, unknown>): { net_gex_flip: number | null; premium_bar: StrikeMap<number> } {
+  const levels = raw.levels as Record<string, number | null> | undefined;
+  const net_gex_flip = (typeof levels?.net_gex_flip === "number" && Number.isFinite(levels.net_gex_flip))
+    ? levels.net_gex_flip : null;
+  const rawPremium = raw.premium as Record<string, { calls: number; puts: number; net: number }> | undefined;
+  const premium_bar: StrikeMap<number> = {};
+  for (const [k, v] of Object.entries(rawPremium ?? {})) {
+    if (Number.isFinite(v?.net)) premium_bar[k] = v.net;
+  }
+  return { net_gex_flip, premium_bar };
+}
+
+/** Distil the raw hedge_pressure response into the compact summary the scorer needs (no timeseries). */
+export function compactHedgePressure(raw: { score: number; label: string; sensitivity: string; gamma_pct: number; vanna_pct: number; charm_pct: number; momentum: number; acceleration: number }): HedgePressureSummary {
+  return {
+    score: raw.score,
+    label: raw.label,
+    sensitivity: raw.sensitivity,
+    gamma_pct: raw.gamma_pct,
+    vanna_pct: raw.vanna_pct,
+    charm_pct: raw.charm_pct,
+    momentum: raw.momentum,
+    acceleration: raw.acceleration,
+  };
 }

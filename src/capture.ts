@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { config, nowInSessionTz } from "./config.js";
-import { compactEntropy, compactGarch, compactHurst, fetchData, fetchEntropy, fetchGarch, fetchGreekTimeseries, fetchHurst, fetchIvTracker, fetchOiChange, fetchVolSkewMulti } from "./altaris.js";
+import { compactEntropy, compactGarch, compactHedgePressure, compactHurst, compactLadder, fetchData, fetchEntropy, fetchGarch, fetchGreekTimeseries, fetchHedgePressure, fetchHurst, fetchIvTracker, fetchLadder, fetchOiChange, fetchVolSkewMulti } from "./altaris.js";
 import type { CaptureRecord, DataSnapshot, GreekTimeseries, IvSummary, OiChangeResponse, StrikeMap, StrikePair, VolSkewResponse } from "./types.js";
 
 interface Heatmap { expirations?: { label: string; dte: number }[]; rows?: { strike: number; cells: number[] }[] }
@@ -123,7 +123,7 @@ export async function captureTick(): Promise<{ record: CaptureRecord; greek: Gre
   await fs.mkdir(config.paths.raw, { recursive: true });
   const { date, iso } = nowInSessionTz();
 
-  const [rawData, greek, ivRaw, skewRaw, oiChangeRaw, entropyRaw, hurstRaw, garchRaw] = await Promise.all([
+  const [rawData, greek, ivRaw, skewRaw, oiChangeRaw, entropyRaw, hurstRaw, garchRaw, ladderRaw, hedgeRaw] = await Promise.all([
     fetchData(),
     fetchGreekTimeseries(),
     fetchIvTracker().catch(() => null),
@@ -132,10 +132,31 @@ export async function captureTick(): Promise<{ record: CaptureRecord; greek: Gre
     fetchEntropy().catch(() => null),
     fetchHurst().catch(() => null),
     fetchGarch().catch(() => null),
+    fetchLadder().catch(() => null),
+    fetchHedgePressure().catch(() => null),
   ]);
+  // Surface silent degradation: a non-fatal source going dark for days quietly lowers
+  // scoring quality with no error. Log which optional feeds came back empty this tick.
+  const missing = [
+    ["iv_tracker", ivRaw], ["vol_skew", skewRaw], ["oi_change", oiChangeRaw],
+    ["entropy", entropyRaw], ["hurst", hurstRaw], ["garch", garchRaw],
+    ["ladder", ladderRaw], ["hedge_pressure", hedgeRaw],
+  ].filter(([, v]) => v == null).map(([k]) => k);
+  if (missing.length) console.warn(`[${iso}] capture: optional feeds unavailable: ${missing.join(", ")}`);
+
   const data = compactSnapshot(rawData as DataSnapshot & Record<string, unknown>);
+  // Reject a degraded/empty /api/data payload (200 returning {} or an HTML interstitial)
+  // BEFORE it reaches the scorer — otherwise the AI scores garbage with no error raised.
+  if (typeof data.spot !== "number" || !Number.isFinite(data.spot) || !data.gex_bar || Object.keys(data.gex_bar).length === 0) {
+    throw new Error(`/api/data returned a degraded snapshot (spot=${data.spot}, gex strikes=${Object.keys(data.gex_bar ?? {}).length}) — refusing to score`);
+  }
   data.iv_skew = skewToStrikeMap(skewRaw);
   data.oi_day_bar = oiChangeToBar(oiChangeRaw);
+  if (ladderRaw) {
+    const ladder = compactLadder(ladderRaw as Record<string, unknown>);
+    if (ladder.net_gex_flip != null) data.net_gex_flip = ladder.net_gex_flip;
+    if (Object.keys(ladder.premium_bar).length) data.premium_bar = ladder.premium_bar;
+  }
   const record: CaptureRecord = {
     capturedAt: iso,
     data,
@@ -143,6 +164,7 @@ export async function captureTick(): Promise<{ record: CaptureRecord; greek: Gre
     entropy: entropyRaw ? compactEntropy(entropyRaw) : undefined,
     hurst: hurstRaw ? compactHurst(hurstRaw) : undefined,
     garch: garchRaw ? compactGarch(garchRaw) : undefined,
+    hedge_pressure: hedgeRaw ? compactHedgePressure(hedgeRaw) : undefined,
   };
 
   await fs.appendFile(rawDataFile(date), JSON.stringify(record) + "\n", "utf8");

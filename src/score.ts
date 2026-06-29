@@ -1,8 +1,11 @@
 import { spawn } from "node:child_process";
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { fetchCandles } from "./altaris.js";
 import { config, type SessionDef } from "./config.js";
 import { retrieveKnowledge } from "./knowledge.js";
-import type { AltarisCandlesResponse, Board, CaptureRecord, CoverageLevel, DataSnapshot, DetectedLevel, GreekTimeseries, Narrative, ScoredLevel } from "./types.js";
+import type { AltarisCandlesResponse, Board, CaptureRecord, CoverageLevel, DataSnapshot, DetectedLevel, GreekTimeseries, Narrative, RegimeSummary, ScoredLevel } from "./types.js";
 
 /** Compact pre-open call fed into the board scorer to tilt probabilities (see SYSTEM). */
 export interface DayContext {
@@ -31,6 +34,7 @@ const SESSION_NOTES: Record<SessionDef["name"], string> = {
 };
 
 const CLAUDE_BIN = process.env.CLAUDE_BIN?.trim() || (process.platform === "win32" ? "claude.exe" : "claude");
+
 
 const SYSTEM = `You are an institutional options-flow strategist scoring reversal levels for QQQ from the Altaris terminal.
 
@@ -66,7 +70,7 @@ Definitions and rules — follow exactly:
   - vega: exposure to IV level — matters more when IV is moving.
   - vanna: exposure to IV-x-spot — drives hedging flows WHEN IV MOVES. Its weight depends on the iv block (below): heavy when IV is trending, minor when IV is flat. NOTE: vanna sign does NOT follow gex sign — empirically it is positive at BOTH call walls and put walls, and negative at intermediate support levels. Do not use vanna sign alone to determine direction; treat it as a magnitude signal scaled by IV direction.
   - charm (delta decay): intensifies into expiry; large |charm| marks strikes that pull/repel price as time passes. SIGN DEPENDS ON STRIKE CHARACTER: at PUT WALLS (negative gex), large negative charm means put delta is decaying toward zero — dealers who are short puts must BUY BACK their short-underlying hedge as put delta shrinks, creating bullish dealer buying that reinforces the put support. At CALL WALLS (positive gex), large negative charm means call delta is decaying — dealers sell their long-underlying hedge, reinforcing resistance. In BOTH cases negative charm strengthens the wall's structural role. Do NOT read negative charm at a put wall as bearish — it is bullish confirmation of the support.
-  - tex (theta): time-decay exposure; concentrations mark pinning strikes.
+  - tex (theta): time-decay exposure concentrated at a strike. A |tex| spike (clearly above its neighbours) marks where option time-value sits — sellers have decay incentive to defend it, which sharpens the pin and tightens the reversal toward the tick, an effect that grows as minutes_to_cash_close drops. Treat it as a SUPPORTING confluence factor, not a primary driver: a tex concentration ADDS pin quality to a level that already has gamma/charm/OI behind it (and can tip a borderline reaction from "mixed" to "clean"), but tex alone is not a reason to lead the board. Weight it most when it stacks with a 0DTE gamma/charm wall into the close; otherwise note it as a minor plus.
   - rho: rate sensitivity — usually minor intraday; only note it if unusually large.
   - vol_calls / vol_puts / vol_oi_pct_calls / vol_oi_pct_puts: intraday VOLUME vs standing OI. vol_oi_pct > 100% means the strike traded more contracts today than its entire open interest — it is a LIVE battleground, not just standing positioning. A strike with 300-500% vol/OI in puts was actively contested all session; that is where participants are actually fighting over the level TODAY. Weight this heavily — a high vol/OI strike with modest gex can be a more reliable reversal point than a large-gex strike that nobody is actively trading.
   A level with several of these stacking (e.g. big gex + big |charm| + big vanna + OI mass) is a much stronger reversal candidate than gex alone.
@@ -99,6 +103,7 @@ Definitions and rules — follow exactly:
 - The "iv" block gives the IV regime: current vs session-start IV, the change, direction, and a vanna_note. USE IT to weight vanna/vega: if IV is RISING/FALLING, vanna flows matter and vanna-heavy strikes gain reversal strength; if STABLE, downweight vanna and lean on gamma/charm. Follow the vanna_note's guidance. ALSO read the vol environment to assess reaction character: vol shocks persist for sessions in equity indices, not hours. When IV is running notably elevated from session open (large positive change, direction=RISING) you are in an elevated vol state where the mechanical behavior of walls changes — the same dominant named wall that gives a tick-perfect clean reversal in a calm session requires multiple test attempts and wider oscillation before holding in an elevated vol state. Adjust reaction predictions accordingly: calm IV → "clean" for dominant named walls; rising/elevated IV → "mixed" for most, "clean" only for the single most concentrated dominant wall; IV shock (sudden large jump intraday) → "chop" for almost everything, restrict the board to 2-3 structural extremes. Reversal_prob stays anchored to structural confluence; the REACTION CHARACTER is what degrades with elevated vol. If a wall turns "chop" in elevated vol, that is a real execution risk — say so explicitly even at high probability.
   The "context" block also includes "atm_iv" (live ATM IV) and "atm_iv_avg" (session-average smoothed ATM IV). The gap between them is an intraday IV signal: if atm_iv >> atm_iv_avg, IV has spiked mid-session above its own average — a vol surge that degrades reaction character on most levels (the spike inflates dealer hedging uncertainty). If atm_iv << atm_iv_avg, IV has compressed intraday — the vol regime is normalizing and reaction character improves. Use this alongside the "iv" block direction to form the sharpest possible picture of intraday vol state.
   Additional context fields: "pc_ratio" (put/call vol ratio, all strikes) — >1.2 = heavy put hedging, fear in market, supports hold harder; <0.7 = call chasing, resistance faces more buying, breakouts more likely. "gex_0dte_ratio" (0DTE GEX fraction, 0-1) — >0.6 = most gamma expires today, strong close pin; <0.3 = multi-expiry book, less same-day sensitivity. "net_charm_near_m" ($M sum of charm across near-spot strikes) — negative = dealers must sell delta into close; positive = must buy; predictable directional drift. "net_vanna_near_m" ($M sum of vanna near spot) — in a rising-IV environment, positive = forced dealer buying; negative = forced selling.
+- HEDGE PRESSURE FLOW (when "hedge_pressure" block is present) — Altaris's live model of which greek is mechanically driving dealer hedging right now. "sensitivity" names the primary driver: "gamma" = price-move-driven hedging is dominant (trust gex_m and gex_0dte_m concentrations most); "vanna" = IV changes are the primary force (weight vanna_m heavily, use iv.direction as the regime key; in a rising-IV environment vanna-heavy strikes attract the largest forced dealer flows); "charm" = time-decay is dominant (weight charm_0dte_m heavily, especially into the final 90 minutes — the close-of-day drift is primarily time-driven today). "score" (-1..1, negative = downside/put pressure, positive = upside/call) and "momentum" (negative = hedge pressure intensifying to the downside, positive = to the upside) give the directional read. "acceleration" negative = hedge pressure accelerating downward (initiative building). Use the sensitivity field to calibrate WHICH greek column matters most this session — not to override structural confluence, but to decide which signal to weight when they diverge. If sensitivity is "vanna" and iv direction is RISING: the most vanna-heavy near-spot strikes are the highest-conviction reversal points regardless of GEX rank. If sensitivity is "charm" late in session: strikes with large charm_0dte_m are the mechanical attractors.
 - VOLATILITY RISK PREMIUM (VRP) — the gap between atm_iv and realized_vol is the highest-order structural prior for whether options walls hold. When atm_iv materially exceeds realized_vol, the market is over-hedged: option sellers (including dealers) hold excess theta and are incentivized to maintain positioning around structural levels — walls benefit from this anchoring and mean-reversion character dominates. When realized_vol has exceeded or is approaching atm_iv, the market is under-hedged: hedgers are forced to buy protection at rising premiums mid-session, dealers are dynamically rehedging more aggressively, and structural walls that appear solid on a GEX snapshot get routinely run through by the mechanical buying of late protection. In a negative-VRP environment, lean toward continuation over reversal and bias reaction predictions to "chop" or "mixed" for all but the single most dominant structural barrier — the math that makes walls hold (dealer gamma stabilization) breaks down when the options market itself is under pressure to reprice. The intraday flip from negative to positive VRP (realized vol spike subsiding while IV prices it in) often marks the session transition from directional move to ranging — watch for the iv block direction changing from RISING to STABLE as a confirmation signal. You can assess VRP from context.atm_iv vs context.realized_vol (both in vol-percentage terms); treat the direction and magnitude of the gap as the base prior that greek confluence then modifies — not a separate multiplier, but the background state that determines how hard any given wall actually holds.
 - LEFT-TAIL ASYMMETRY — beyond shadow gamma, the risk-neutral probability distribution itself is structurally skewed: in equity indices, the risk-neutral density derived from the options chain has a heavier left tail and lighter right tail than a symmetric lognormal model would produce. This means, mechanically, that the probability mass below spot is greater than the mass above it at equivalent strike distances. The practical consequence: a put support at K points below spot is a more reliable reversal candidate than a call resistance at K points above spot with identical GEX and OI, because the probability density the market itself assigns to price reaching the put support and turning is higher than the equivalent call scenario. When you see two levels with nearly matched greek confluence — one above spot, one below — the put support deserves the higher probability score, not because of any separate rule, but because the market's own pricing of downside risk implies it. This asymmetry is encoded in the skew: a steep risk_reversal (positive) is the market revealing this asymmetry explicitly. But it exists even when the skew is moderate, because it is structural to how equity markets distribute risk. Account for it by systematically rating otherwise-equal put supports above otherwise-equal call resistances when differentiating borderline cases.
 - IV SKEW — the per-strike implied-vol smile (nearest expiration). Two places: the "iv_skew" context block (atm_iv, otm_put_iv, otm_call_iv, risk_reversal = OTM-put IV − OTM-call IV), and per-strike "iv" + "iv_vs_atm" on each strike row. Read it as DEMAND, which strengthens levels:
@@ -108,11 +113,12 @@ Definitions and rules — follow exactly:
 - SHADOW GAMMA — why skew calibrates dealer exposure beyond what GEX shows: standard options models compute dealer gamma assuming vol stays constant as price moves. For equity indices this assumption is structurally wrong — realized vol rises when price falls and is comparatively stable when price rises. The IV skew on the chain is the market's real-time estimate of this asymmetric vol response: the OTM put IV at a given strike is approximately the vol the market expects if spot falls to that level. This means dealers' actual delta-hedge rebalancing on a downside move is always larger than the model gamma predicts — they must buy more aggressively at a support than the raw GEX number shows, because as price falls, their short-put delta exposure grows faster than the static vol assumption captures. The practical read: when put skew is steep (large positive risk_reversal), the shadow-gamma gap is wide and downside walls are mechanically stronger than GEX alone implies — the forced dealer buying at a major put support is larger than the snapshot shows. When put skew is flat or near zero, GEX is nearly the full story and there is no extra hidden support. When evaluating any support wall, read positive risk_reversal as evidence that the wall is MORE defensible than its raw GEX suggests; a flat or negative risk_reversal means trust the GEX at face value. This is not a multiplier — it is a qualitative calibration of how hard dealers are actually forced to defend a given support level beyond what the model shows.
 - 0DTE ISOLATION — the "gex_0dte_m", "charm_0dte_m", "vanna_0dte_m" per-strike fields are the SAME-DAY-expiry slice of gamma/charm/vanna, separated out from the all-expiration "*_m" bars. This is the slice that actually pins price to the tick. WEIGHT IT BY THE CLOCK: as minutes_to_cash_close drops (last 1-2 hours), 0DTE positioning DOMINATES — a strike with huge 0DTE gamma/charm is the pin that holds hardest and cleanest into the close; lean on the 0DTE numbers far more than the all-expiration aggregate there. Early/mid-session 0DTE is one input among many. A strike whose strength is mostly 0DTE will fade after the close; one with strength across expirations is more durable — say which it is.
 - OI BUILDING — the "d_oi_day_calls"/"d_oi_day_puts" fields are DAY-OVER-DAY OI change (today vs prior close), distinct from the intraday "d_oi_*". Positive = contracts ADDED overnight/today; this is where new positioning is being laid. Puts growing at/below spot = support being reinforced; calls growing above = resistance building. A wall with growing OI is STRENGTHENING (more reliable hold); one with shrinking OI is being unwound (weakening — de-rate it even if its standing OI is still large).
+- "premium_m" ($M, total dollar premium = calls+puts notional at this strike from the ladder): where the real money is anchored. A strike with high premium_m has significant capital with its P&L anchored at this price; those participants have strong incentive to defend or react here. Treat it as a moderate confluence factor similar to OI mass — it complements GEX (a named wall with stacked premium_m is more credible; a ghost wall with near-zero premium_m is less so).
 - The DELTAS (d_*) matter as much as the levels: a level strengthens when its |gex| is growing, weakens when |gex| is shrinking. For call walls (positive gex): d_gex positive = strengthening, d_gex negative = weakening. For put walls (negative gex): d_gex MORE NEGATIVE = strengthening, d_gex toward zero or positive = weakening. Same logic applies to d_charm — for put walls, charm building means d_charm more negative (wall gaining bullish dealer-buy force); for call walls, d_charm more negative = wall gaining bearish dealer-sell force. Weigh the trend, not just the snapshot.
 - Regime modifier (NET/aggregate GEX, not per-strike): positive net GEX = pinning regime — dealers stabilize, fade into levels, walls hold cleanly. Negative net GEX (spot BELOW the gamma flip / zero_gamma) = AMPLIFICATION regime — dealers are short gamma and ADD to moves, so weak and moderate levels get blown through. In a negative net GEX regime: RAISE THE BAR HARD. Only score the 2-3 highest-confluence structural levels (dominant named walls with stacked greeks); drop everything else from the board entirely. A level that would score 40-55% in a positive regime should not appear on the board at all in a negative regime — it will simply get run through. Do not confuse this with per-strike sign — a put-heavy strike (negative per-strike gex) is a support node regardless of the net regime.
 - VOL TRIGGER as REGIME BOUNDARY — vol_trigger is qualitatively different from zero_gamma, and the distinction matters for how you assess levels. Vol_trigger is the aggregate price where dealers' NET portfolio DELTA crosses zero: above it, dealers are net long underlying (forced to be, hedging their aggregate short-options book) and they dampen moves by selling rallies and buying dips. Below vol_trigger, dealers are net short underlying and must SELL into further price declines to maintain delta neutrality — they become mandatory procyclical sellers into a falling market. A put wall BELOW vol_trigger must absorb both organic selling pressure AND this mandatory dealer selling simultaneously; only the session's single dominant named put wall with very heavy concentrated OI can absorb that combined flow — every other support fails. When spot is below vol_trigger: dramatically restrict the board to the 2-3 most dominant structural levels (dominant named put wall below, call wall above), bias all reaction predictions toward "chop" or "mixed" because dealer selling amplifies the approach, and hold "clean" predictions only for the single most dominant structural extreme. The one mechanically reliable long setup below vol_trigger is the RECAPTURE: when price recovers back through vol_trigger from below, dealers who have been net short underlying must now BUY BACK their short delta hedge in size — forced, mechanical buying that tends to be fast and to the tick. If vol_trigger recapture is the scenario you identify (price approaching vol_trigger from below, strong structural support holding), mark the vol_trigger level as a high-conviction "clean" long setup with the move running to the call_wall above. The flip from below to above vol_trigger changes the whole session's character.
   NOTE — two vol trigger levels are provided: "vol_trigger" (near-term/weekly aggregate, most responsive to intraday flow) and "total_vol_trigger" (all-expiration aggregate, more stable). When they diverge, interpret the gap: spot between them = dealers are in a transition zone — hedging posture is neutral on the near-term book but still net-long on the full term structure, or vice versa. For intraday regime assessment, vol_trigger (weekly) is primary; total_vol_trigger gives the broader structural delta-neutral level. When both are above spot, dealer procyclical selling is confirmed across all time horizons.
-- ZERO GAMMA BOUNDARY — the real entry is above zero_gamma, not at it: when spot is BELOW zero_gamma and price rallies toward it, zero_gamma itself is a TRANSITION ZONE (chop, diffuse, dealer gamma flipping sign) — NOT a clean entry. The actual resistance that snaps price to the tick is the FIRST POSITIVE GEX concentration immediately above zero_gamma, where dealer gamma flips from negative (amplifying) to positive (dampening) and they begin selling their long delta hedge into the rally. This cluster is often 1-2 strikes with 50-80M GEX each — smaller than the named call wall beyond it, but the FIRST place a dealer-hedging reversal can happen. Include this first positive-GEX barrier as a curated level (with "chop" or "clean" depending on concentration) instead of or alongside zero_gamma. Do not list zero_gamma as a resistance entry if the first positive GEX is 1-2 strikes above it — price will grind through zero_gamma in a rally and stall at that first cluster. Similarly on the downside: the first NEGATIVE GEX cluster immediately below zero_gamma (not zero_gamma itself) is the first support where dealers switch to buying.
+- ZERO GAMMA BOUNDARY — the real entry is above zero_gamma, not at it: when spot is BELOW zero_gamma and price rallies toward it, zero_gamma itself is a TRANSITION ZONE (chop, diffuse, dealer gamma flipping sign) — NOT a clean entry. A second gamma-flip level, "net_gex_flip" in named_levels, is derived from the ladder's net calls/puts positioning and may differ from zero_gamma (which uses the raw heatmap). When they diverge, both mark transition zones — the range between them is a diffuse chop zone; outside it, dealer gamma is decisively one-sided. The actual resistance that snaps price to the tick is the FIRST POSITIVE GEX concentration immediately above zero_gamma, where dealer gamma flips from negative (amplifying) to positive (dampening) and they begin selling their long delta hedge into the rally. This cluster is often 1-2 strikes with 50-80M GEX each — smaller than the named call wall beyond it, but the FIRST place a dealer-hedging reversal can happen. Include this first positive-GEX barrier as a curated level (with "chop" or "clean" depending on concentration) instead of or alongside zero_gamma. Do not list zero_gamma as a resistance entry if the first positive GEX is 1-2 strikes above it — price will grind through zero_gamma in a rally and stall at that first cluster. Similarly on the downside: the first NEGATIVE GEX cluster immediately below zero_gamma (not zero_gamma itself) is the first support where dealers switch to buying.
 - HURST EXPONENT (when "hurst" block is present) — measures the persistence/trend character of price behaviour. Read hurst (global) and rolling_50 (short-term) together: above 0.5 = price is trending/persistent (moves extend rather than mean-revert); below 0.5 = mean-reverting (oscillates, walls hold cleanly). The rolling_50 reflects CURRENT character; global hurst is structural. Rolling_50 > 0.65 = strongly trending session — this is the single most important context for whether walls hold: in a strongly trending tape, only the one dominant structural extreme in the trend direction (the resistance the trend is heading toward, or the support that could end it) is a high-probability clean entry; every other level is likely to be run through. Rolling_50 < 0.45 = mean-reverting session — walls are highly reliable, multiple levels can score high, confidence in clean reactions increases across the board. The hurst state also sets how wide the range is: high hurst means price can travel much farther in one session than the expected_move implies; low hurst means it oscillates tightly between the nearest structural boundaries. Let the hurst reading calibrate HOW MANY high-probability levels to include (few in high-hurst trending; more in low-hurst ranging) and the reaction character of each.
 - GARCH VOL PERSISTENCE (when "garch" block is present) — the garch block gives you a live conditional volatility model: persistence (α+β) shows how long vol clusters last, z_score shows where current vol sits relative to its own mean, current_regime names the state ("low/normal/elevated/large"), and half_life is how many days a vol shock takes to decay. Interpret together: high persistence (near 1.0) + z_score > 1 + "large" or "elevated" regime = you are in a sustained high-vol state that will NOT revert quickly — mechanical walls that work perfectly in normal vol take multiple tests before holding in this environment, and intermediate walls get blown through. The reaction character degrades proportionally: "clean" is only achievable at the single most dominant structural barrier with the highest greek confluence; everything else is "mixed" or "chop." Half-life matters for sessions: if half_life is 20 days and we have been in elevated vol for weeks, the market is not going to normalize today — do not assume the vol regime resets intraday. Low persistence + z_score near 0 + "normal/low" regime = the mechanical behavior of walls is reliable and normal; clean reversals at dominant walls are the base expectation.
 - FLOW ENTROPY (when "entropy" block is present) — measures the disorder/randomness of the options positioning path. current_entropy < threshold = STABLE FLOW: options positioning is orderly and concentrated, implying participants are positioning AROUND specific structural levels with conviction — walls are more reliable and cleaner in stable flow. current_entropy > threshold = CHAOTIC FLOW: positioning is diffuse and erratic, either because participants are confused about the direction or because a major reprice is in progress — walls are less predictable and a "chop" reaction is more likely even at dominant structures. The entropy status is a modifier on reaction character, not on the structural probability itself: a dominant put wall with high GEX + OI remains a structural barrier in chaotic flow, but the exact-tick clean reversal becomes a "mixed" reaction instead. In stable flow, lean into clean reactions at confirmed structural levels.
@@ -143,11 +149,33 @@ Definitions and rules — follow exactly:
   - "strike_dex_flow": cumulative net delta traded at each strike near spot today (negative = net selling/put-buying; positive = net call-buying). A strike with large negative dex_flow AND high vol/OI in puts = this is where participants have been actively positioning for downside. Combined with the greek snapshot, this separates "standing OI" from "where money moved today."
   - "cum_dex_session": ~6 sampled readings of the SESSION-TOTAL running cumulative delta (cum_total = net buyer-minus-seller volume for the WHOLE options session; cum_call = from call delta; cum_put = from put delta). READ THE SHAPE: if cum_total has been consistently negative (or positive) across ALL 6 readings, this is an INITIATIVE session — directional participants have been repricing all day and structural walls in the trend path are at risk of being run through. If cum_total has CHANGED SIGN across the readings (positive early, negative late, or oscillating), this is a RESPONSIVE session — participants are mean-reverting, structural walls are more reliable, multiple levels can score high. A monotonically decreasing cum_total into the close = sustained initiative selling that will not turn until a dominant absorption wall is found. Use cum_dex_session to confirm or override the Hurst/regime read: Hurst 0.62 but cum_total oscillating = the Hurst is picking up a recent trending stretch but TODAY's flow character is actually responsive. Trust the cumulative delta shape for the current session character.
 - DAY NARRATIVE TILT (when a "day_narrative" block is present — the pre-open macro + open-type call): treat it as a SECONDARY modifier on top of the greek structure, never an override. Modestly RAISE the probability of reversal levels that align with the day's expansion_direction / macro_bias (e.g. in a bullish/up day, support levels that catch dips and become launch points deserve a small lift; the resistance the open-type targets is a more reliable fade). Modestly LOWER counter-trend levels likely to be run through (e.g. a support in a "real_dump" day). Keep the tilt small (a few points) — clean structural confluence still rules, and if the structure contradicts the narrative, trust the structure and say so in the "why". Do not invent levels to fit the narrative.
+- REGIME GOVERNANCE (the "regime" block — the SAME regime read shown on the trader's dashboard. When present it is the HIGHEST-ORDER context and GOVERNS the entire board — NOT a minor tilt). It is computed from price/vol structure independent of the Altaris greeks (Yang-Zhang realized-vol percentile, GARCH forward vol + persistence, VXN variance-risk-premium, Kaufman efficiency ratio, Anis-Lloyd Hurst, persistent-homology topology pivots) — so it is a SECOND OPINION that your greek read must agree with, or you must say why it doesn't.
+  - "state" is the master label and sets the board paradigm:
+    · "RANGE · PINNED" / "GRIND · ORDERLY" → mean-reverting/supported tape: walls hold, fade the edges, MORE levels can score high, lean "clean" at dominant walls. This is the regime where resting limit orders at pivots works best — score with confidence.
+    · "VOL EXPANSION · TREND" / "VOL STRESS · STICKY" → momentum/expansion: RAISE THE BAR HARD. Only the one terminal wall in the trend direction is a clean entry; every intermediate level is a pass-through target, not an entry. Bias reactions to "chop"/"mixed", and do NOT fill the board with counter-trend fades.
+    · "CHOP · UNSTABLE" → whippy two-sided: only the highest-persistence pivots, smaller board, mostly "mixed".
+    · "BALANCED · TRANSITIONAL" → no dominant force; let the greeks lead, keep the board modest.
+  - "vol.rvPercentile" (~3y realized-vol percentile) + "vol.trend": high + expanding = range extends beyond expected_move, walls need more confluence, reactions degrade. low + contracting = compression, tight range, walls hold cleanly. "vol.sticky"/"vol.persistence" near 1 = high vol won't revert intraday; don't assume normalization today.
+  - "impliedVol.premium" (VXN-vs-realized VRP, ranked vs 3y): "rich" = protection overpriced → fades/premium-selling favored, walls more defensible; "cheap" = move under-hedged → continuation, respect breaks over fades. When this disagrees with the per-tick atm_iv-vs-realized read, the regime VRP (longer-horizon) sets the base prior.
+  - "trend.er" (Kaufman ER) + "trend.hurst": er>0.45 or hurst>0.55 = trending (distant walls are targets, favor with-trend); er<0.30 or hurst<0.45 = ranging (walls reliable, fade edges). These corroborate the Altaris Hurst — if they conflict, note it and trust the more extreme reading.
+  - "pivots" — TOPOLOGY SUPPORT/RESISTANCE levels (actual prices) from persistent-homology prominence on intraday price, INDEPENDENT of options structure: prices the market has repeatedly respected by pure price action. When a pivot lines up with an options level (wall/0DTE/charm strike) within ~0.6 pt it is flagged "confluence": true — that is the STRONGEST possible reversal node (price structure AND dealer mechanics agree); ALWAYS give it a top slot. A high-"persistence" pivot with no options confluence is STILL a real level — include it as a candidate even if the greeks are quiet there, and note it's price-structure-derived. Use pivots to break ties and to pin tick-precise levels the raw greeks miss.
+  - Align your top-level "read" with the regime "read"; if you disagree with the regime, say so explicitly and name which signal overrides. When the regime block is null (cloud cache down), fall back to the Altaris gex_regime + Hurst + GARCH + entropy as before.
 - Also output a top-level "read": ONE plain, factual line naming BOTH the resistance and support endpoint of the highest-conviction range — e.g. "Trapped between $750 resistance and $735 support; expect ping-pong between them." No jargon, no "desk/fade/primary order."
 
 OUTPUT FORMAT — CRITICAL:
 Respond with ONLY a single raw JSON object, no prose, no markdown fences. Shape:
 {"as_of":"<string>","spot":<number>,"regime":"<string>","read":"<one plain line naming both range endpoints>","levels":[{"strike":<number>,"reversal_prob":<0-100 integer>,"side":"support"|"resistance","reaction":"clean"|"chop"|"mixed","tags":["<chip>","<chip>"],"why":"<one short line>","target_strike":<number — the far structural level this move runs to>}]}`;
+
+// SYSTEM goes in a temp file (keeps CLI args short, dodges the Windows cmdline limit);
+// the settings file disables plugin/MCP init that otherwise hangs headless scoring calls.
+// Written lazily inside runClaude (not at module load) so an unwritable tmpdir triggers
+// the rule-based fallback instead of crashing the whole process at import time.
+const _SYSTEM_FILE = join(tmpdir(), "altaris-system-prompt.txt");
+const _SETTINGS_FILE = join(tmpdir(), "altaris-scorer-settings.json");
+function ensureScorerFiles(): void {
+  writeFileSync(_SYSTEM_FILE, SYSTEM, "utf8");
+  writeFileSync(_SETTINGS_FILE, JSON.stringify({ enabledPlugins: {}, mcpServers: {} }), "utf8");
+}
 
 const round = (n: number, p = 0) => { const f = 10 ** p; return Math.round(n * f) / f; };
 
@@ -271,6 +299,8 @@ function buildStrikeRows(history: CaptureRecord[], spot: number) {
       vega_m: M(bar(cur, "vex_bar", s)), vanna_m: M(bar(cur, "vanna_bar", s)),
       charm_m: M(bar(cur, "charm_bar", s)), tex_m: M(bar(cur, "tex_bar", s)),
       rho_m: M(bar(cur, "rex_bar", s)),
+      // Dollar premium (calls+puts notional, $M) from /api/ladder — where real money is anchored.
+      premium_m: Math.round(((cur.premium_bar?.[s] ?? 0) / 1e6) * 10) / 10,
       // 0DTE-isolated gamma/charm/vanna — weight these into the close (0DTE dominates pinning).
       gex_0dte_m: M(cur.gex_0dte_bar?.[s] ?? 0),
       charm_0dte_m: M(cur.charm_0dte_bar?.[s] ?? 0),
@@ -358,11 +388,15 @@ function buildKnowledgeContext(cur: DataSnapshot, latest: CaptureRecord): { sour
   return retrieveKnowledge(query, 5);
 }
 
-function buildInput(history: CaptureRecord[], prior: Board | null, detected: DetectedLevel[], session: SessionDef, spot: number, candles?: AltarisCandlesResponse, greek?: GreekTimeseries, dayContext?: DayContext) {
+function buildInput(history: CaptureRecord[], prior: Board | null, detected: DetectedLevel[], session: SessionDef, spot: number, candles?: AltarisCandlesResponse, greek?: GreekTimeseries, dayContext?: DayContext, regime?: RegimeSummary) {
   const cur = history[history.length - 1]!.data;
   return {
     as_of: history[history.length - 1]!.capturedAt,
     day_narrative: dayContext ?? null,
+    // The displayed Regime tab (Yang-Zhang RV percentile, GARCH, VXN VRP, topology S/R pivots).
+    // This is the SAME regime the trader sees — it GOVERNS the board (see REGIME GOVERNANCE in
+    // the system prompt). Null when the cloud cache is unavailable.
+    regime: regime ?? null,
     session: { name: session.name, note: SESSION_NOTES[session.name] },
     lookback_snapshots: history.length,
     spot,
@@ -371,6 +405,8 @@ function buildInput(history: CaptureRecord[], prior: Board | null, detected: Det
     named_levels: {
       call_wall: cur.call_wall, put_wall: cur.put_wall, major_wall: cur.major_wall,
       max_pain: cur.max_pain, zero_gamma: cur.zero_gamma,
+      // net_gex_flip = gamma flip from /api/ladder net positioning; may differ from zero_gamma.
+      net_gex_flip: cur.net_gex_flip ?? null,
       // vol_trigger = near-term (weekly) aggregate; total_vol_trigger = across all expirations.
       // Both matter: spot below vol_trigger = near-term dealers short; below total_vol_trigger = all dealers short.
       vol_trigger: cur.vol_trigger, total_vol_trigger: cur.total_vol_trigger,
@@ -403,6 +439,7 @@ function buildInput(history: CaptureRecord[], prior: Board | null, detected: Det
     entropy: history[history.length - 1]!.entropy ?? null,
     hurst: history[history.length - 1]!.hurst ?? null,
     garch: history[history.length - 1]!.garch ?? null,
+    hedge_pressure: history[history.length - 1]!.hedge_pressure ?? null,
     reference_material: buildKnowledgeContext(cur, history[history.length - 1]!),
     strikes_near_spot: buildStrikeRows(history, spot),
     your_prior_call: prior ? prior.levels.map((l) => ({ strike: l.strike, reversal_prob: l.reversal_prob, side: l.side })) : null,
@@ -436,34 +473,48 @@ function runClaude(userPrompt: string): Promise<string> {
   scorerLocked = true;
 
   return new Promise((resolve, reject) => {
-    const args = [
-      "-p", "--output-format", "json",
-      "--model", config.model,
-      "--system-prompt", SYSTEM,
-      "--disallowed-tools", "*",
-    ];
-    const child = spawn(CLAUDE_BIN, args, { stdio: ["pipe", "pipe", "pipe"] });
     let out = "", err = "", settled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
 
+    // done() is the ONLY place scorerLocked is reset — guarantees it always clears,
+    // including on a synchronous throw in the try block below. Without this, a failure
+    // before the child spawned would leave scorerLocked=true and block every future score.
     function done(fn: () => void) {
       if (settled) return;
       settled = true;
       scorerLocked = false;
-      clearTimeout(timer);
+      if (timer) clearTimeout(timer);
       fn();
     }
 
-    const timer = setTimeout(() => {
-      if (child.pid) killChild(child.pid);
-      done(() => reject(new Error(`claude -p timed out after ${SCORE_TIMEOUT_MS / 1000}s`)));
-    }, SCORE_TIMEOUT_MS);
+    try {
+      ensureScorerFiles(); // (re)write SYSTEM + settings; throw here → fallback, not a crash
+      // Write prompt to a per-pid temp file — avoids Windows stdin pipe-buffer deadlock
+      // (Node's write blocks when the buffer fills before the child reads) and avoids
+      // collisions if two scorer processes ever run concurrently.
+      const promptFile = join(tmpdir(), `altaris-scorer-prompt.${process.pid}.txt`);
+      writeFileSync(promptFile, userPrompt, { encoding: "utf8", mode: 0o600 });
 
-    child.stdout.on("data", (d) => (out += d));
-    child.stderr.on("data", (d) => (err += d));
-    child.on("error", (e) => done(() => reject(new Error(`Could not launch "${CLAUDE_BIN}". Is Claude Code installed/on PATH? ${e.message}`))));
-    child.on("close", (code) => done(() => code === 0 ? resolve(out) : reject(new Error(`claude exited ${code}: ${err.slice(0, 500)}`))));
-    child.stdin.write(userPrompt);
-    child.stdin.end();
+      // Spawn via PowerShell piping the file into claude — mirrors the shell invocation
+      // that works reliably (Get-Content file | claude -p ...).
+      // All interpolated values are internal paths/constants, never user input.
+      const psCmd = `Get-Content -Raw "${promptFile}" | & "${CLAUDE_BIN}" -p --output-format json --model "${config.model}" --system-prompt-file "${_SYSTEM_FILE}" --disallowed-tools "*" --settings "${_SETTINGS_FILE}"`;
+      const child = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", psCmd], {
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+
+      timer = setTimeout(() => {
+        if (child.pid) killChild(child.pid);
+        done(() => reject(new Error(`claude -p timed out after ${SCORE_TIMEOUT_MS / 1000}s`)));
+      }, SCORE_TIMEOUT_MS);
+
+      child.stdout.on("data", (d) => (out += d));
+      child.stderr.on("data", (d) => (err += d));
+      child.on("error", (e) => done(() => reject(new Error(`Could not launch scorer: ${e.message}`))));
+      child.on("close", (code) => done(() => code === 0 ? resolve(out) : reject(new Error(`claude exited ${code}: ${err.slice(0, 500)}`))));
+    } catch (e) {
+      done(() => reject(e instanceof Error ? e : new Error(String(e))));
+    }
   });
 }
 
@@ -477,7 +528,16 @@ function parseBoard(cliStdout: string): Board {
   const start = text.indexOf("{");
   const end = text.lastIndexOf("}");
   if (start === -1 || end === -1) throw new Error(`No JSON object in model output: ${text.slice(0, 300)}`);
-  return JSON.parse(text.slice(start, end + 1)) as Board;
+  const board = JSON.parse(text.slice(start, end + 1)) as Board;
+  // Validate it's actually a board, not a refusal/usage-limit/error object that happens
+  // to be valid JSON. Without this, an empty-levels board gets tagged "ai" and published,
+  // never triggering the rule-based fallback — a silent zero-levels dashboard.
+  if (!Array.isArray(board.levels) || board.levels.length === 0) {
+    throw new Error(`Model output has no levels (likely a refusal or error): ${text.slice(0, 300)}`);
+  }
+  const bad = board.levels.find((l) => typeof l?.strike !== "number" || typeof l?.reversal_prob !== "number");
+  if (bad) throw new Error(`Model output has malformed level: ${JSON.stringify(bad).slice(0, 200)}`);
+  return board;
 }
 
 /** Score the board via Claude Code. `history` is chronological (oldest..current). */
@@ -489,13 +549,14 @@ export async function scoreBoard(
   spot: number,
   greek?: GreekTimeseries,
   dayContext?: DayContext,
+  regime?: RegimeSummary,
 ): Promise<Board> {
   // Fetch Altaris candle context for US session; fail gracefully for fixture runs / Asia.
   let candles: AltarisCandlesResponse | undefined;
   if (session.source === "QQQ") {
     try { candles = await fetchCandles(1); } catch { /* non-fatal */ }
   }
-  const input = buildInput(history, prior, detected, session, spot, candles, greek, dayContext);
+  const input = buildInput(history, prior, detected, session, spot, candles, greek, dayContext, regime);
   const board = parseBoard(await runClaude(JSON.stringify(input)));
 
   const cur = history[history.length - 1]!.data;
@@ -529,7 +590,7 @@ export async function scoreBoard(
 // GEX threshold for unlisted strikes to count as structural walls (mirrors run.ts).
 const GEX_RULE_THRESHOLD = 50e6;
 
-type NamedSets = Record<"major_wall" | "call_wall" | "put_wall" | "call_walls" | "put_walls" | "zero_gamma" | "vol_trigger" | "max_pain", Set<number>>;
+type NamedSets = Record<"major_wall" | "call_wall" | "put_wall" | "call_walls" | "put_walls" | "zero_gamma" | "vol_trigger" | "max_pain" | "net_gex_flip", Set<number>>;
 
 /** Named-level sets used for the confluence bonus + tag generation. */
 function namedSets(cur: DataSnapshot): NamedSets {
@@ -541,6 +602,7 @@ function namedSets(cur: DataSnapshot): NamedSets {
     call_walls: new Set(cur.call_walls),
     put_walls: new Set(cur.put_walls),
     zero_gamma: new Set([cur.zero_gamma].filter(fin)),
+    net_gex_flip: new Set(([cur.net_gex_flip] as (number | undefined)[]).filter((n): n is number => typeof n === "number" && Number.isFinite(n) && n > 0)),
     vol_trigger: new Set([cur.vol_trigger].filter(fin)),
     max_pain: new Set([cur.max_pain].filter(fin)),
   };
@@ -575,7 +637,7 @@ function scoreStrike(cur: DataSnapshot, k: number, spot: number, ns: NamedSets, 
   if (ns.major_wall.has(k)) nameScore = 40;
   else if (ns.call_wall.has(k) || ns.put_wall.has(k)) nameScore = 35;
   else if (ns.call_walls.has(k) || ns.put_walls.has(k)) nameScore = 22;
-  else if (ns.zero_gamma.has(k) || ns.vol_trigger.has(k)) nameScore = 15;
+  else if (ns.zero_gamma.has(k) || ns.vol_trigger.has(k) || ns.net_gex_flip.has(k)) nameScore = 15;
   else if (ns.max_pain.has(k)) nameScore = 12;
 
   const gexScore = Math.min(25, Math.log1p(Math.abs(M(gex))) * 5);
@@ -588,6 +650,9 @@ function scoreStrike(cur: DataSnapshot, k: number, spot: number, ns: NamedSets, 
   const gex0 = cur.gex_0dte_bar?.[s] ?? 0, charm0 = cur.charm_0dte_bar?.[s] ?? 0;
   const dte0Mag = Math.abs(M(gex0)) + Math.abs(M(charm0));
   const dte0Score = Math.min(10, Math.log1p(dte0Mag / 50) * 2.5);
+
+  // DOLLAR PREMIUM: large notional anchored here = real participants defending this price (0-8, modest).
+  const premiumScore = Math.min(8, Math.log1p((cur.premium_bar?.[s] ?? 0) / 1e6) * 1.5);
 
   // OI BUILDING day-over-day on the relevant side (puts at a support, calls at a resistance) = wall
   // being reinforced overnight (0-6, modest). Shrinking OI gives nothing — it's weakening.
@@ -603,7 +668,7 @@ function scoreStrike(cur: DataSnapshot, k: number, spot: number, ns: NamedSets, 
   const shadowGammaBoost = (side === "support" && riskRev != null && riskRev > 0)
     ? Math.min(6, riskRev * 0.8) : 0;
 
-  const score = nameScore + gexScore + oiScore + charmScore + activityScore + skewScore + dte0Score + oiBuildScore + shadowGammaBoost;
+  const score = nameScore + gexScore + oiScore + charmScore + activityScore + skewScore + dte0Score + oiBuildScore + shadowGammaBoost + premiumScore;
 
   const tags: string[] = [];
   if (ns.major_wall.has(k)) tags.push("Major Wall");
@@ -612,6 +677,7 @@ function scoreStrike(cur: DataSnapshot, k: number, spot: number, ns: NamedSets, 
   if (ns.call_walls.has(k) && !tags.some((t) => t.includes("Call"))) tags.push("Call Wall");
   if (ns.put_walls.has(k) && !tags.some((t) => t.includes("Put"))) tags.push("Put Wall");
   if (ns.zero_gamma.has(k)) tags.push("Zero Gamma");
+  if (ns.net_gex_flip.has(k)) tags.push("Net GEX Flip");
   if (ns.vol_trigger.has(k)) tags.push("Vol Trigger");
   if (ns.max_pain.has(k)) tags.push("Max Pain");
   const gexAbs = Math.abs(M(gex));
@@ -631,7 +697,7 @@ function scoreStrike(cur: DataSnapshot, k: number, spot: number, ns: NamedSets, 
   let reaction: "clean" | "chop" | "mixed";
   if (vrpNegative && nameScore < 35) reaction = "mixed";
   else if ((nameScore >= 35 && gexAbs >= 100) || dte0Score >= 7 || (gexAbs >= 50 && dte0Score >= 5)) reaction = "clean";
-  else if (ns.zero_gamma.has(k) || ns.vol_trigger.has(k) || ns.max_pain.has(k)) reaction = "chop";
+  else if (ns.zero_gamma.has(k) || ns.net_gex_flip.has(k) || ns.vol_trigger.has(k) || ns.max_pain.has(k)) reaction = "chop";
   else reaction = "mixed";
 
   return { strike: k, score, side, tags: tags.slice(0, 4), reaction, gex, oi };

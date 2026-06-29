@@ -5,6 +5,16 @@ import type { Bar } from "./types.js";
 
 const yf = new YahooFinance();
 
+/** Reject if a promise doesn't settle within ms — guards against a hung Yahoo request. */
+function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms).unref?.(),
+    ),
+  ]);
+}
+
 function etDate(d: Date): string {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: config.sessionTz, year: "numeric", month: "2-digit", day: "2-digit",
@@ -34,7 +44,10 @@ interface RawBar { date: Date; open: number; high: number; low: number; close: n
 async function fetchRaw(symbol: string, lookbackHours: number): Promise<RawBar[]> {
   const now = new Date();
   const start = new Date(now.getTime() - lookbackHours * 3600 * 1000);
-  const res = await yf.chart(symbol, { period1: start, period2: now, interval: config.marketInterval as "1m" });
+  const res = await withTimeout(
+    yf.chart(symbol, { period1: start, period2: now, interval: config.marketInterval as "1m" }),
+    config.fetchTimeoutMs, `Yahoo chart ${symbol}`,
+  );
   return res.quotes
     .filter((r) => r.high != null && r.low != null && r.open != null && r.close != null)
     .map((r) => ({ date: r.date, open: r.open!, high: r.high!, low: r.low!, close: r.close!, volume: r.volume ?? 0 }));

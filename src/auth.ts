@@ -53,6 +53,9 @@ async function doLogin(): Promise<string> {
     method: "POST",
     headers: LOGIN_HEADERS,
     body: JSON.stringify({ email: config.altarisUser, password: config.altarisPass }),
+    // Login is single-flight: if it hangs, every endpoint awaiting refreshCookie hangs
+    // with it. A timeout keeps a stalled login from freezing the whole capture.
+    signal: AbortSignal.timeout(config.fetchTimeoutMs),
   });
   if (!res.ok) {
     const body = await res.text().catch(() => "");

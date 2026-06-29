@@ -10,7 +10,7 @@ import { buildNarrative, narrativeJsonPath, writeNarrative } from "./narrative.j
 import { deploySite, publish } from "./publish.js";
 import { dayContextFromNarrative, scoreBoard, scoreBoardDeterministic } from "./score.js";
 import { fetchCloudCaptures, type CloudTick } from "./cloudCaptures.js";
-import type { Board, CaptureRecord, DataSnapshot, DetectedLevel, GreekTimeseries, Narrative } from "./types.js";
+import type { Board, CaptureRecord, DataSnapshot, DetectedLevel, GreekTimeseries, Narrative, RegimeSummary } from "./types.js";
 
 /** ~90 min of context at a 15-min cadence — enough to read trend without diluting deltas. */
 const LOOKBACK = 6;
@@ -20,7 +20,7 @@ const LOOKBACK = 6;
 const LOCK_FILE = path.join(path.resolve("data", "scored"), ".scoring.lock");
 
 async function acquireLock(): Promise<boolean> {
-  // Check for a stale lock from a dead process before trying to create a fresh one.
+  // Check for an existing lock; reclaim it if it's stale (dead process or too old).
   try {
     const existing = JSON.parse(await fs.readFile(LOCK_FILE, "utf8")) as { pid: number; ts: number };
     const ageMs = Date.now() - existing.ts;
@@ -29,11 +29,16 @@ async function acquireLock(): Promise<boolean> {
         process.kill(existing.pid, 0); // throws if PID is gone
         return false; // lock is held by a live process
       } catch {
-        // stale lock — dead process, fall through to take it
+        // dead process — fall through to reclaim
       }
     }
+    // Stale lock (dead PID or older than 2 intervals): unlink it so the O_EXCL
+    // create below can succeed. Without this, a lock left by a killed/crashed
+    // process deadlocks every future tick — open("wx") keeps failing with EEXIST.
+    await fs.unlink(LOCK_FILE).catch(() => {});
+    console.warn(`[${new Date().toISOString()}] reclaimed stale scoring lock (pid ${existing.pid}, age ${Math.round(ageMs / 1000)}s)`);
   } catch {
-    // no lock file exists yet
+    // no lock file exists yet (or it was unreadable) — proceed to create
   }
   try {
     const fh = await open(LOCK_FILE, "wx"); // O_EXCL: fails if file already exists
@@ -89,6 +94,24 @@ async function loadLatestBoardAny(): Promise<Board | null> {
 }
 
 /** Today's pre-open narrative, if one was generated for this date (used to tilt scoring). */
+/**
+ * Read the cloud Regime tab's latest output from Netlify Blobs (the SAME data the dashboard
+ * shows). Fed to the AI scorer so the displayed regime governs the board. Best-effort: if
+ * Blobs creds are missing or the cache is empty, returns null and scoring proceeds without it.
+ */
+async function loadRegime(): Promise<RegimeSummary | null> {
+  const siteID = process.env.NETLIFY_SITE_ID?.trim();
+  const token = process.env.NETLIFY_AUTH_TOKEN?.trim();
+  if (!siteID || !token) return null;
+  try {
+    const r = await getStore({ name: "regime-cache", siteID, token }).get("latest", { type: "json" }) as RegimeSummary | null;
+    return r && Array.isArray(r.pivots) ? r : null;
+  } catch (err) {
+    console.warn("regime read failed (scoring continues without it):", err instanceof Error ? err.message : err);
+    return null;
+  }
+}
+
 async function loadTodayNarrative(date: string): Promise<Narrative | null> {
   try {
     const n = JSON.parse(await fs.readFile(narrativeJsonPath, "utf8")) as Narrative;
@@ -156,20 +179,25 @@ async function scoreFromHistory(date: string, history: CaptureRecord[], session:
   const prior = opts.prior !== undefined ? opts.prior : await loadLatestBoard(date);
 
   const candidateStrikes = [...named(cur), ...(prior?.levels.map((l) => l.strike) ?? [])];
-  const [detected, spot, greek, narrative] = await Promise.all([
+  const [detected, spot, greek, narrative, regime] = await Promise.all([
     detectForSession(session, candidateStrikes, date),
     effectiveSpot(session, cur.spot),
     opts.greek !== undefined ? Promise.resolve(opts.greek) : loadDayGreek(date),
     loadTodayNarrative(date),
+    isAiScoreTime() ? loadRegime() : Promise.resolve(null), // regime only feeds the AI pass
   ]);
   const dayContext = dayContextFromNarrative(narrative); // tilt scoring toward the pre-open call
 
   let board: Board;
   if (isAiScoreTime()) {
     try {
-      board = await scoreBoard(history.slice(-LOOKBACK), prior, detected, session, spot, greek ?? undefined, dayContext);
+      board = await scoreBoard(history.slice(-LOOKBACK), prior, detected, session, spot, greek ?? undefined, dayContext, regime ?? undefined);
     } catch (err) {
       console.warn("AI scoring failed, falling back to rule-based scorer:", err instanceof Error ? err.message : err);
+      // Persist the full error so recurring fallbacks are diagnosable after the fact,
+      // even when the scheduled task doesn't capture stdout/stderr.
+      const detail = `[${new Date().toISOString()}] [${session.name}] AI scoring failed:\n${err instanceof Error ? (err.stack ?? err.message) : String(err)}\n\n`;
+      await fs.appendFile(path.join(config.paths.scored, "scoring-errors.log"), detail, "utf8").catch(() => {});
       board = await scoreBoardDeterministic(history.slice(-LOOKBACK), prior, detected, session, spot);
     }
   } else {

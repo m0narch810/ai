@@ -46,8 +46,9 @@ export const config = {
   sessionTz: process.env.SESSION_TZ?.trim() || "America/New_York",
   sessionStart: process.env.SESSION_START?.trim() || "08:30",
   sessionEnd: process.env.SESSION_END?.trim() || "17:00",
-  // Asia overnight window (ET, wraps midnight). Price comes from NQ futures, converted to QQQ.
-  asiaStart: process.env.ASIA_START?.trim() || "20:00",
+  // Asia overnight window (ET, wraps midnight). Starts at 18:00 ET (NQ maintenance ends,
+  // futures open) so spot + rule scoring are live as soon as NQ is tradeable.
+  asiaStart: process.env.ASIA_START?.trim() || "18:00",
   asiaEnd: process.env.ASIA_END?.trim() || "04:00",
   scoreIntervalMin: num("SCORE_INTERVAL_MIN", 15),
   // AI re-scoring runs RTH only (Mon–Fri 09:15–16:00 ET). Outside this the loop holds the
@@ -60,6 +61,11 @@ export const config = {
   // Scoring runs through Claude Code headless on the Max subscription — no API key.
   // model is a CLI alias ("opus"/"sonnet") or a full id.
   model: process.env.ANTHROPIC_MODEL?.trim() || "sonnet",
+
+  // Per-request HTTP timeout (ms) for ALL outbound fetches (Altaris, login, Yahoo).
+  // Without this, a fetch that connects but never responds hangs the whole capture
+  // forever and holds the scoring lock — the historical cause of stalled ticks.
+  fetchTimeoutMs: num("FETCH_TIMEOUT_MS", 20000),
 
   // Let the (once-per-day, pre-open) narrative pass use WebSearch/WebFetch to read live
   // breaking macro/geopolitics (Fed commentary, oil shocks). The per-tick scorer stays
@@ -139,7 +145,7 @@ export interface SessionDef {
 /**
  * Which trading session (if any) is active now.
  *  US   — Mon–Fri 08:30–17:00 ET; price/levels from QQQ directly.
- *  Asia — Sun–Thu evenings 20:00 → Mon–Fri 04:00 ET; QQQ is stale, price from NQ futures converted.
+ *  Asia — Sun–Thu evenings 18:00 → Mon–Fri 04:00 ET; QQQ is stale, price from NQ futures converted.
  */
 export function activeSession(d = new Date()): SessionDef | null {
   const wd = etWeekday(d);
