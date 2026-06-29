@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { config, nowInSessionTz } from "./config.js";
 import { compactEntropy, compactGarch, compactHedgePressure, compactHurst, compactLadder, fetchData, fetchEntropy, fetchGarch, fetchGreekTimeseries, fetchHedgePressure, fetchHurst, fetchIvTracker, fetchLadder, fetchOiChange, fetchVolSkewMulti } from "./altaris.js";
-import type { CaptureRecord, DataSnapshot, GreekTimeseries, IvSummary, OiChangeResponse, StrikeMap, StrikePair, VolSkewResponse } from "./types.js";
+import type { CaptureRecord, DataSnapshot, GreekTimeseries, IvSummary, OiChangeResponse, StrikeMap, StrikePair, TermBuckets, VolSkewResponse } from "./types.js";
 
 interface Heatmap { expirations?: { label: string; dte: number }[]; rows?: { strike: number; cells: number[] }[] }
 
@@ -28,6 +28,25 @@ function zeroDteSlice(hm: Heatmap | undefined): StrikeMap<number> {
   }
   const out: StrikeMap<number> = {};
   for (const r of hm.rows) out[r.strike.toFixed(1)] = r.cells?.[idx] ?? 0;
+  return out;
+}
+
+/**
+ * Split a strike×expiration heatmap into per-strike TENOR buckets instead of one total:
+ * d0 = same-day (0DTE), w1 = this week (1-7 DTE), w2 = next week (8-14 DTE), m = 15+ DTE.
+ * Surfaces where a level's gamma/charm sits in TIME — a same-day pin that fades vs durable structure.
+ */
+function bucketHmByDte(hm: Heatmap | undefined): StrikeMap<TermBuckets> {
+  const exps = hm?.expirations;
+  if (!exps?.length || !hm?.rows) return {};
+  const bucketOf: (keyof TermBuckets)[] = exps.map((e) =>
+    e.dte <= 0 ? "d0" : e.dte <= 7 ? "w1" : e.dte <= 14 ? "w2" : "m");
+  const out: StrikeMap<TermBuckets> = {};
+  for (const r of hm.rows) {
+    const b: TermBuckets = { d0: 0, w1: 0, w2: 0, m: 0 };
+    r.cells?.forEach((c, i) => { const k = bucketOf[i]; if (k) b[k] += c ?? 0; });
+    out[r.strike.toFixed(1)] = b;
+  }
   return out;
 }
 
@@ -66,6 +85,10 @@ export function compactSnapshot(raw: DataSnapshot & Record<string, unknown>): Da
     gex_0dte_bar,
     charm_0dte_bar: zeroDteSlice(raw.cex_hm as Heatmap),
     vanna_0dte_bar: zeroDteSlice(raw.vannex_hm as Heatmap),
+    // Per-strike gamma & charm split by tenor (0DTE / this-week / next-week / monthly+) so the
+    // scorer can read term structure: a same-day pin that fades vs durable multi-expiry structure.
+    gex_term: bucketHmByDte(raw.gex_hm as Heatmap),
+    charm_term: bucketHmByDte(raw.cex_hm as Heatmap),
     atm_iv: raw.atm_iv, expected_move: raw.expected_move, atm_iv_avg: raw.atm_iv_avg,
     gex_regime: raw.gex_regime, realized_vol: raw.realized_vol, net_vanna: raw.net_vanna,
     pc_ratio,

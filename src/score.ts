@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { fetchCandles } from "./altaris.js";
 import { config, type SessionDef } from "./config.js";
 import { retrieveKnowledge } from "./knowledge.js";
-import type { AltarisCandlesResponse, Board, CaptureRecord, CoverageLevel, DataSnapshot, DetectedLevel, GreekTimeseries, Narrative, RegimeSummary, ScoredLevel } from "./types.js";
+import type { AltarisCandlesResponse, Board, CaptureRecord, CoverageLevel, DataSnapshot, DetectedLevel, GreekTimeseries, Narrative, RegimeSummary, ScoredLevel, TermBuckets } from "./types.js";
 
 /** Compact pre-open call fed into the board scorer to tilt probabilities (see SYSTEM). */
 export interface DayContext {
@@ -112,6 +112,11 @@ Definitions and rules — follow exactly:
   - The skew tape is jumpy near ATM — treat a single noisy print cautiously; trust a bump that lines up with other confluence (a wall, heavy OI, charm) far more than one standing alone.
 - SHADOW GAMMA — why skew calibrates dealer exposure beyond what GEX shows: standard options models compute dealer gamma assuming vol stays constant as price moves. For equity indices this assumption is structurally wrong — realized vol rises when price falls and is comparatively stable when price rises. The IV skew on the chain is the market's real-time estimate of this asymmetric vol response: the OTM put IV at a given strike is approximately the vol the market expects if spot falls to that level. This means dealers' actual delta-hedge rebalancing on a downside move is always larger than the model gamma predicts — they must buy more aggressively at a support than the raw GEX number shows, because as price falls, their short-put delta exposure grows faster than the static vol assumption captures. The practical read: when put skew is steep (large positive risk_reversal), the shadow-gamma gap is wide and downside walls are mechanically stronger than GEX alone implies — the forced dealer buying at a major put support is larger than the snapshot shows. When put skew is flat or near zero, GEX is nearly the full story and there is no extra hidden support. When evaluating any support wall, read positive risk_reversal as evidence that the wall is MORE defensible than its raw GEX suggests; a flat or negative risk_reversal means trust the GEX at face value. This is not a multiplier — it is a qualitative calibration of how hard dealers are actually forced to defend a given support level beyond what the model shows.
 - 0DTE ISOLATION — the "gex_0dte_m", "charm_0dte_m", "vanna_0dte_m" per-strike fields are the SAME-DAY-expiry slice of gamma/charm/vanna, separated out from the all-expiration "*_m" bars. This is the slice that actually pins price to the tick. WEIGHT IT BY THE CLOCK: as minutes_to_cash_close drops (last 1-2 hours), 0DTE positioning DOMINATES — a strike with huge 0DTE gamma/charm is the pin that holds hardest and cleanest into the close; lean on the 0DTE numbers far more than the all-expiration aggregate there. Early/mid-session 0DTE is one input among many. A strike whose strength is mostly 0DTE will fade after the close; one with strength across expirations is more durable — say which it is.
+- GAMMA / CHARM TERM STRUCTURE — "gex_term_m" and "charm_term_m" are 4-element arrays giving the greek's $M split BY TIME-TO-EXPIRY: [0DTE, this-week (1-7 DTE), next-week (8-14 DTE), monthly (15+ DTE)]. This is the single most important refinement to how you read a level's durability: TWO STRIKES WITH IDENTICAL TOTAL gex_m CAN MEAN OPPOSITE THINGS depending on where that gamma sits in time. Read it as follows:
+  - FRONT-LOADED (most of |gex_term_m| in slot 0 / 0DTE) = a SAME-DAY PIN. It holds hard and to-the-tick TODAY, especially as minutes_to_cash_close drops, but it EVAPORATES after today's close — do not treat it as durable structure or rest an order there for a multi-day thesis. Best for an intraday reversal taken and closed today; call its reaction "clean" into the cash close, but note it is a today-only level.
+  - BACK-LOADED (weight in slots 2-3 / next-week + monthly, little in 0DTE) = DURABLE STRUCTURE. Dealers are hedging this across expirations, so the wall persists across sessions and is the more reliable level to rest a standing limit order at over multiple days. It may NOT pin as tightly to the tick intraday (less 0DTE concentration), so its reaction is more often "mixed" unless OI/charm confluence is heavy — but it survives.
+  - BALANCED (spread across tenors) = both an intraday pin AND durable structure — the strongest kind of wall; lead the board with it.
+  - In your "why", SAY which kind it is when it matters (e.g. "0DTE-front-loaded pin, fades after today" vs "back-loaded monthly wall, durable"). The clock interacts with this: late in the session lean on front-loaded 0DTE pins; early session and for any multi-day level lean on the back-loaded structure. The charm term array tells you the same for time-decay flows — front-loaded charm accelerates HARD into today's close, back-loaded charm is a slower multi-session drift. This term-structure read SUPERSEDES the single gex_0dte_m vs gex_m comparison — it is the full tenor ladder, use it.
 - OI BUILDING — the "d_oi_day_calls"/"d_oi_day_puts" fields are DAY-OVER-DAY OI change (today vs prior close), distinct from the intraday "d_oi_*". Positive = contracts ADDED overnight/today; this is where new positioning is being laid. Puts growing at/below spot = support being reinforced; calls growing above = resistance building. A wall with growing OI is STRENGTHENING (more reliable hold); one with shrinking OI is being unwound (weakening — de-rate it even if its standing OI is still large).
 - "premium_m" ($M, total dollar premium = calls+puts notional at this strike from the ladder): where the real money is anchored. A strike with high premium_m has significant capital with its P&L anchored at this price; those participants have strong incentive to defend or react here. Treat it as a moderate confluence factor similar to OI mass — it complements GEX (a named wall with stacked premium_m is more credible; a ghost wall with near-zero premium_m is less so).
 - The DELTAS (d_*) matter as much as the levels: a level strengthens when its |gex| is growing, weakens when |gex| is shrinking. For call walls (positive gex): d_gex positive = strengthening, d_gex negative = weakening. For put walls (negative gex): d_gex MORE NEGATIVE = strengthening, d_gex toward zero or positive = weakening. Same logic applies to d_charm — for put walls, charm building means d_charm more negative (wall gaining bullish dealer-buy force); for call walls, d_charm more negative = wall gaining bearish dealer-sell force. Weigh the trend, not just the snapshot.
@@ -267,6 +272,11 @@ function skewBump(cur: DataSnapshot, k: number): number {
   return rel > 0.08 ? Math.min(8, (rel - 0.08) * 20) : 0;
 }
 
+/** A strike's tenor buckets as a compact [0DTE, this-week, next-week, monthly+] array (converted). */
+function termArr(t: TermBuckets | undefined, conv: (n: number) => number): [number, number, number, number] {
+  return [conv(t?.d0 ?? 0), conv(t?.w1 ?? 0), conv(t?.w2 ?? 0), conv(t?.m ?? 0)];
+}
+
 /** Per-strike near-spot rows with deltas vs the oldest snapshot in the lookback window. */
 function buildStrikeRows(history: CaptureRecord[], spot: number) {
   const cur = history[history.length - 1]!.data;
@@ -305,6 +315,11 @@ function buildStrikeRows(history: CaptureRecord[], spot: number) {
       gex_0dte_m: M(cur.gex_0dte_bar?.[s] ?? 0),
       charm_0dte_m: M(cur.charm_0dte_bar?.[s] ?? 0),
       vanna_0dte_m: M(cur.vanna_0dte_bar?.[s] ?? 0),
+      // TERM STRUCTURE ($M by tenor): [0DTE, this-week 1-7d, next-week 8-14d, monthly 15d+].
+      // Same total gex means different things by tenor — a d0-heavy strike pins today then fades;
+      // a strike weighted to later tenors is durable structure. See GAMMA/CHARM TERM STRUCTURE.
+      gex_term_m: termArr(cur.gex_term?.[s], M),
+      charm_term_m: termArr(cur.charm_term?.[s], M),
       // Per-strike IV from the skew + how elevated it sits vs ATM (a local bump = demand/defense here).
       iv: iv != null ? round(iv, 2) : null,
       iv_vs_atm: iv != null && atmIv != null ? round(iv - atmIv, 2) : null,

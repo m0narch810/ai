@@ -10,6 +10,19 @@ export interface StrikePair {
 /** Maps keyed by strike-as-string (e.g. "729.0"). */
 export type StrikeMap<T> = Record<string, T>;
 
+/**
+ * A greek's exposure at one strike, split by time-to-expiry instead of collapsed to a single
+ * total. Same total GEX means very different things by tenor: a strike whose gamma is mostly d0
+ * pins hard TODAY then evaporates; the same number sitting in `m` (monthly+) is durable structure.
+ * d0 = same-day (0DTE), w1 = this week (1-7 DTE), w2 = next week (8-14 DTE), m = 15+ DTE.
+ */
+export interface TermBuckets {
+  d0: number;
+  w1: number;
+  w2: number;
+  m: number;
+}
+
 /** The subset of /api/data we persist and use. The *_hm heatmaps are dropped. */
 export interface DataSnapshot {
   ticker: string;
@@ -65,6 +78,13 @@ export interface DataSnapshot {
   gex_0dte_bar?: StrikeMap<number>;
   charm_0dte_bar?: StrikeMap<number>;
   vanna_0dte_bar?: StrikeMap<number>;
+  /**
+   * Per-strike gamma & charm exposure split by tenor (0DTE / this-week / next-week / monthly+),
+   * from the raw strike×expiration heatmaps (gex_hm / cex_hm). Lets the scorer read the TERM
+   * STRUCTURE of a level — durable multi-expiry structure vs a same-day pin that fades after today.
+   */
+  gex_term?: StrikeMap<TermBuckets>;
+  charm_term?: StrikeMap<TermBuckets>;
   /** Day-over-day OI change per strike (calls/puts) from /api/oi_change — where walls are BUILDING. */
   oi_day_bar?: StrikeMap<StrikePair>;
   /**

@@ -103,6 +103,19 @@ function zeroDteSlice(hm) {
   for (const r of hm.rows) out[r.strike.toFixed(1)] = r.cells?.[idx] ?? 0;
   return out;
 }
+/** Per-strike gamma/charm split by tenor: d0 (0DTE), w1 (1-7 DTE), w2 (8-14 DTE), m (15+ DTE). */
+function bucketHmByDte(hm) {
+  const exps = hm?.expirations;
+  if (!exps?.length || !hm?.rows) return {};
+  const bucketOf = exps.map((e) => (e.dte <= 0 ? "d0" : e.dte <= 7 ? "w1" : e.dte <= 14 ? "w2" : "m"));
+  const out = {};
+  for (const r of hm.rows) {
+    const b = { d0: 0, w1: 0, w2: 0, m: 0 };
+    r.cells?.forEach((c, i) => { const k = bucketOf[i]; if (k) b[k] += c ?? 0; });
+    out[r.strike.toFixed(1)] = b;
+  }
+  return out;
+}
 /** Day-over-day OI change (calls/puts) per strike from /api/oi_change. */
 function oiChangeToBar(oc) {
   if (!oc?.has_previous || !Array.isArray(oc.nodes) || !oc.nodes.length) return undefined;
@@ -132,6 +145,7 @@ function compactSnapshot(raw) {
     gex_bar: raw.gex_bar, dex_bar: raw.dex_bar, vex_bar: raw.vex_bar, rex_bar: raw.rex_bar,
     charm_bar: aggregateHm(raw.cex_hm), tex_bar: aggregateHm(raw.tex_hm), vanna_bar: aggregateHm(raw.vannex_hm),
     gex_0dte_bar, charm_0dte_bar: zeroDteSlice(raw.cex_hm), vanna_0dte_bar: zeroDteSlice(raw.vannex_hm),
+    gex_term: bucketHmByDte(raw.gex_hm), charm_term: bucketHmByDte(raw.cex_hm),
     atm_iv: raw.atm_iv, expected_move: raw.expected_move, atm_iv_avg: raw.atm_iv_avg,
     gex_regime: raw.gex_regime, realized_vol: raw.realized_vol, net_vanna: raw.net_vanna,
     pc_ratio,
