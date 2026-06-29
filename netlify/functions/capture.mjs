@@ -20,6 +20,9 @@ import { connectLambda, getStore } from "@netlify/blobs";
 const BASE = (process.env.ALTARIS_BASE_URL?.trim() || "https://altaris.up.railway.app/api").replace(/\/$/, "");
 const USER = process.env.ALTARIS_USER?.trim();
 const PASS = process.env.ALTARIS_PASS?.trim();
+// Per-request timeout: a connected-but-silent endpoint must not hang the whole scheduled
+// invocation (mirrors config.fetchTimeoutMs in the local loop).
+const FETCH_TIMEOUT_MS = 20000;
 
 const LOGIN_HEADERS = {
   accept: "application/json",
@@ -69,6 +72,7 @@ async function login() {
   const res = await fetch(`${BASE}/login`, {
     method: "POST", headers: LOGIN_HEADERS,
     body: JSON.stringify({ email: USER, password: PASS }),
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
   if (!res.ok) throw new Error(`Altaris login HTTP ${res.status}: ${(await res.text().catch(() => "")).slice(0, 160)}`);
   const cookie = extractCookie(res);
@@ -77,7 +81,7 @@ async function login() {
 }
 
 async function getJson(endpoint, cookie) {
-  const res = await fetch(`${BASE}/${endpoint}`, { headers: { ...BROWSER_HEADERS, cookie } });
+  const res = await fetch(`${BASE}/${endpoint}`, { headers: { ...BROWSER_HEADERS, cookie }, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
   if (!res.ok) throw new Error(`GET ${endpoint} HTTP ${res.status}`);
   return res.json();
 }
@@ -154,6 +158,26 @@ function summarizeIv(iv) {
   };
 }
 
+/** Extract net_gex_flip and premium_bar from /api/ladder (mirrors compactLadder in src/altaris.ts). */
+function compactLadder(raw) {
+  const levels = raw?.levels;
+  const net_gex_flip = typeof levels?.net_gex_flip === "number" && Number.isFinite(levels.net_gex_flip)
+    ? levels.net_gex_flip : null;
+  const premium_bar = {};
+  for (const [k, v] of Object.entries(raw?.premium ?? {})) {
+    if (typeof v?.net === "number" && Number.isFinite(v.net)) premium_bar[k] = v.net;
+  }
+  return { net_gex_flip, premium_bar };
+}
+/** Distil /api/hedge_pressure to the compact summary (no timeseries). */
+function compactHedgePressure(raw) {
+  return {
+    score: raw.score, label: raw.label, sensitivity: raw.sensitivity,
+    gamma_pct: raw.gamma_pct, vanna_pct: raw.vanna_pct, charm_pct: raw.charm_pct,
+    momentum: raw.momentum, acceleration: raw.acceleration,
+  };
+}
+
 export const handler = async (event) => {
   connectLambda(event); // wire Blobs context (classic Lambda-signature function)
   const t = etParts();
@@ -162,21 +186,29 @@ export const handler = async (event) => {
 
   try {
     const cookie = await login();
-    const [data, greek, ivRaw, skewRaw, oiChangeRaw] = await Promise.all([
+    const [data, greek, ivRaw, skewRaw, oiChangeRaw, ladderRaw, hedgeRaw] = await Promise.all([
       getJson("data", cookie),
       getJson("greek_timeseries", cookie),
       getJson("iv_tracker", cookie).catch(() => null), // IV is enrichment; don't fail the tick on it
       getJson("vol_skew_multi", cookie).catch(() => null), // per-strike IV skew is enrichment too
       getJson("oi_change", cookie).catch(() => null), // day-over-day OI change is enrichment too
+      getJson("ladder", cookie).catch(() => null), // net_gex_flip + premium per strike
+      getJson("hedge_pressure", cookie).catch(() => null), // dealer hedge flow: sensitivity, score, momentum
     ]);
     const compact = compactSnapshot(data);
     compact.iv_skew = skewToStrikeMap(skewRaw);
     compact.oi_day_bar = oiChangeToBar(oiChangeRaw);
+    if (ladderRaw) {
+      const ladder = compactLadder(ladderRaw);
+      if (ladder.net_gex_flip != null) compact.net_gex_flip = ladder.net_gex_flip;
+      if (Object.keys(ladder.premium_bar).length) compact.premium_bar = ladder.premium_bar;
+    }
     const record = {
       capturedAt: t.iso,
       data: compact,
       iv: ivRaw ? summarizeIv(ivRaw) : undefined,
       greek, // the as-of cumulative greek timeseries, so backfill scores each tick faithfully
+      hedge_pressure: hedgeRaw ? compactHedgePressure(hedgeRaw) : undefined,
     };
     // Key by ET date/time so backfill can list a day's ticks in order via prefix.
     await getStore("captures").setJSON(`${t.date}/${t.hh}-${t.mm}`, record);
