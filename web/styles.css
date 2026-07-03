@@ -51,7 +51,14 @@ html, body {
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
-body { overflow-x: hidden; min-height: 100vh; }
+body { overflow-x: hidden; min-height: 100vh; min-height: 100dvh; }
+
+/* iOS notch / home-indicator: keep the chrome out of the unsafe areas. */
+.wrap { padding-left: max(0px, env(safe-area-inset-left)); padding-right: max(0px, env(safe-area-inset-right)); }
+
+/* Stale markers: an aged regime/narrative read must not look authoritative. */
+.stale-warn { color: var(--amber) !important; }
+.tell.stale-note { border-color: var(--amber); color: var(--amber); }
 
 /* ── BACKGROUND ── */
 /* z-index:0 (not -1): a negative-z canvas is painted UNDER the body's own
@@ -97,15 +104,17 @@ body { overflow-x: hidden; min-height: 100vh; }
   text-transform: uppercase;
   color: var(--ink2);
 }
+/* Stamped index chip — inverted plate, the panel's "hardware tag". */
 .sec-label .ix {
   font-style: normal;
-  color: var(--ink3);
-  margin-right: 7px;
-  padding-right: 7px;
-  border-right: 1px solid var(--line2);
+  background: var(--ink);
+  color: var(--bg);
+  margin-right: 8px;
+  padding: 1px 6px;
+  letter-spacing: .1em;
 }
-.sec-label .ix.tick-res { color: var(--red); border-color: var(--red); }
-.sec-label .ix.tick-sup { color: var(--ink); }
+.sec-label .ix.tick-res { background: var(--red); color: #fff; }
+.sec-label .ix.tick-sup { background: var(--ink); color: var(--bg); }
 .sec-label .jp {
   font-family: var(--jp);
   font-weight: 500;
@@ -120,7 +129,7 @@ body { overflow-x: hidden; min-height: 100vh; }
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 18px 2px 12px;
+  padding: max(18px, env(safe-area-inset-top)) 2px 12px;
 }
 .brand { display: flex; align-items: baseline; gap: 11px; }
 .brand-mark {
@@ -198,6 +207,32 @@ body { overflow-x: hidden; min-height: 100vh; }
   transition: border-color .18s, color .18s;
 }
 .theme-btn:hover { border-color: var(--red); color: var(--red); }
+.account-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.account-user {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: .12em;
+  color: var(--ink3);
+  text-transform: uppercase;
+}
+.signout-btn {
+  background: transparent;
+  border: 1px solid var(--line2);
+  color: var(--ink3);
+  width: 22px; height: 22px;
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color .18s, color .18s;
+}
+.signout-btn:hover { border-color: var(--red); color: var(--red); }
 
 /* ── SPEC BAR ── */
 .specbar {
@@ -333,6 +368,60 @@ body { overflow-x: hidden; min-height: 100vh; }
   color: var(--ink);
 }
 
+/* ── TAPE — continuous action narrative ── */
+.tape-sec { margin-bottom: 12px; border-left: 2px solid var(--ink); }
+.tape-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 6px; flex-wrap: wrap; }
+.tape-dir {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: .14em;
+  padding: 2px 8px;
+  border: 1px solid var(--line2);
+  color: var(--ink2);
+}
+.tape-dir.bull { border-color: var(--green); color: var(--green); }
+.tape-dir.bear { border-color: var(--red); color: var(--red); }
+.tape-now { font-family: var(--mono); font-size: 11px; color: var(--ink2); letter-spacing: .04em; }
+#tapeNarrative {
+  font-family: var(--disp);
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.65;
+  color: var(--ink);
+  margin: 0 0 10px;
+}
+.tape-path { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 10px; }
+.tape-arrow { color: var(--ink3); font-family: var(--mono); font-size: 11px; }
+.tape-wp {
+  display: flex;
+  gap: 7px;
+  align-items: baseline;
+  border: 1px solid var(--line2);
+  padding: 4px 9px;
+  font-family: var(--mono);
+}
+.wp-strike { font-size: 12px; color: var(--ink); font-weight: 600; }
+.wp-kind { font-size: 9.5px; letter-spacing: .12em; color: var(--ink2); }
+.tape-wp.reversal { border-color: var(--green); }
+.tape-wp.reversal .wp-kind { color: var(--green); }
+.tape-wp.chop .wp-kind { color: var(--amber); }
+.tape-wp.accelerate { border-color: var(--red); }
+.tape-wp.accelerate .wp-kind { color: var(--red); }
+.tape-trade {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  flex-wrap: wrap;
+  border-top: 1px dashed var(--line2);
+  padding-top: 8px;
+  font-family: var(--mono);
+}
+.tt-side { font-size: 11px; letter-spacing: .14em; padding: 2px 8px; border: 1px solid; }
+.tt-side.bull { color: var(--green); border-color: var(--green); }
+.tt-side.bear { color: var(--red); border-color: var(--red); }
+.tt-lvls { font-size: 13px; color: var(--ink); font-weight: 600; }
+.tt-why { font-size: 11px; color: var(--ink2); }
+
 /* ── BANNER ── */
 .banner {
   display: flex;
@@ -349,6 +438,57 @@ body { overflow-x: hidden; min-height: 100vh; }
   color: var(--ink2);
 }
 .banner-dot { width: 5px; height: 5px; background: var(--amber); flex: none; margin-top: 5px; }
+
+/* ── PANEL CHROME — corner brackets (control-panel ticks, no glow) ── */
+.sec { position: relative; }
+.sec::before, .sec::after { content: ""; position: absolute; width: 7px; height: 7px; pointer-events: none; opacity: .55; }
+.sec::before { top: -1px; left: -1px; border-top: 1px solid var(--ink2); border-left: 1px solid var(--ink2); }
+.sec::after  { bottom: -1px; right: -1px; border-bottom: 1px solid var(--ink2); border-right: 1px solid var(--ink2); }
+
+/* ── TOPOGRAPHY ── */
+.topo-sec { margin-bottom: 12px; }
+.topo-body { padding: 0; }
+#topoCanvas { display: block; width: 100%; height: 265px; touch-action: none; cursor: grab; }
+#topoCanvas:active { cursor: grabbing; }
+.topo-caption {
+  font-family: var(--mono); font-size: 9px; letter-spacing: .08em;
+  color: var(--ink3); padding: 6px 12px 8px; border-top: 1px solid var(--line);
+  text-transform: uppercase;
+}
+.topo-tools { display: flex; align-items: center; gap: 10px; }
+.topo-readout { font-family: var(--mono); font-size: 9.5px; color: var(--ink2); min-width: 0; white-space: nowrap; }
+.topo-chips { display: flex; gap: 4px; }
+.topo-chip {
+  background: transparent; border: 1px solid var(--line2); color: var(--ink3);
+  font-family: var(--mono); font-size: 8.5px; letter-spacing: .12em;
+  padding: 2px 7px; cursor: pointer;
+}
+.topo-chip.active { border-color: var(--red); color: var(--red); }
+@media (min-width: 900px) { #topoCanvas { height: 340px; } }
+
+/* ── FLOW → instrument cluster (tiles instead of a list) ── */
+.metrics { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1px; padding-top: 0; background: var(--line); border: 1px solid var(--line); }
+.metrics .metric { flex-direction: column; align-items: flex-start; justify-content: flex-start; gap: 3px; padding: 8px 10px; background: var(--panel-bg); border-bottom: none; }
+.metrics .mv { font-size: 15px; }
+.metrics .metric-spacer { display: none; }
+.metrics .method-tag { grid-column: 1 / -1; background: var(--panel-bg); padding: 7px 10px; }
+
+/* ── DAY GATE ── */
+.day-gate { margin-bottom: 12px; border-left: 2px solid var(--green); }
+.day-gate[data-verdict="SELECTIVE"]  { border-left-color: var(--amber); }
+.day-gate[data-verdict="STAND DOWN"] { border-left-color: var(--red); }
+.dg-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.dg-verdict { font-family: var(--mono); font-size: 13px; font-weight: 700; letter-spacing: .12em; color: var(--green); }
+.day-gate[data-verdict="SELECTIVE"]  .dg-verdict { color: var(--amber); }
+.day-gate[data-verdict="STAND DOWN"] .dg-verdict { color: var(--red); }
+.dg-score { font-family: var(--mono); font-size: 11px; color: var(--ink2); }
+.dg-note  { font-family: var(--mono); font-size: 9px; letter-spacing: .1em; color: var(--ink3); margin-left: auto; }
+.dg-reasons { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 3px; }
+.dg-reason  { display: flex; gap: 8px; font-family: var(--mono); font-size: 10.5px; color: var(--ink2); line-height: 1.45; }
+.dg-sev { flex: none; min-width: 40px; font-size: 9px; letter-spacing: .1em; padding-top: 1px; }
+.dg-sev.dg-major { color: var(--red); font-weight: 700; }
+.dg-sev.dg-minor { color: var(--amber); }
+.dg-reason.dg-clean { color: var(--green); }
 
 /* ── CHARTS ── */
 .charts-section { display: none; }
@@ -1015,6 +1155,28 @@ body { overflow-x: hidden; min-height: 100vh; }
   .spotrail .rail-line { width: 1px; height: auto; flex: 1; background: repeating-linear-gradient(0deg, var(--red) 0 5px, transparent 5px 10px); }
   .spotrail .rail-tag { writing-mode: vertical-rl; text-orientation: mixed; }
   .level-map-wrap { display: none; }
+}
+
+/* ── regime visualizers ──────────────────────────────────────────────────── */
+.viz-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.viz-card {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+}
+.viz-card--grow { flex: 1; min-width: 180px; }
+.viz-wave-card { width: 100%; box-sizing: border-box; }
+.viz-canvas-wrap { position: relative; width: 100%; height: 130px; }
+.viz-canvas-sq   { width: 160px; height: 150px; flex-shrink: 0; }
+.viz-canvas-wave { height: 90px; }
+.viz-lbl {
+  font: 500 9px/1 var(--mono);
+  color: var(--ink3);
+  letter-spacing: .07em;
+  text-transform: uppercase;
 }
 
 @media (prefers-reduced-motion: reduce) {

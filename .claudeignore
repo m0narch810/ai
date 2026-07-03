@@ -1,0 +1,11 @@
+data/
+pdfs/
+fixtures/
+scripts/
+web/dashboard.json
+web/narrative.json
+web/regime.json
+tmp_bars.ts
+node_modules/
+dist/
+.netlify/

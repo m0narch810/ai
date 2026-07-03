@@ -70,6 +70,8 @@ export interface DataSnapshot {
    * elevated OTM-put vs OTM-call IV (risk reversal) = downside hedging. Optional (enrichment).
    */
   iv_skew?: StrikeMap<number>;
+  /** Days-to-expiry of the front expiration that `iv_skew` came from — needed to build the RND. */
+  iv_skew_dte?: number;
   /**
    * 0DTE-ISOLATED greeks — the same-day-expiry slice of the strike×expiration heatmaps (not the
    * all-expiration `*_bar` aggregates). Into the cash close 0DTE positioning dominates pinning/charm,
@@ -85,6 +87,7 @@ export interface DataSnapshot {
    */
   gex_term?: StrikeMap<TermBuckets>;
   charm_term?: StrikeMap<TermBuckets>;
+  vanna_term?: StrikeMap<TermBuckets>;
   /** Day-over-day OI change per strike (calls/puts) from /api/oi_change — where walls are BUILDING. */
   oi_day_bar?: StrikeMap<StrikePair>;
   /**
@@ -197,6 +200,208 @@ export interface GarchSummary {
   half_life: number;   // days for a vol shock to decay to half
   z_score: number;     // current conditional vol vs its own GARCH mean (±sigma)
   current_regime: string; // "low" | "normal" | "elevated" | "large"
+  /**
+   * GARCH-implied PRICE bands from spot: ±1σ/±2σ over the rest of TODAY ("0") and 1 day ("1").
+   * Statistical-exhaustion levels — a wall at/beyond the band edge has mechanics AND statistics
+   * aligned (the large-reversal origin archetype).
+   */
+  ranges?: Record<string, { vol_pct: number; low_1s: number; high_1s: number; low_2s: number; high_2s: number }>;
+  /** 10-day conditional-vol forecast path, slimmed: day-1 vs day-10 (rising = vol regime worsening). */
+  forecast?: { d1_vol_pct: number; d10_vol_pct: number; dir: "cooling" | "steady" | "heating" };
+}
+
+/** /api/anomalies — z-scored 5-min return anomalies (capitulation/exhaustion prints). */
+export interface AnomalySummary {
+  /** |z| threshold the engine flags at. */
+  threshold: number;
+  /** Anomalous up/down 5-min returns TODAY (session date). */
+  today_up: number;
+  today_down: number;
+  /** Most recent anomaly in the feed (any day). */
+  last: { time: string; dir: "up" | "down"; ret_pct: number } | null;
+}
+
+/** /api/put_call_skew — risk-reversal (put IV − call IV) term structure. */
+export interface PcSkewSummary {
+  /** Front-expiry 5%-OTM risk reversal (positive = put skew = hedging demand). */
+  current_rr: number;
+  /** Altaris's read, e.g. "MODERATE PUT SKEW - HEDGING". */
+  bias: string;
+  /** RR per expiration (front 4) — how far out the hedging demand extends. */
+  term: { dte: number; rr: number }[];
+}
+
+/** /api/skew_index — SKEW-index-style tail-risk measure computed on the QQQ chain. */
+export interface SkewIndexSummary {
+  current_skew: number; // ~100 = flat, higher = more tail-risk premium
+  risk_level: string;   // e.g. "LOW TAIL RISK"
+  /** Front-expiry OTM-put/ATM IV ratio — how expensive crash protection is today. */
+  front_put_skew_ratio: number | null;
+}
+
+/** /api/vol_regime_score — mean-revert / breakout / no-trend scores with driver reasoning. */
+export interface VolRegimeScoreSummary {
+  label: string;      // "MR" | "BO" | "NT"
+  mr_score: number;
+  bo_score: number;
+  nt_score: number;
+  confidence: number;
+  reasoning: string;  // e.g. "BO (38%MR/55%BO/11%NT) | drivers: vrp→BO(70%)…"
+  /** % of the 252d calibration history the engine has — LOW means discount this block. */
+  history_pct_complete: number;
+}
+
+/** /api/regime_intraday — 5-min-bar intraday regime engine with an execution hint. Slow (~35s). */
+export interface RegimeIntradaySummary {
+  structural_state: string;   // CALM | TRANSITION | STRESS
+  structural_confidence: number;
+  behavioral_regime: string;  // MR | BO
+  mean_reversion_score: number;
+  breakout_score: number;
+  signal_clarity: number;
+  model_certainty: number;
+  reasoning: string;
+  /** e.g. { action: "WEAK_MR", size_scalar: 0.33 } — the engine's own sizing suggestion. */
+  execution_hint: { action: string; size_scalar: number } | null;
+}
+
+/** /api/oi365 — OI mass by EXPIRATION (where positioning lives in time). */
+export interface Oi365Summary {
+  /** Front expirations by date: total OI + put/call ratio each. */
+  expirations: { label: string; dte: number; total_oi: number; pc: number }[];
+}
+
+/** One graded strike from /api/level_assessment — Altaris's own level engine. */
+export interface AssessedLevel {
+  strike: number;
+  /** Positioning zone the strike sits in (e.g. "P" put-supported, "C" call-supported). */
+  zone: string;
+  /** Structural quality grade (A/B/C) from the Altaris engine. */
+  grade: string;
+  /** Expected-reaction archetype: "The Bedrock" = solid hold; "The Trapdoor" = liquidity gap (plunges through). */
+  archetype: string;
+  /** "SAFE" | "NEUTRAL" | ... — the engine's tradability call. */
+  level_type: string;
+  /** 0-1: how well dealer hedging aligns with the level holding. */
+  hedge_score: number;
+  /** 0-1 weight rank among all assessed levels (1 = most significant). */
+  rank_pct: number;
+  oi: number;
+  /** e.g. "Lean bullish alignment, stabilizing" — dealer-hedge alignment read. */
+  hedge_desc: string;
+  /** e.g. "Vanna-dominated; Charm-heavy" — which greeks drive the level. */
+  drivers_desc: string;
+}
+
+/** /api/level_assessment — the terminal's own per-strike level grading (near-spot slice). */
+export interface LevelAssessmentSummary {
+  gamma_flip: number | null;
+  /** Where spot sits, e.g. "Z — Zero Gamma (at Gamma Flip)". */
+  zone_label: string;
+  /** The strike the engine ranks most significant right now. */
+  dominant: { strike: number; zone: string; grade: string; archetype: string } | null;
+  levels: AssessedLevel[];
+}
+
+/** /api/opex_gravity — front-expiry max-pain pinning mechanics. */
+export interface OpexGravitySummary {
+  expiry_label: string;
+  dte: number;
+  hours_to_expiry: number;
+  /** FRONT-expiry max pain (can differ from the all-expiration max_pain in named_levels). */
+  max_pain: number;
+  /** 0-100: strength of the max-pain magnet today. */
+  pin_score: number;
+  total_oi: number;
+  /** Near-spot strikes exerting OI pull, strongest first. */
+  gravity_strikes: { strike: number; call_oi: number; put_oi: number; pull_strength: number }[];
+}
+
+/** /api/oi_analytics — chain-wide OI positioning shape. */
+export interface OiAnalyticsSummary {
+  /** OI-based put/call ratio (standing positioning; the volume pc_ratio is today's flow). */
+  pc_ratio_oi: number;
+  /** % of total OI in the top-5 strikes — high = concentrated walls, low = diffuse. */
+  concentration_top5_pct: number;
+  /** The strike total OI mass centers on — a mean-reversion magnet in pinning regimes. */
+  oi_center_of_gravity: number;
+  max_pain_all: number;
+  /** [lo, hi] price band where puts dominate OI. */
+  put_heavy_zone: number[] | null;
+  call_heavy_zone: number[] | null;
+}
+
+/** /api/liquidity_map — front-expiry per-strike OI/volume (the lived-in check at 0DTE granularity). */
+export interface LiquiditySummary {
+  expiry_label: string;
+  dte: number;
+  /** Near-spot strikes ranked by total front-expiry OI. */
+  top: { strike: number; call_oi: number; put_oi: number; call_vol: number; put_vol: number }[];
+}
+
+/** One sweep/block alert from /api/unusual_activity — aggressive initiative flow. */
+export interface UnusualAlert {
+  strike: number;
+  dte: number;
+  option_type: string; // "call" | "put"
+  volume: number;
+  oi: number;
+  vol_oi_ratio: number;
+  premium_m: number; // $M spent
+  signal: string;    // e.g. "SWEEP"
+}
+
+/** /api/hiro — live dealer-hedging impact tape (net mechanical flow from option trades). */
+export interface HiroSummary {
+  direction: string;      // "BUY PRESSURE" | "SELL PRESSURE" | ...
+  current_hiro_m: number;
+  total_gex_m: number;
+  call_gex_m: number;
+  put_gex_m: number;
+  /** Sum of the last ~30 min of 5-min hiro prints — the recent flow impulse. */
+  last_30m_hiro: number | null;
+}
+
+/** /api/heston_surface — where option premium is rich/cheap vs a calibrated Heston surface. */
+export interface HestonSummary {
+  rmse: number;
+  feller: boolean;
+  pct_rich: number;
+  pct_cheap: number;
+  mean_spread: number;
+  richest: { strike: number; dte: number; z: number }[];
+  cheapest: { strike: number; dte: number; z: number }[];
+}
+
+/** /api/regime_v2 — the terminal's multi-model regime consensus (TVTP-MS, MS-GARCH, HDP-HMM, BOCPD…). */
+export interface RegimeV2Summary {
+  consensus: string;       // e.g. "STRESS / REGIME BREAK WARNING"
+  interpretation: string;
+  agreement: string;       // "N/M models agree"
+  p_change: number;        // P(regime change)
+  expected_dwell: number;  // expected days the current regime persists
+  expected_move_pct: number;
+  rv30: number;
+  atm_iv: number;
+  votes: { model: string; vote: string; confidence: number }[];
+}
+
+/** /api/vol_stats — the terminal's vol dashboard (HV ladder, IV rank, VRP, VIX term structure). */
+export interface VolStatsSummary {
+  hv10: number;
+  hv20: number;
+  hv30: number;
+  atm_iv: number;
+  /** IV rank (percentile of ATM IV vs its own history). */
+  ivr: number;
+  /** IV − RV: negative = realized running above implied (under-hedged → continuation prior). */
+  vol_premium: number;
+  regime: string;
+  vix9d: number;
+  vix: number;
+  vix3m: number;
+  /** "CONTANGO" (calm) | "BACKWARDATION" (stressed — don't fade large moves) | "FLAT". */
+  ts_shape: string;
 }
 
 /**
@@ -219,6 +424,27 @@ export interface RegimeSummary {
   pivots: Array<{ price: number; side: string; persistence: number; confluence?: boolean }>;
 }
 
+/** One factor degrading the day gate. Severity is the ONLY parameter (no numeric weights —
+ *  point magnitudes would be pseudo-precision, and fitting them would be curve-fitting). */
+export interface DayGateReason {
+  /** "major" = the mechanism alone breaks the fade-at-levels edge; "minor" = corroborating. */
+  severity: "major" | "minor";
+  label: string;
+}
+
+/**
+ * The DAY GATE — a deterministic, advisory "should I rest limits at levels today at all?"
+ * verdict composed from the expiration calendar × live flow state × regime. Count rule:
+ * 2 majors (or 1 major + 3 minors) → STAND DOWN; 1 major or 3 minors → SELECTIVE; else TAKE.
+ * Display-layer: it never blocks scoring or caps the AI. See src/dayGate.ts.
+ */
+export interface DayGate {
+  verdict: "TAKE" | "SELECTIVE" | "STAND DOWN";
+  majors: number;
+  minors: number;
+  reasons: DayGateReason[];
+}
+
 /** One captured poll, appended to data/raw/<date>.data.jsonl. */
 export interface CaptureRecord {
   /** Our capture time, normalized to ET ISO. */
@@ -230,6 +456,36 @@ export interface CaptureRecord {
   garch?: GarchSummary;
   /** Dealer hedge pressure from /api/hedge_pressure — which greek drives flows, directional score, momentum. */
   hedge_pressure?: HedgePressureSummary;
+  /** Altaris's own per-strike level grading from /api/level_assessment (near-spot slice). */
+  level_assessment?: LevelAssessmentSummary;
+  /** Front-expiry max-pain pinning from /api/opex_gravity. */
+  opex_gravity?: OpexGravitySummary;
+  /** Chain-wide OI positioning shape from /api/oi_analytics. */
+  oi_analytics?: OiAnalyticsSummary;
+  /** Front-expiry per-strike liquidity from /api/liquidity_map. */
+  liquidity?: LiquiditySummary;
+  /** Sweep/block alerts from /api/unusual_activity (largest premium first). */
+  unusual_activity?: UnusualAlert[];
+  /** Live dealer-hedging impact tape from /api/hiro. */
+  hiro?: HiroSummary;
+  /** Rich/cheap option-pricing surface from /api/heston_surface (slow endpoint; often absent). */
+  heston?: HestonSummary;
+  /** Multi-model regime consensus from /api/regime_v2. */
+  regime_v2?: RegimeV2Summary;
+  /** Vol dashboard from /api/vol_stats (HV ladder, IVR, VRP, VIX term structure). */
+  vol_stats?: VolStatsSummary;
+  /** Z-scored 5-min return anomalies from /api/anomalies. */
+  anomalies?: AnomalySummary;
+  /** Risk-reversal term structure from /api/put_call_skew. */
+  pc_skew?: PcSkewSummary;
+  /** Tail-risk skew index from /api/skew_index. */
+  skew_index?: SkewIndexSummary;
+  /** MR/BO/NT vol-regime scores from /api/vol_regime_score. */
+  vol_regime_score?: VolRegimeScoreSummary;
+  /** Intraday regime engine from /api/regime_intraday (slow endpoint; local capture only). */
+  regime_intraday?: RegimeIntradaySummary;
+  /** OI by expiration from /api/oi365. */
+  oi365?: Oi365Summary;
 }
 
 /** One OHLCV bar, timestamped in ET. Delta is net buyer-minus-seller volume for the bar (from Altaris). */
@@ -307,8 +563,39 @@ export interface CoverageLevel {
   tags: string[];
   /** Per-strike implied vol (%) from the skew, when captured — a local bump = demand/defense here. */
   iv?: number;
+  /** Risk-neutral P(%) the underlying FINISHES in this strike's bin (Breeden–Litzenberger; see density.ts). */
+  rnd?: number;
   /** True if price already broke this strike today (hard-stopped) — de-rated to ~zero. */
   broken?: boolean;
+}
+
+/** One waypoint in the tape's expected path — every strike ahead classified by what it does to the move. */
+export interface TapeWaypoint {
+  strike: number;
+  /**
+   * "reversal" = turns the move for a full tradeable leg; "chop" = pauses/oscillates, pressure then
+   * decides; "speed_bump" = brief pause then CONTINUATION through; "accelerate" = breaks and speeds up.
+   */
+  expect: "reversal" | "chop" | "speed_bump" | "accelerate";
+  why: string;
+}
+
+/**
+ * The continuous first-person tape read — the desk's committed play-by-play of the session.
+ * This is where pass-through levels (excluded from levels[] by ACTIONABILITY) live, classified
+ * honestly as chop/speed bumps/accelerants in the story. AI boards only; the rule fallback omits it.
+ */
+export interface BoardTape {
+  /** What price is DOING right now, one line ("Selling down from the 710 rejection, delta one-way"). */
+  now: string;
+  /** The current leg's committed direction — where dealer/hedging pressure is pushing. */
+  direction: "down" | "up" | "ranging";
+  /** The strikes price meets next, in order, each classified. */
+  path: TapeWaypoint[];
+  /** THE trade this read implies — the "set a limit here, expect it to run there" call. Null = no-trade read. */
+  trade: { side: "long" | "short"; entry: number; target: number; why: string } | null;
+  /** The full flowing narrative paragraph, first person, committed. */
+  narrative: string;
 }
 
 /** The board the AI returns each tick. */
@@ -320,11 +607,17 @@ export interface Board {
   regime: string;
   /** One-line institutional read: where price is headed next + the level to fade it at. */
   read?: string;
+  /** The continuous action narrative (committed play-by-play + expected path + the trade). */
+  tape?: BoardTape;
   levels: ScoredLevel[];
   /** Current IV regime, surfaced for the dashboard hero. */
   iv?: { current: number; direction: string };
   /** Expected daily move (points), surfaced for the dashboard hero. */
   expected_move?: number;
+  /** Advisory day-quality verdict (calendar × flow × regime) — see src/dayGate.ts. */
+  day_gate?: DayGate;
+  /** Per-strike × tenor gamma/charm surfaces ($M) for the dashboard's 3D topography. */
+  term_profile?: { strike: number; gex: [number, number, number, number]; charm: [number, number, number, number] }[];
   /** How this board was scored: "ai" = Claude, "rule" = deterministic fallback. */
   scoring_method?: "ai" | "rule";
   /** Near-spot GEX distribution for the dashboard GEX chart. */
@@ -425,8 +718,37 @@ export interface MacroSnapshot {
   cross?: CrossAssetSnapshot;
   /** Recent market-moving headlines (GDELT, keyless) — the deterministic event backstop. */
   headlines?: NewsEvent[];
+  /** The Altaris terminal's own Macro tab (/api/macro) — enrichment, complements our direct feeds. */
+  altaris?: AltarisMacroSummary;
   /** Any source that failed to load, for honest display. */
   notes: string[];
+}
+
+/**
+ * Compact of the Altaris /api/macro dashboard. Fields chosen to COMPLEMENT (not duplicate)
+ * our direct FRED/Treasury/CFTC feeds: hawk/dove regime score, FRED release calendar with
+ * days-out, event-risk score, VIX fair-value model, real yields/breakevens, financial
+ * conditions, inflation YoY, and sector rotation extremes.
+ */
+export interface AltarisMacroSummary {
+  /** Hawk/dove read: score (negative = dovish, positive = hawkish), label, driving factors. */
+  regime: { score: number; label: string; factors: Record<string, string> } | null;
+  /** Upcoming FRED releases (FOMC/CPI/Retail/ISM/PCE/GDP…) with days until each. */
+  events: { name: string; date: string; days: number }[];
+  /** Event-risk composite (0-10 score, label e.g. "EXTREME") + which events are in window. */
+  event_risk: { score: number; label: string; in_window: string[] } | null;
+  /** VIX cycle model: percentile, regime, fair value vs actual, mispricing, trade signal. */
+  vix_intel: { vix: number; percentile: number; regime: string; fair_value: number; mispricing: number; signal: string } | null;
+  /** Net liquidity ($T): Fed balance sheet − TGA − RRP (Altaris uses weekly FRED TGA). */
+  net_liquidity: number | null;
+  /** 10Y TIPS real yield + 10Y breakeven (%, latest). */
+  real_yields: { tips_10y: number | null; breakeven_10y: number | null };
+  /** Financial conditions: NFCI, financial stress index, HY spread, trade-weighted dollar. */
+  fin_cond: { nfci: number | null; stress: number | null; hy_spread: number | null; dxy_twi: number | null };
+  /** Inflation/labor YoY prints: CPI, core CPI, core PCE, plus NFP + unemployment. */
+  inflation: Record<string, number>;
+  /** Sector rotation extremes: top-3 and bottom-3 by rate/growth/vol-sensitivity score. */
+  sectors: { leading: string[]; lagging: string[] };
 }
 
 export type OpenType =
@@ -580,6 +902,12 @@ export interface DetectedLevel {
   retestAt?: string;
   /** For a reversed/retested level: how far price retraced off it, as a fraction of the level. */
   reversalPct?: number;
+  /**
+   * Max favorable run after the reversal confirmed (fraction of the level), frozen at any later
+   * hard-stop break. THE calibration number for the board's objective: >= 0.005 = the minimum
+   * tradeable reversal; >= 0.01 = the ideal large reversal the system hunts.
+   */
+  maxRunPct?: number;
   /** Worst adverse excursion BEYOND the level, in points (how far price overshot it). */
   overshoot?: number;
   /**

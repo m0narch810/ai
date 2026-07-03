@@ -74,6 +74,14 @@ export async function nqToQqqRatio(): Promise<number> {
   return recent.reduce((a, b) => a + b, 0) / recent.length;
 }
 
+/** Latest live QQQ print from Yahoo (US-session sanity reference vs the Altaris chain spot). */
+export async function liveQqqSpot(): Promise<number> {
+  const qqq = await fetchRaw("QQQ", 6);
+  const last = qqq[qqq.length - 1];
+  if (!last) throw new Error("No recent QQQ bars.");
+  return last.close;
+}
+
 /** Current QQQ-equivalent spot from the latest NQ print (for Asia, when QQQ is stale). */
 export async function liveQqqEquivSpot(): Promise<number> {
   const [nq, ratio] = await Promise.all([fetchRaw("NQ=F", 6), nqToQqqRatio()]);
@@ -89,8 +97,8 @@ export async function liveQqqEquivSpot(): Promise<number> {
  */
 export async function fetchSessionBars(session: SessionDef, date?: string): Promise<Bar[]> {
   if (session.source === "QQQ") {
-    const resp = await fetchCandles(1);
-    return resp.candles
+    const resp = await fetchCandles(1).catch(() => null);
+    const bars = (resp?.candles ?? [])
       .filter((c) => {
         // Guard against Altaris returning a rolling 24h window that bleeds yesterday's bars.
         if (date && !c.t.startsWith(date)) return false;
@@ -99,6 +107,17 @@ export async function fetchSessionBars(session: SessionDef, date?: string): Prom
         return inWindow(Number(m[1]) * 60 + Number(m[2]), session.startMin, session.endMin);
       })
       .map((c) => ({ ts: c.t, open: c.o, high: c.h, low: c.l, close: c.c, volume: c.v, delta: c.d }));
+    if (bars.length) return bars;
+
+    // The Altaris candle feed can FREEZE on a prior day (seen live 2026-07-02: days=1..3 all ended
+    // at the July 1 close) — with zero bars for the session date, every level grades "untouched"
+    // and the day's calibration silently records nothing. Fall back to Yahoo QQQ 1-min bars so
+    // detection/calibration keep working (no per-bar delta, which detection doesn't need).
+    console.warn(`Altaris candles have no ${date ?? "today"} bars (feed last=${resp?.candles.at(-1)?.t ?? "unavailable"}) — falling back to Yahoo QQQ bars for detection`);
+    const raw = await fetchRaw("QQQ", 14);
+    return raw
+      .filter((r) => (!date || etDate(r.date) === date) && inWindow(etMinutes(r.date), session.startMin, session.endMin))
+      .map((r) => ({ ts: etIso(r.date), open: r.open, high: r.high, low: r.low, close: r.close, volume: r.volume }));
   }
 
   // Asia: NQ→QQQ via Yahoo (Altaris doesn't serve futures bars).

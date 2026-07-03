@@ -6,8 +6,9 @@
 // Every fetch is independent and non-fatal: a failure is recorded in notes[] and the
 // narrative scorer simply weights the rest. Nothing here throws.
 import YahooFinance from "yahoo-finance2";
+import { compactAltarisMacro, fetchMacroPanel } from "./altaris.js";
 import { config } from "./config.js";
-import type { CrossAssetSnapshot, MacroReading, MacroSnapshot, NewsEvent } from "./types.js";
+import type { AltarisMacroSummary, CrossAssetSnapshot, MacroReading, MacroSnapshot, NewsEvent } from "./types.js";
 
 const yf = new YahooFinance();
 
@@ -106,6 +107,42 @@ async function tgaReading(): Promise<MacroReading | undefined> {
   return (await treasuryTgaReading()) ?? (await fredReading("WTREGEN", 1));
 }
 
+/** OAS credit spreads — FRED BAMLH0A0HYM2 (ICE BofA High Yield OAS). YYY guide Ch.12.2 weekly layer.
+ *  Thresholds: <3% healthy; 3-4% mild caution; 4-5% elevated stress; >5% crisis. Credit leads equities. */
+async function oasReading(): Promise<MacroSnapshot["oas"]> {
+  const r = await fredReading("BAMLH0A0HYM2", 0.05);
+  if (!r) return undefined;
+  const level = r.last < 3.0 ? "healthy" : r.last < 4.0 ? "mild" : r.last < 5.0 ? "elevated" : "crisis";
+  return { ...r, level };
+}
+
+/** VIX term structure: 9-day vs 1-month VIX ratio. Backwardation = stressed, don't fade large moves. */
+function vixTermStructure(vix9d: MacroReading | undefined, vixFront: MacroReading | undefined): MacroSnapshot["vix_term"] {
+  if (!vix9d?.last || !vixFront?.last) return undefined;
+  const ratio = round(vix9d.last / vixFront.last, 3);
+  const structure = ratio > 1.02 ? "backwardation" as const : ratio < 0.98 ? "contango" as const : "flat" as const;
+  return { front: round(vix9d.last, 3), back: round(vixFront.last, 3), ratio, structure };
+}
+
+/** True if today (ET "YYYY-MM-DD") has a 10Y/20Y/30Y note or bond auction. YYY Ch.12.2: size down. */
+async function auctionDayCheck(etDate: string): Promise<boolean> {
+  try {
+    const url = "https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v1/accounting/od/auctions_query"
+      + `?filter=auction_date:eq:${etDate}`
+      + "&fields=auction_date,security_term,security_type"
+      + "&page%5Bsize%5D=50";
+    const res = await fetch(url, { headers: { accept: "application/json" } });
+    if (!res.ok) return false;
+    const body = (await res.json()) as { data?: { security_term?: string; security_type?: string }[] };
+    return (body?.data ?? []).some((r) => {
+      const term = (r.security_term || "").toLowerCase();
+      const type = (r.security_type || "").toLowerCase();
+      if (!["note", "bond"].includes(type)) return false;
+      return /10.year|20.year|30.year/.test(term);
+    });
+  } catch { return false; }
+}
+
 /**
  * COT speculator crowding for Nasdaq-100 (CFTC legacy futures-only). Returns the latest
  * net non-commercial position as a percentile of its own ~3-year history — dxrk's >80 / <20
@@ -169,7 +206,8 @@ async function crossReading(symbol: string): Promise<MacroReading | undefined> {
 async function fetchCrossAssets(): Promise<{ cross: CrossAssetSnapshot; missing: string[] }> {
   const symbols: [keyof CrossAssetSnapshot, string][] = [
     ["brent", "BZ=F"], ["wti", "CL=F"], ["gold", "GC=F"], ["copper", "HG=F"],
-    ["dxy", "DX-Y.NYB"], ["vix", "^VIX"], ["btc", "BTC-USD"], ["hyg", "HYG"],
+    ["dxy", "DX-Y.NYB"], ["vix", "^VIX"], ["vxn", "^VXN"], ["btc", "BTC-USD"],
+    ["hyg", "HYG"], ["skew_index", "^SKEW"],
   ];
   const results = await Promise.all(symbols.map(([, sym]) => crossReading(sym)));
   const cross: CrossAssetSnapshot = {};
@@ -229,7 +267,8 @@ export async function fetchMacro(): Promise<MacroSnapshot> {
   // 2Y is the lead signal; try Yahoo (intraday) first, fall back to FRED DGS2 (daily, no velocity).
   let us2y = await yahooReading("2YY=F", 0.01);
   if (!us2y) us2y = await fredReading("DGS2", 0.01);
-  const [us10y, usdjpy, tga, rrp, cot, crossResult, headlines] = await Promise.all([
+  const etDate = etIso().slice(0, 10);
+  const [us10y, usdjpy, tga, rrp, cot, crossResult, headlines, vix9d, wresbal, walcl, oas, auction_today, altarisMacro] = await Promise.all([
     yahooReading("^TNX", 0.01),
     yahooReading("JPY=X", 0.05),
     tgaReading(),                 // Treasury General Account — daily (DTS), weekly FRED fallback
@@ -237,6 +276,17 @@ export async function fetchMacro(): Promise<MacroSnapshot> {
     cotReading(),
     fetchCrossAssets(),
     fetchNews(),
+    yahooReading("^VIX9D", 0.01), // VIX 9-day (short-end term structure)
+    fredReading("WRESBAL", 5),    // Fed reserve balances (H.4.1 weekly)
+    fredReading("WALCL", 1),      // Fed total assets (weekly)
+    oasReading(),                 // High-yield OAS credit spreads
+    auctionDayCheck(etDate),      // 10Y/20Y/30Y auction today?
+    // Altaris /api/macro — the terminal's own macro tab (hawk/dove regime, FRED release calendar,
+    // event-risk score, VIX fair-value model, real yields, NFCI/stress, sector rotation).
+    // ENRICHMENT alongside our direct feeds, not a replacement: our TGA is the daily Treasury DTS
+    // (Altaris uses the lagging weekly WTREGEN), and keeping FRED direct means the narrative
+    // still works when the Altaris box is down. Requires ALTARIS creds; best-effort like the rest.
+    fetchMacroPanel().then((r) => compactAltarisMacro(r)).catch(() => undefined as AltarisMacroSummary | undefined),
   ]);
 
   if (!us2y) notes.push("2Y yield unavailable");
@@ -245,10 +295,22 @@ export async function fetchMacro(): Promise<MacroSnapshot> {
   if (!tga) notes.push("TGA (FRED) unavailable");
   if (!rrp) notes.push("RRP (FRED) unavailable");
   if (!cot) notes.push("COT (CFTC) unavailable");
+  if (!oas) notes.push("OAS (BAMLH0A0HYM2) unavailable");
+  if (!wresbal) notes.push("Reserve balances (WRESBAL) unavailable");
+  if (!walcl) notes.push("WALCL (Fed balance sheet) unavailable");
   if (crossResult.missing.length) notes.push(`cross-asset unavailable: ${crossResult.missing.join(", ")}`);
   if (!headlines.length) notes.push("news (GDELT) unavailable");
+  if (!altarisMacro) notes.push("Altaris macro panel unavailable");
 
   const curve = us10y && us2y ? round(us10y.last - us2y.last, 3) : undefined;
+  const cross = crossResult.cross;
+  const vix_term = vixTermStructure(vix9d, cross.vix);
+  const copper_gold_ratio = (cross.copper?.last && cross.gold?.last && cross.gold.last > 0)
+    ? round(cross.copper.last / cross.gold.last, 6) : undefined;
 
-  return { asOf: etIso(), us2y, us10y, curve2s10s: curve, usdjpy, tga, rrp, cot, cross: crossResult.cross, headlines, notes };
+  return {
+    asOf: etIso(), us2y, us10y, curve2s10s: curve, usdjpy, tga, rrp, cot,
+    oas, vix_term, auction_today, reserve_bal: wresbal, walcl, copper_gold_ratio,
+    cross, headlines, altaris: altarisMacro, notes,
+  };
 }

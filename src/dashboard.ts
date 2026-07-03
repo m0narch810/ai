@@ -3,7 +3,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { activeSession, config } from "./config.js";
-import type { Board, CoverageLevel, DetectedLevel, ReversalOutcome, ScoredLevel, Side } from "./types.js";
+import type { Board, CoverageLevel, DayGate, DetectedLevel, ReversalOutcome, ScoredLevel, Side } from "./types.js";
 
 /** A scored level annotated with how it has played out on today's tape. */
 export interface DashboardLevel extends ScoredLevel {
@@ -30,6 +30,8 @@ export interface DashboardData {
   regime: string;
   /** One-line institutional read (path + the level to fade). */
   read?: string;
+  /** The continuous action narrative (committed play-by-play + expected path + the trade). AI boards only. */
+  tape?: Board["tape"];
   /** Points beyond a level that count as a hard break (lets the live spot flag breaks). */
   hard_stop_pts: number;
   /** Points beyond a level still considered a clean reversal. */
@@ -40,6 +42,8 @@ export interface DashboardData {
   scoring_method?: "ai" | "rule";
   /** Near-spot GEX distribution for the dashboard GEX bar chart. */
   gex_profile?: { strike: number; gex_m: number }[];
+  /** Per-strike × tenor gamma/charm surfaces ($M) for the 3D topography panel. */
+  term_profile?: Board["term_profile"];
   /** Per-strike reversal score for EVERY near-spot strike (precision coverage). */
   coverage?: CoverageLevel[];
   /** Gamma flip level — spot above = positive gamma regime, below = negative. */
@@ -56,6 +60,8 @@ export interface DashboardData {
   entropy_state?: "NORMAL" | "ELEVATED" | "CRITICAL";
   /** Entropy ratio at score time (current / threshold, rounded to 2 dp). */
   entropy_ratio?: number;
+  /** Advisory day-quality verdict (calendar × flow × regime) — see src/dayGate.ts. */
+  day_gate?: DayGate;
   levels: DashboardLevel[];
 }
 
@@ -86,12 +92,14 @@ export function buildDashboard(board: Board, detected: DetectedLevel[], session?
     spot: board.spot,
     regime: board.regime,
     read: board.read,
+    tape: board.tape,
     hard_stop_pts: config.hardStopPts,
     clean_reversal_pts: config.cleanReversalPts,
     iv: board.iv,
     expected_move: board.expected_move,
     scoring_method: board.scoring_method,
     gex_profile: board.gex_profile,
+    term_profile: board.term_profile,
     coverage: board.coverage,
     zero_gamma: board.zero_gamma,
     vol_trigger: board.vol_trigger,
@@ -100,6 +108,7 @@ export function buildDashboard(board: Board, detected: DetectedLevel[], session?
     gex_0dte_ratio: board.gex_0dte_ratio,
     entropy_state: board.entropy_state,
     entropy_ratio: board.entropy_ratio,
+    day_gate: board.day_gate,
     levels: board.levels.map((l) => ({ ...l, ...outcomeFor(l.strike, l.side, detected) })),
   };
 }

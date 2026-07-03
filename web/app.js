@@ -7,8 +7,16 @@ const STALE_MS    = 30 * 60_000;
 const SPOT_URL    = "/.netlify/functions/spot";
 const CANDLES_URL = "/.netlify/functions/altaris-candles";
 const BOARD_FN    = "/.netlify/functions/board"; // cloud deterministic board (box-off fallback)
+const DASH_FN     = "/.netlify/functions/dashboard"; // authed board (Blobs) — the primary source
 const NARR_URL    = "/.netlify/functions/narrative";
 const MACRO_URL   = "/.netlify/functions/macro";
+
+// ── Auth ────────────────────────────────────────────────────────────────────
+const getToken  = () => localStorage.getItem("authToken");
+const clearAuth = () => { localStorage.removeItem("authToken"); localStorage.removeItem("authUser"); localStorage.removeItem("lastSeen"); };
+const authHdrs  = () => { const t = getToken(); return t ? { "Authorization": `Bearer ${t}` } : {}; };
+function handle401() { clearAuth(); window.location.href = "/login.html"; }
+const IDLE_MS = 2 * 24 * 60 * 60 * 1000; // 2-day inactivity window
 
 // ── palette (kept in sync with styles.css) ──
 const C = {
@@ -20,6 +28,7 @@ const C = {
   red:  "#e60023",
   blue: "#1f5fd0",
   green:"#1c7a52",
+  amber:"#c07c00",
   paper:"#f1f1ee",
 };
 
@@ -36,6 +45,7 @@ function readPalette() {
   C.ink = g("--ink", C.ink); C.ink2 = g("--ink2", C.ink2); C.ink3 = g("--ink3", C.ink3);
   C.line = g("--line", C.line); C.line2 = g("--line2", C.line2);
   C.red = g("--red", C.red); C.blue = g("--blue", C.blue); C.green = g("--green", C.green);
+  C.amber = g("--amber", C.amber);
   C.paper = g("--bg", C.paper);
   const dark = document.documentElement.dataset.theme === "dark";
   bgInkRGB = dark ? "190,180,158" : "17,18,16";  // warm dim gray ink on charcoal / black ink on paper
@@ -47,6 +57,45 @@ const el = (tag, cls, text) => {
   if (text != null) n.textContent = text;
   return n;
 };
+
+/* ── TAPE — the desk's continuous action narrative (AI boards only) ── */
+const TAPE_KIND = { reversal: "REVERSAL", chop: "CHOP", speed_bump: "SPEED BUMP", accelerate: "ACCEL" };
+function renderTape(tape) {
+  const wrap = $("#tapeWrap");
+  if (!tape || (!tape.narrative && !tape.now)) { wrap.hidden = true; return; }
+  wrap.hidden = false;
+
+  const dir = $("#tapeDir");
+  dir.textContent = (tape.direction || "—").toUpperCase();
+  dir.className = "tape-dir" + (tape.direction === "up" ? " bull" : tape.direction === "down" ? " bear" : "");
+  $("#tapeNow").textContent = tape.now || "";
+  $("#tapeNarrative").textContent = tape.narrative || "";
+
+  const path = $("#tapePath");
+  path.replaceChildren();
+  const wps = Array.isArray(tape.path) ? tape.path : [];
+  wps.forEach((w, i) => {
+    if (i > 0) path.appendChild(el("span", "tape-arrow", "→"));
+    const chip = el("div", `tape-wp ${w.expect || ""}`);
+    chip.appendChild(el("span", "wp-strike", "$" + w.strike));
+    chip.appendChild(el("span", "wp-kind", TAPE_KIND[w.expect] || String(w.expect || "").toUpperCase()));
+    if (w.why) chip.dataset.tip = w.why;
+    path.appendChild(chip);
+  });
+  path.hidden = wps.length === 0;
+
+  const tr = $("#tapeTrade");
+  if (tape.trade && Number.isFinite(tape.trade.entry)) {
+    tr.hidden = false;
+    tr.replaceChildren(
+      el("span", `tt-side ${tape.trade.side === "long" ? "bull" : "bear"}`, (tape.trade.side || "").toUpperCase()),
+      el("span", "tt-lvls", `$${tape.trade.entry} → $${tape.trade.target}`),
+      el("span", "tt-why", tape.trade.why || ""),
+    );
+  } else {
+    tr.hidden = true;
+  }
+}
 const clamp    = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const fmtPrice = (n) => (typeof n === "number" ? (Number.isInteger(n) ? String(n) : n.toFixed(2)) : "—");
 const fmtSpot  = (n) => (typeof n === "number" ? n.toFixed(2) : "—");
@@ -278,9 +327,14 @@ function fmtFeed(ms) {
 
 function tickFeedTimers() {
   const now = Date.now();
-  const set = (id, next) => { const e = $(id); if (e) e.textContent = fmtFeed(next - now); };
+  const set = (id, next) => { const e = $(id); if (e) e.textContent = next != null ? fmtFeed(next - now) : "--"; };
   set("#feedSpot",    feedNext.spot);
-  set("#feedBoard",   feedNext.board);
+  // Board polls the static file every 60s, but it only changes when scoring runs.
+  // Show countdown only while the board is fresh; stale board shows "--" so the
+  // poll timer doesn't imply a score is arriving.
+  const { mode } = nextScoreInfo();
+  const inSession = mode === "ai" || mode === "rule";
+  set("#feedBoard",   !boardStale() || inSession ? feedNext.board : null);
   set("#feedCandles", feedNext.candles);
   set("#feedNarr",    feedNext.narr);
   set("#feedRegime",  feedNext.regime);
@@ -288,59 +342,99 @@ function tickFeedTimers() {
 }
 
 // ── next-score countdown ──────────────────────────────────────────────────────
-// Time until the next scheduled scoring tick. Both the local loop (cron */15) and the cloud
-// capture function fire on clock-aligned 15-min boundaries (:00/:15/:30/:45). During the RTH
-// AI window (09:15–16:00 ET, Mon–Fri) the next boundary is an AI re-score IF the box is online;
-// if the board's gone stale (box offline) that same boundary is a *cloud capture* instead — the
-// snapshot is saved for `npm run backfill`, but no fresh AI levels print. Outside the window the
-// next score is the next session's 09:15 open.
-const AI_OPEN_MIN  = 9 * 60 + 15; // 09:15 ET
-const AI_CLOSE_MIN = 16 * 60;     // 16:00 ET (inclusive — the close-tick still scores)
-const SCORE_STEP   = 15;          // minutes between ticks (matches SCORE_INTERVAL_MIN + capture cron)
+// Sessions: RTH AI scoring Mon–Fri 09:15–16:00 ET; Asia rule scoring 18:00–04:00 Sun–Thu/Mon–Fri.
+// Both fire on clock-aligned 15-min boundaries (:00/:15/:30/:45).
+const AI_OPEN_MIN   = 9 * 60 + 15; // 09:15 ET
+const AI_CLOSE_MIN  = 16 * 60;     // 16:00 ET (inclusive)
+const ASIA_OPEN_MIN = 18 * 60;     // 18:00 ET (NQ opens after maintenance)
+const ASIA_CLOSE_MIN = 4 * 60;     // 04:00 ET (wraps midnight)
+const SCORE_STEP    = 15;          // minutes between ticks
 
 function secsToNextAiOpen({ dow, hour, min, sec }) {
   const nowSec = dow * 86400 + hour * 3600 + min * 60 + sec;
   const WEEK = 7 * 86400;
   let best = Infinity;
-  for (let d = 1; d <= 5; d++) {           // Mon–Fri
+  for (let d = 1; d <= 5; d++) {
     let t = d * 86400 + AI_OPEN_MIN * 60 - nowSec;
-    if (t <= 0) t += WEEK;                  // already passed this week → next week
+    if (t <= 0) t += WEEK;
     if (t < best) best = t;
   }
   return best;
 }
 
-// → { delta: seconds, mode: "tick" | "session" }
+function secsToNextAsiaOpen({ dow, hour, min, sec }) {
+  // Asia opens 18:00 ET Sun(0)–Thu(4)
+  const nowSec = dow * 86400 + hour * 3600 + min * 60 + sec;
+  const WEEK = 7 * 86400;
+  let best = Infinity;
+  for (let d = 0; d <= 4; d++) {
+    let t = d * 86400 + ASIA_OPEN_MIN * 60 - nowSec;
+    if (t <= 0) t += WEEK;
+    if (t < best) best = t;
+  }
+  return best;
+}
+
+// → { delta: seconds, mode: "ai" | "rule" | "ai-open" | "asia-open" }
 function nextScoreInfo() {
   const p = etNowParts();
   const curMin = p.hour * 60 + p.min;
-  const inWindow = p.dow >= 1 && p.dow <= 5 && curMin >= AI_OPEN_MIN && curMin <= AI_CLOSE_MIN;
-  if (inWindow) {
-    const nextBoundaryMin = curMin - (p.min % SCORE_STEP) + SCORE_STEP; // next :00/:15/:30/:45
-    if (nextBoundaryMin <= AI_CLOSE_MIN) {
-      return { delta: (nextBoundaryMin - curMin) * 60 - p.sec, mode: "tick" };
-    }
+  const secIntoMin = p.sec;
+
+  // RTH AI scoring window: Mon–Fri 09:15–16:00
+  if (p.dow >= 1 && p.dow <= 5 && curMin >= AI_OPEN_MIN && curMin <= AI_CLOSE_MIN) {
+    const nb = curMin - (p.min % SCORE_STEP) + SCORE_STEP;
+    if (nb <= AI_CLOSE_MIN)
+      return { delta: (nb - curMin) * 60 - secIntoMin, mode: "ai" };
   }
-  return { delta: secsToNextAiOpen(p), mode: "session" }; // past today's close / off-hours
+
+  // Asia rule-scoring window: 18:00–23:59 Sun–Thu  OR  00:00–04:00 Mon–Fri
+  const asiaEvening = curMin >= ASIA_OPEN_MIN && p.dow >= 0 && p.dow <= 4;
+  const asiaMorning = curMin < ASIA_CLOSE_MIN && p.dow >= 1 && p.dow <= 5;
+  if (asiaEvening || asiaMorning) {
+    const nb = curMin - (p.min % SCORE_STEP) + SCORE_STEP;
+    return { delta: (nb - curMin) * 60 - secIntoMin, mode: "rule" };
+  }
+
+  // Gap: Asia just ended (04:00–09:15 Mon–Fri) → next AI open today
+  if (p.dow >= 1 && p.dow <= 5 && curMin >= ASIA_CLOSE_MIN && curMin < AI_OPEN_MIN)
+    return { delta: (AI_OPEN_MIN - curMin) * 60 - secIntoMin, mode: "ai-open" };
+
+  // Gap: US just closed and Asia not yet open (Mon–Thu 16:00–18:00) → Asia opens today
+  if (p.dow >= 1 && p.dow <= 4 && curMin > AI_CLOSE_MIN && curMin < ASIA_OPEN_MIN)
+    return { delta: (ASIA_OPEN_MIN - curMin) * 60 - secIntoMin, mode: "asia-open" };
+
+  // Weekend / Fri evening / Sun pre-open: whichever session opens sooner
+  const toAsia = secsToNextAsiaOpen(p);
+  const toAI   = secsToNextAiOpen(p);
+  return toAsia < toAI
+    ? { delta: toAsia, mode: "asia-open" }
+    : { delta: toAI,   mode: "ai-open"  };
 }
 
 function tickNextScore() {
   const elT = $("#nsTime"), elL = $("#nsLabel"), wrap = $("#nextScore");
   if (!elT || !elL) return;
   const { delta, mode } = nextScoreInfo();
-  const d = Math.floor(delta / 86400);
+  const d  = Math.floor(delta / 86400);
   const hh = Math.floor((delta % 86400) / 3600);
   const mm = Math.floor((delta % 3600) / 60);
   const ss = Math.floor(delta % 60);
   const p2 = (n) => String(n).padStart(2, "0");
   elT.textContent = (d > 0 ? `${d}d ` : "") + (d > 0 || hh > 0 ? `${p2(hh)}:` : "") + `${p2(mm)}:${p2(ss)}`;
 
-  // Online → AI score. Showing the cloud rule board (box offline) → the next tick recomputes
-  // calculated levels. Box stale with no cloud board yet → the next tick is just a capture.
-  const cloudRule = (lastData?.scoring_method === "rule") && (lastData?._cloud || lastData?.cloud);
-  const calc = mode === "tick" && (cloudRule || boardStale());
-  elL.textContent = !calc ? "NEXT AI SCORE" : cloudRule ? "NEXT CALC" : "NEXT CAPTURE";
-  if (wrap) wrap.classList.toggle("capture", calc);
+  const cloudRule = (lastData?.scoring_method === "rule") && lastData?.cloud;
+  const inTick    = mode === "ai" || mode === "rule";
+  const calc      = inTick && (cloudRule || boardStale());
+
+  let label;
+  if      (mode === "ai")         label = calc ? (cloudRule ? "NEXT CALC" : "NEXT CAPTURE") : "NEXT AI SCORE";
+  else if (mode === "rule")       label = "NEXT RULE SCORE";
+  else if (mode === "ai-open")    label = "AI OPENS";
+  else                            label = "ASIA OPENS";
+
+  elL.textContent = label;
+  if (wrap) wrap.classList.toggle("capture", inTick && calc);
 }
 
 // ── clock ───────────────────────────────────────────────────────────────────────
@@ -360,11 +454,20 @@ function tickAgoStamps() {
     const prefix = lastData.scoring_method === "rule" ? "rule scored" : "scored";
     asOf.textContent = `${prefix} ${scoredAgo()}`;
   }
-  const ns = $(".ms-stamp");
-  if (ns && narrData?.scoring_method === "ai") ns.textContent = `scored ${narrAgo(narrData)}`;
+  // Narrative open-type stamp (its own id — .ms-stamp belongs to the macro panel).
+  const ns = document.getElementById("narrStamp");
+  if (ns && narrData?.scoring_method === "ai") ns.textContent = `${ns.dataset.prefix || ""}${narrAgo(narrData)}`;
+  // Macro "refreshed X ago" stamp.
+  const ms = document.getElementById("macroStamp");
+  if (ms && macroData) ms.textContent = `refreshed ${agoMs(macroData.scored_at)}`;
   // Regime stamp: first .vsub inside #regHero is always the "scored X ago" on the Regime cell.
   const rs = document.querySelector("#regHero .vsub");
-  if (rs && regData) rs.textContent = `scored ${regAgo(regData)}`;
+  if (rs && regData) {
+    rs.textContent = `scored ${regAgo(regData)}`;
+    // Past ~35 min the regime engine's read no longer governs scoring — flag it.
+    const t = typeof regData.scored_at === "number" ? regData.scored_at : NaN;
+    rs.classList.toggle("stale-warn", !Number.isFinite(t) || Date.now() - t > 35 * 60_000);
+  }
 }
 
 // ── sparkline ────────────────────────────────────────────────────────────────
@@ -521,7 +624,8 @@ let candleData = null;
 async function loadCandles() {
   feedNext.candles = Date.now() + CANDLE_MS;
   try {
-    const res = await fetch(`${CANDLES_URL}?t=${Date.now()}`, { cache: "no-store" });
+    const res = await fetch(`${CANDLES_URL}?t=${Date.now()}`, { cache: "no-store", headers: authHdrs() });
+    if (res.status === 401) { handle401(); return; }
     if (!res.ok) return;
     const json = await res.json();
     if (Array.isArray(json?.candles) && json.candles.length)  candleData = json.candles;
@@ -695,6 +799,16 @@ function agoMs(t) {
 }
 const scoredAt  = () => (typeof lastData?.scored_at === "number" ? lastData.scored_at : Date.parse(lastData?.generated_at ?? ""));
 const scoredAgo = () => agoMs(scoredAt());
+// Overnight the loop holds the RTH levels but keeps republishing with a live spot — that is a
+// LIVE feed (generated_at fresh) even though scored_at is hours old. Staleness = last publish,
+// so the UI stops swapping in a cloud board built from yesterday's capture while the box is on.
+const freshAt = (d) => {
+  const s = typeof d?.scored_at === "number" ? d.scored_at : 0;
+  const g = Date.parse(d?.generated_at ?? "");
+  return Math.max(s, Number.isFinite(g) ? g : 0);
+};
+// Held-from-RTH: feed is live but the LEVELS themselves are from the last RTH score.
+const heldOffRth = () => !!lastData && !isRthNow() && Number.isFinite(scoredAt()) && Date.now() - scoredAt() > STALE_MS;
 
 // ── state ─────────────────────────────────────────────────────────────────────
 let lastData   = null;
@@ -704,7 +818,7 @@ let rungEls    = [];
 
 const currentSpot = () => (typeof liveSpot === "number" ? liveSpot : lastData?.spot);
 // A board with no/invalid timestamp must count as STALE (not silently fresh).
-const boardStale  = () => { if (!lastData) return false; const t = scoredAt(); return !Number.isFinite(t) || t < Date.now() - STALE_MS; };
+const boardStale  = () => { if (!lastData) return false; const t = freshAt(lastData); return t <= 0 || t < Date.now() - STALE_MS; };
 
 function isRthNow() {
   const p   = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(new Date());
@@ -905,13 +1019,22 @@ function renderBanner(data) {
   const b = $("#banner");
   if (data?.scoring_method === "rule" && !boardStale()) {
     b.hidden = false;
-    const txt = data._cloud || data.cloud
+    const txt = data.cloud
       ? `Box offline — cloud-calculated rule-based levels (lower confidence), refreshed ${scoredAgo()}. Spot & reversals are live.`
       : `Manual scored (AI unavailable) — rule-based levels, refreshed ${scoredAgo()}. Spot & reversals are live.`;
     b.replaceChildren(el("span", "banner-dot"), el("span", "", txt));
     return;
   }
-  if (!boardStale()) { b.hidden = true; return; }
+  if (!boardStale()) {
+    // Feed is live but the levels are held from the last RTH score — say so honestly.
+    if (heldOffRth()) {
+      b.hidden = false;
+      b.replaceChildren(el("span", "banner-dot"), el("span", "",
+        `Outside market hours — holding levels from the last RTH session (scored ${scoredAgo()}). Spot & reversals are live.`));
+      return;
+    }
+    b.hidden = true; return;
+  }
   b.hidden = false;
   const text = isRthNow()
     ? `Levels last scored ${scoredAgo()} — AI scoring paused (box offline). Spot & reversals are live.`
@@ -919,16 +1042,52 @@ function renderBanner(data) {
   b.replaceChildren(el("span", "banner-dot"), el("span", "", text));
 }
 
+// ── day gate ──────────────────────────────────────────────────────────────────
+// Advisory "take levels today?" verdict computed server-side (calendar × flow × regime).
+// Each firing factor renders with its penalty so the verdict is auditable, not a black box.
+function renderDayGate(data) {
+  const wrap = $("#dayGate");
+  if (!wrap) return;
+  const g = data?.day_gate;
+  if (!g || !g.verdict) { wrap.hidden = true; return; }
+  wrap.hidden = false;
+  wrap.dataset.verdict = g.verdict;
+  $("#dgVerdict").textContent =
+    g.verdict === "TAKE" ? "TAKE LEVELS" :
+    g.verdict === "SELECTIVE" ? "SELECTIVE — CONFIRMATION ONLY" : "STAND DOWN";
+  const counts = [];
+  if (g.majors) counts.push(`${g.majors} MAJOR`);
+  if (g.minors) counts.push(`${g.minors} minor`);
+  $("#dgScore").textContent = counts.join(" · ");
+  const ul = $("#dgReasons");
+  ul.replaceChildren();
+  const reasons = Array.isArray(g.reasons) ? g.reasons : [];
+  for (const r of reasons.slice(0, 7)) {
+    const li = el("li", "dg-reason");
+    li.appendChild(el("span", `dg-sev ${r.severity === "major" ? "dg-major" : "dg-minor"}`, r.severity === "major" ? "MAJOR" : "minor"));
+    li.appendChild(el("span", "dg-lbl", r.label));
+    ul.appendChild(li);
+  }
+  if (!reasons.length) ul.appendChild(el("li", "dg-reason dg-clean", "No degrading factors — clean session"));
+}
+
 // ── render ────────────────────────────────────────────────────────────────────
 function render(data) {
   renderBanner(data);
+  renderDayGate(data);
+  // 3D topography (topo.js): the strike×tenor gamma/charm terrain + RND ridge.
+  if (window.Topo) {
+    window.Topo.setData({ term_profile: data.term_profile, coverage: data.coverage, spot: currentSpot() });
+    const ts = $("#topoSec");
+    if (ts) ts.hidden = !window.Topo.hasData();
+  }
   const stale   = boardStale();
   const offline = stale && isRthNow();
   const rule    = !stale && data?.scoring_method === "rule";
 
   $("#statusDot").className    = `status-dot ${stale ? "stale" : rule ? "rule" : "live"}`;
   $("#statusText").textContent  = !stale
-    ? (rule ? "rule scored" : "live")
+    ? (heldOffRth() ? "held · off-rth" : rule ? "rule scored" : "live")
     : isRthNow() ? `scored ${scoredAgo()}` : "held · off-rth";
 
   renderMetrics(data);
@@ -936,6 +1095,8 @@ function render(data) {
   const rw = $("#readWrap");
   if (data.read) { rw.hidden = false; $("#heroRead").textContent = data.read; }
   else           { rw.hidden = true; }
+
+  renderTape(data.tape);
 
   const levels = Array.isArray(data.levels) ? data.levels : [];
   const ceil   = $("#ceilings"), floor = $("#floors");
@@ -988,26 +1149,40 @@ function render(data) {
 // The cloud deterministic board — fresh rule-based levels computed server-side when the box is off.
 async function loadCloudBoard() {
   try {
-    const res = await fetch(`${BOARD_FN}?t=${Date.now()}`, { cache: "no-store" });
+    const res = await fetch(`${BOARD_FN}?t=${Date.now()}`, { cache: "no-store", headers: authHdrs() });
+    if (res.status === 401) { handle401(); return null; }
     if (!res.ok) return null;
     const j = await res.json();
     return j && Array.isArray(j.levels) ? j : null;
   } catch { return null; }
 }
 
-const freshnessOf = (d) => { const t = typeof d?.scored_at === "number" ? d.scored_at : Date.parse(d?.generated_at ?? ""); return Number.isFinite(t) ? t : 0; };
+/**
+ * The board itself. Primary: the token-checked dashboard function (Netlify Blobs) — the
+ * deployed site no longer ships dashboard.json publicly, so this is the only cloud path.
+ * Fallback: the static file, which still exists when serving web/ over the LAN (npm run web).
+ */
+async function fetchBoard() {
+  try {
+    const res = await fetch(`${DASH_FN}?t=${Date.now()}`, { cache: "no-store", headers: authHdrs() });
+    if (res.status === 401) { handle401(); return null; }
+    if (res.ok) return await res.json();
+  } catch { /* function unreachable (LAN mode) — fall through to the static file */ }
+  const res = await fetch(`dashboard.json?t=${Date.now()}`, { cache: "no-store" });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
 
 async function load() {
   feedNext.board = Date.now() + POLL_MS;
   try {
-    const res = await fetch(`dashboard.json?t=${Date.now()}`, { cache: "no-store" });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    let data = await res.json();
+    let data = await fetchBoard();
+    if (!data) return; // 401 → already redirecting to login
     // Box offline (any session) → published board is frozen. Pull the cloud rule board so
     // levels keep moving at all hours, not just RTH.
-    if (freshnessOf(data) < Date.now() - STALE_MS) {
+    if (freshAt(data) < Date.now() - STALE_MS) {
       const cloud = await loadCloudBoard();
-      if (cloud && freshnessOf(cloud) > freshnessOf(data)) data = cloud;
+      if (cloud && freshAt(cloud) > freshAt(data)) data = cloud;
     }
     lastData = data;
     render(lastData);
@@ -1018,22 +1193,26 @@ async function load() {
     $("#ladderGrid").hidden      = true;
     const empty = $("#empty");
     empty.hidden      = false;
-    empty.textContent = "Waiting for dashboard.json — run a capture.";
+    empty.textContent = "Waiting for the board — run a capture.";
   }
 }
 
 async function loadSpot() {
   feedNext.spot = Date.now() + SPOT_MS;
   try {
-    const res = await fetch(`${SPOT_URL}?t=${Date.now()}`, { cache: "no-store" });
+    const res = await fetch(`${SPOT_URL}?t=${Date.now()}`, { cache: "no-store", headers: authHdrs() });
+    if (res.status === 401) { handle401(); return; }
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const j = await res.json();
     if (typeof j.spot === "number") {
+      const changed = j.spot !== liveSpot;
       liveSpot   = j.spot;
       liveSpotAt = j.at || new Date().toISOString();
       pushSparkPoint(liveSpot);
       drawSparkline();
-      repaintLive();
+      // repaintLive rebuilds the level-map + GEX SVGs from scratch — skip it when the print
+      // hasn't moved (overnight/weekend every tick returns the same last price).
+      if (changed) repaintLive();
     }
   } catch { /* offline / LAN — use scored spot */ }
 }
@@ -1128,6 +1307,13 @@ function renderNarrative(n) {
   const dirTone  = n.expansion_direction === "up" ? "up" : n.expansion_direction === "down" ? "down" : "";
   hero.replaceChildren();
 
+  // Yesterday's narrative (cloud flag, or client-side date check) — badge it, don't present it as today's.
+  const narrDayStale = n.stale === true
+    || (typeof n.as_of === "string" && !n.as_of.startsWith(new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date())));
+  if (narrDayStale) {
+    hero.appendChild(el("div", "tell stale-note", "⚠ Yesterday's pre-open read — a fresh narrative generates ≈09:00 ET."));
+  }
+
   // ── 4-cell verdict row: LEAN | ENTROPY | TOPOLOGY | OPEN TYPE ────────────────
   const v = el("div", "verdict");
   const cell = (k, val, cls, sub) => {
@@ -1151,7 +1337,7 @@ function renderNarrative(n) {
   const entRatio = n.entropy_ratio ?? lastData?.entropy_ratio;
   const entCls   = entState === "CRITICAL" ? "bear" : entState === "ELEVATED" ? "amber" : entState === "NORMAL" ? "bull" : "";
   const entSub   = entRatio != null ? `ρ = ${entRatio.toFixed(2)}` : (entState ? "" : "no entropy data");
-  v.appendChild(cell("Entropy", entState || "—", entCls, entSub));
+  v.appendChild(cell("Options", entState || "—", entCls, entSub));
 
   // Cell 3: TOPOLOGY (PCA1/PCA2 alignment proxy)
   const topoAlign  = n.topology_alignment || "unclear";
@@ -1164,8 +1350,16 @@ function renderNarrative(n) {
 
   // Cell 4: OPEN TYPE
   const otToneC = OPEN_TYPE_TONE[n.open_type] || "";
-  const otSub   = n.expansion_direction ? `expand ${GLYPH[n.expansion_direction] || "►"} · ${n.scoring_method === "ai" ? narrAgo(n) : "rule-based"}` : null;
-  v.appendChild(cell("Open Type", (n.open_type_label || n.open_type || "—").replace("→", "→"), otToneC, otSub));
+  const otPrefix = n.expansion_direction ? `expand ${GLYPH[n.expansion_direction] || "►"} · ` : null;
+  const otSub   = otPrefix ? `${otPrefix}${n.scoring_method === "ai" ? narrAgo(n) : "rule-based"}` : null;
+  const otCell  = cell("Open Type", (n.open_type_label || n.open_type || "—").replace("→", "→"), otToneC, otSub);
+  // Tag the sub so tickAgoStamps can keep the "scored X ago" live (its own id — NOT .ms-stamp,
+  // which belongs to the macro panel and used to get clobbered by this narrative age).
+  if (otPrefix && n.scoring_method === "ai") {
+    const sub = otCell.querySelector(".vsub");
+    if (sub) { sub.id = "narrStamp"; sub.dataset.prefix = otPrefix; }
+  }
+  v.appendChild(otCell);
 
   hero.appendChild(v);
 
@@ -1263,12 +1457,15 @@ function renderNarrative(n) {
 async function loadNarrative() {
   feedNext.narr = Date.now() + NARR_MS;
   try {
-    const res = await fetch(`${NARR_URL}?t=${Date.now()}`, { cache: "no-store" });
+    const res = await fetch(`${NARR_URL}?t=${Date.now()}`, { cache: "no-store", headers: authHdrs() });
+    if (res.status === 401) { handle401(); return; }
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     narrData = await res.json();
     renderNarrative(narrData);
   } catch {
-    renderNarrative(null);
+    // Keep the last good narrative on a transient fetch error instead of blanking the tab
+    // (matches loadRegime/loadMacro behavior).
+    renderNarrative(narrData);
   }
 }
 
@@ -1300,7 +1497,9 @@ function renderLiveMacro(m) {
   const sAbs = Math.abs(m.bias_score ?? 0);
   status.appendChild(el("span", "ms-sep", "·"));
   status.appendChild(el("span", "ms-conf", sAbs >= 50 ? "●●● high" : sAbs >= 25 ? "●●○ med" : "●○○ low"));
-  status.appendChild(el("span", "ms-stamp", `refreshed ${agoMs(m.scored_at)}`));
+  const macroStamp = el("span", "ms-stamp", `refreshed ${agoMs(m.scored_at)}`);
+  macroStamp.id = "macroStamp";
+  status.appendChild(macroStamp);
   body.appendChild(status);
 
   // YYY key inputs: 2Y, TGA, RRP, COT + OAS (Ch.12.2) + reserve_bal + walcl
@@ -1393,13 +1592,206 @@ function renderLiveMacro(m) {
 async function loadMacro() {
   feedNext.macro = Date.now() + MACRO_MS;
   try {
-    const res = await fetch(`${MACRO_URL}?t=${Date.now()}`, { cache: "no-store" });
+    const res = await fetch(`${MACRO_URL}?t=${Date.now()}`, { cache: "no-store", headers: authHdrs() });
+    if (res.status === 401) { handle401(); return; }
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     macroData = await res.json();
     renderLiveMacro(macroData);
   } catch {
     renderLiveMacro(macroData || null);
   }
+}
+
+// ── regime visualizers (Chart.js) ───────────────────────────────────────────────
+
+function _isDark() { return document.documentElement.dataset.theme === "dark"; }
+function _hexRgba(hex, a) {
+  const h = hex.replace("#", "");
+  return `rgba(${parseInt(h.slice(0,2),16)},${parseInt(h.slice(2,4),16)},${parseInt(h.slice(4,6),16)},${a})`;
+}
+
+let _hurstHistory = [];
+let _chartHurst = null, _chartIv = null, _chartRadar = null;
+
+function _chartDefaults() {
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: false,
+    plugins: { legend: { display: false }, tooltip: { enabled: false } },
+  };
+}
+
+function destroyVizCharts() {
+  [_chartHurst, _chartIv, _chartRadar].forEach(c => { try { c?.destroy(); } catch {} });
+  _chartHurst = _chartIv = _chartRadar = null;
+}
+
+function updateHurstChart() {
+  const canvas = document.getElementById("hurstChart");
+  if (!canvas) return;
+  const labels = _hurstHistory.map(p => p.t);
+  const vals   = _hurstHistory.map(p => p.h);
+  const fill55 = labels.map(() => 0.55);
+  const fill45 = labels.map(() => 0.45);
+  const lastH  = vals.at(-1) ?? 0.5;
+  const lineCol = lastH > 0.55 ? C.green : lastH < 0.45 ? C.blue : C.ink3;
+
+  if (_chartHurst) {
+    const ds = _chartHurst.data.datasets;
+    _chartHurst.data.labels    = labels;
+    ds[0].data = vals;    ds[0].borderColor = lineCol;
+    ds[1].data = fill55;
+    ds[2].data = fill45;
+    _chartHurst.update("none");
+    return;
+  }
+  const dim = _isDark() ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)";
+  _chartHurst = new Chart(canvas, {
+    type: "line",
+    data: {
+      labels,
+      datasets: [
+        { data: vals, borderColor: lineCol, borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0.35, order: 1 },
+        { data: fill55, borderColor: C.green, borderWidth: 1, borderDash: [3, 4], pointRadius: 0, fill: false, order: 2 },
+        { data: fill45, borderColor: C.blue,  borderWidth: 1, borderDash: [3, 4], pointRadius: 0, fill: false, order: 3 },
+      ],
+    },
+    options: {
+      ..._chartDefaults(),
+      scales: {
+        x: { display: false },
+        y: {
+          min: 0.3, max: 0.7,
+          ticks: { font: { size: 8, family: "JetBrains Mono" }, color: C.ink3, stepSize: 0.1 },
+          grid: { color: dim },
+          border: { display: false },
+        },
+      },
+    },
+  });
+}
+
+function updateIvSmileChart(coverage) {
+  const canvas = document.getElementById("ivSmileChart");
+  if (!canvas) return;
+  const pts = (Array.isArray(coverage) ? coverage : [])
+    .filter(c => typeof c.iv === "number" && c.iv > 0)
+    .sort((a, b) => a.strike - b.strike);
+
+  const labels = pts.map(c => c.strike.toFixed(1));
+  const vals   = pts.map(c => c.iv);
+
+  if (_chartIv) {
+    _chartIv.data.labels = labels;
+    _chartIv.data.datasets[0].data = vals;
+    _chartIv.update("none");
+    return;
+  }
+  if (!pts.length) return;
+
+  const dim = _isDark() ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)";
+  _chartIv = new Chart(canvas, {
+    type: "line",
+    data: {
+      labels,
+      datasets: [{
+        data: vals,
+        borderColor: C.blue,
+        borderWidth: 1.5,
+        pointRadius: 0,
+        fill: true,
+        backgroundColor: _hexRgba(C.blue, 0.07),
+        tension: 0.35,
+      }],
+    },
+    options: {
+      ..._chartDefaults(),
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          enabled: true,
+          callbacks: {
+            title: items => `$${items[0].label}`,
+            label:  item  => `IV ${Number(item.raw).toFixed(1)}%`,
+          },
+          titleFont: { size: 10, family: "JetBrains Mono" },
+          bodyFont:  { size: 10, family: "JetBrains Mono" },
+          backgroundColor: _isDark() ? "#1a1a18" : "#f4f4f2",
+          titleColor: C.ink, bodyColor: C.ink2,
+          borderColor: C.line, borderWidth: 1,
+          padding: 6,
+        },
+      },
+      scales: {
+        x: {
+          ticks: { font: { size: 8, family: "JetBrains Mono" }, color: C.ink3, maxTicksLimit: 8, maxRotation: 0 },
+          grid: { display: false },
+          border: { display: false },
+        },
+        y: {
+          ticks: { font: { size: 8, family: "JetBrains Mono" }, color: C.ink3 },
+          grid: { color: dim },
+          border: { display: false },
+        },
+      },
+    },
+  });
+}
+
+function updateRadarChart(r) {
+  const canvas = document.getElementById("radarChart");
+  if (!canvas || !r) return;
+  const vals = [
+    clamp(r.trend?.hurst ?? 0.5, 0, 1) * 100,
+    clamp(r.trend?.er    ?? 0,   0, 1) * 100,
+    r.confidence ?? 0,
+    r.impliedVol ? clamp(r.impliedVol.vrpPercentile, 0, 100) : 50,
+    r.vol        ? clamp(100 - r.vol.rvPercentile, 0, 100)   : 50,
+  ];
+  const dim = _isDark() ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.07)";
+
+  if (_chartRadar) {
+    _chartRadar.data.datasets[0].data = vals;
+    _chartRadar.update("none");
+    return;
+  }
+  _chartRadar = new Chart(canvas, {
+    type: "radar",
+    data: {
+      labels: ["HURST", "ER", "CONF", "VRP", "CALM"],
+      datasets: [{
+        data: vals,
+        borderColor: C.green,
+        backgroundColor: _hexRgba(C.green, 0.12),
+        borderWidth: 1.5,
+        pointBackgroundColor: C.green,
+        pointRadius: 3,
+        pointHoverRadius: 4,
+      }],
+    },
+    options: {
+      ..._chartDefaults(),
+      plugins: { legend: { display: false }, tooltip: { enabled: false } },
+      scales: {
+        r: {
+          min: 0, max: 100,
+          ticks: { display: false, stepSize: 25 },
+          pointLabels: { font: { size: 8, family: "JetBrains Mono" }, color: C.ink3 },
+          grid:        { color: dim },
+          angleLines:  { color: dim },
+        },
+      },
+    },
+  });
+}
+
+function renderVizCharts(r) {
+  _hurstHistory.push({ t: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }), h: r.trend?.hurst ?? 0.5 });
+  if (_hurstHistory.length > 60) _hurstHistory.shift();
+  updateHurstChart();
+  updateIvSmileChart(lastData?.coverage);
+  updateRadarChart(r);
 }
 
 // ── regime tab ──────────────────────────────────────────────────────────────────
@@ -1473,15 +1865,19 @@ function renderRegime(r) {
     row.appendChild(note);
     pw.appendChild(row);
   }
+
+  // monitors
+  renderVizCharts(r);
 }
 
 async function loadRegime() {
   feedNext.regime = Date.now() + NARR_MS;
   // Prefer the cloud function (live even when the scoring box is off); fall back to the static
   // file for LAN viewing. Keep the last good read if both fail rather than blanking the tab.
-  for (const url of [`${REGIME_FN}?t=${Date.now()}`, `${REGIME_URL}?t=${Date.now()}`]) {
+  for (const [url, isAuth] of [[`${REGIME_FN}?t=${Date.now()}`, true], [`${REGIME_URL}?t=${Date.now()}`, false]]) {
     try {
-      const res = await fetch(url, { cache: "no-store" });
+      const res = await fetch(url, { cache: "no-store", headers: isAuth ? authHdrs() : {} });
+      if (res.status === 401) { handle401(); return; }
       if (!res.ok) continue;
       regData = await res.json();
       renderRegime(regData);
@@ -1516,6 +1912,7 @@ function applyTheme(theme) {
     btn.setAttribute("aria-label", theme === "dark" ? "Switch to light mode" : "Switch to dark mode");
   }
   readPalette();
+  window.Topo?.refreshPalette();
 }
 let theme = "light";
 try {
@@ -1528,15 +1925,31 @@ $("#themeToggle")?.addEventListener("click", () => {
   try { localStorage.setItem("torii.theme", next); } catch { /* ignore */ }
   applyTheme(next);
   if (lastData) render(lastData);  // repaint canvas/SVG charts with the new palette
+  destroyVizCharts(); if (regData) renderVizCharts(regData);
 });
 
 // ── init ──────────────────────────────────────────────────────────────────────
+const idleExpired = () => Date.now() - parseInt(localStorage.getItem("lastSeen") ?? "0", 10) > IDLE_MS;
+const touchSession = () => localStorage.setItem("lastSeen", String(Date.now()));
+if (!getToken() || idleExpired()) { clearAuth(); window.location.href = "/login.html"; }
+touchSession();
+// Track real activity (not just page loads) so the 2-day idle window means what it says,
+// and re-check it whenever the tab wakes up — a tab left open for weeks must re-auth.
+document.addEventListener("pointerdown", touchSession, { passive: true });
+const $accountUser = $("#accountUser");
+if ($accountUser) $accountUser.textContent = localStorage.getItem("authUser") ?? "";
+const $signoutBtn = $("#signoutBtn");
+if ($signoutBtn) $signoutBtn.addEventListener("click", () => { clearAuth(); window.location.href = "/login.html"; });
 initBackground();
+window.Topo?.init("#topoCanvas", "#topoChips", "#topoReadout", "#topoCaption");
 tickClock(); tickOpenCountdown(); tickNextScore(); tickAgoStamps(); tickFeedTimers();
 setInterval(() => { tickClock(); tickOpenCountdown(); tickNextScore(); tickAgoStamps(); tickFeedTimers(); }, 1000);
 $("#refresh").addEventListener("click", () => { load(); loadSpot(); loadCandles(); loadNarrative(); loadRegime(); loadMacro(); });
 document.addEventListener("visibilitychange", () => {
-  if (!document.hidden) { load(); loadSpot(); loadCandles(); loadNarrative(); loadRegime(); loadMacro(); }
+  if (document.hidden) return;
+  if (!getToken() || idleExpired()) { clearAuth(); window.location.href = "/login.html"; return; }
+  touchSession();
+  load(); loadSpot(); loadCandles(); loadNarrative(); loadRegime(); loadMacro();
 });
 
 let startView = "board";

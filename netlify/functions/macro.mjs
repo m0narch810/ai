@@ -7,6 +7,19 @@
 //   Bearish: 2Y rising fast AND liquidity tightening AND COT > 80
 //   Neutral: signals conflict
 import { connectLambda, getStore } from "@netlify/blobs";
+import { createHmac, timingSafeEqual } from "node:crypto";
+function verifyToken(authHeader) {
+  const token = (authHeader ?? "").replace(/^Bearer\s+/, "");
+  if (!token || !process.env.AUTH_SECRET) return false;
+  const dot = token.lastIndexOf(".");
+  if (dot < 0) return false;
+  const payload = token.slice(0, dot), sig = token.slice(dot + 1);
+  const expected = createHmac("sha256", process.env.AUTH_SECRET).update(payload).digest("base64url");
+  const a = Buffer.from(sig), b = Buffer.from(expected);
+  if (a.length !== b.length || !timingSafeEqual(a, b)) return false;
+  try { const { exp } = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")); return Number.isFinite(exp) && Date.now() < exp; }
+  catch { return false; }
+}
 
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36";
 const CACHE_TTL_MS = 5 * 60 * 1000;
@@ -177,25 +190,32 @@ async function cotReading() {
  * New layers (Ch.12.2 weekly): OAS credit spreads, reserve balances, WALCL, VIX term structure,
  * copper (growth proxy), auction day flag.
  */
-function computeBias({ us2y, usdjpy, tga, rrp, cot, cross, oas, vix_term, reserve_bal, walcl, auction_today }) {
+function computeBias({ us2y, us10y, usdjpy, tga, rrp, cot, cross, oas, vix_term, reserve_bal, walcl, auction_today }) {
   let score = 0;
   const drivers = [];
 
   // ── Core yield + liquidity (existing) ──────────────────────────────────────
   if (us2y) {
+    // dxrk PDF-2 §1: "slow drift means nothing" — full ±25 only for a fast move (≥3bp in ~30min);
+    // slow drift (or no intraday velocity) gets reduced weight. Mirrors fallbackNarrative in narrative.ts.
+    const fast = Math.abs(us2y.velocity ?? 0) >= 0.03;
+    const w = fast ? 25 : 10;
     const bear = us2y.dir === "rising";
-    score += bear ? -25 : us2y.dir === "falling" ? 25 : 0;
-    drivers.push({ label: "2Y Yield", reading: `${us2y.last}% (${us2y.dir})`, lean: bear ? "bear" : us2y.dir === "falling" ? "bull" : "neutral" });
+    score += bear ? -w : us2y.dir === "falling" ? w : 0;
+    // Fast-rising 2Y WITHOUT the 10Y following = the strongest bearish version of the signal.
+    if (fast && bear && us10y && Math.abs(us10y.velocity ?? 0) < 0.015) score -= 8;
+    const speed = us2y.velocity != null ? (fast ? ", fast" : ", slow drift") : "";
+    drivers.push({ label: "2Y Yield", reading: `${us2y.last}% (${us2y.dir}${speed})`, lean: bear ? "bear" : us2y.dir === "falling" ? "bull" : "neutral" });
   }
   if (tga) {
-    const bull = tga.dir === "falling";
-    score += bull ? 15 : -10;
-    drivers.push({ label: "TGA", reading: `$${Math.round(tga.last / 1000)}B (${tga.dir})`, lean: bull ? "bull" : "bear" });
+    const d = tga.dir;
+    score += d === "falling" ? 15 : d === "rising" ? -10 : 0;
+    drivers.push({ label: "TGA", reading: `$${Math.round(tga.last / 1000)}B (${d})`, lean: d === "falling" ? "bull" : d === "rising" ? "bear" : "neutral" });
   }
   if (rrp) {
-    const bull = rrp.dir === "falling";
-    score += bull ? 15 : -10;
-    drivers.push({ label: "RRP", reading: `$${rrp.last}B (${rrp.dir})`, lean: bull ? "bull" : "bear" });
+    const d = rrp.dir;
+    score += d === "falling" ? 15 : d === "rising" ? -10 : 0;
+    drivers.push({ label: "RRP", reading: `$${rrp.last}B (${d})`, lean: d === "falling" ? "bull" : d === "rising" ? "bear" : "neutral" });
   }
   if (cot) {
     const bear = cot.percentile > 80;
@@ -286,6 +306,9 @@ const jsonResp = (statusCode, body) => ({
 });
 
 export const handler = async (event) => {
+  if (!verifyToken(event.headers["authorization"] ?? event.headers["Authorization"])) {
+    return { statusCode: 401, headers: { "content-type": "application/json", "access-control-allow-origin": "*" }, body: JSON.stringify({ error: "Unauthorized" }) };
+  }
   connectLambda(event);
   const force = event?.queryStringParameters?.force === "1";
   const store = getStore("macro-cache");
@@ -355,7 +378,7 @@ export const handler = async (event) => {
   if (!walcl)   notes.push("WALCL (Fed balance sheet) unavailable");
 
   const { bias, score: bias_score, drivers } = computeBias({
-    us2y, usdjpy, tga, rrp, cot, cross,
+    us2y, us10y, usdjpy, tga, rrp, cot, cross,
     oas, vix_term, reserve_bal: wresbal, walcl, auction_today,
   });
 

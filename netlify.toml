@@ -23,17 +23,21 @@
 [functions."capture"]
   schedule = "*/15 * * * *"
 
-# The board JSON must never be cached by the CDN, or the phone shows a stale board.
-[[headers]]
-  for = "/dashboard.json"
-  [headers.values]
-    Cache-Control = "no-store, max-age=0"
+# Scheduled regime refresh: recomputes the Regime engine to Blobs during RTH so the headless
+# scorer's regime block is never stale (the HTTP regime function only recomputes on view).
+[functions."regime-cron"]
+  schedule = "*/15 * * * *"
 
-# Same for the pre-open narrative — must reflect today's generated file, never a cached one.
-[[headers]]
-  for = "/narrative.json"
-  [headers.values]
-    Cache-Control = "no-store, max-age=0"
+# News watchdog: every 15 min it checks today's USD high-impact ("red folder") economic
+# calendar (NFP, CPI, FOMC, etc.) and pushes an ntfy alert ~20 min ahead of each release, plus
+# one morning digest of the day's times. Self-gates to 06:00-16:00 ET Mon-Fri. Reuses
+# NTFY_TOPIC/NTFY_SERVER from the watchdog config — no extra env needed. See news-cron.mjs.
+[functions."news-cron"]
+  schedule = "*/15 * * * *"
+
+# NOTE: dashboard.json / narrative.json / regime.json are intentionally NOT deployed (they'd be
+# public and bypass the login) — the board is served from Netlify Blobs via the token-checked
+# dashboard/narrative functions. See stageWebDir() in src/publish.ts.
 
 # The shell + assets must revalidate every load, or a redeploy shows the OLD UI
 # (browser keeps the cached styles.css/app.js). no-cache = use cache only after a
@@ -48,5 +52,9 @@
     Cache-Control = "no-cache"
 [[headers]]
   for = "/app.js"
+  [headers.values]
+    Cache-Control = "no-cache"
+[[headers]]
+  for = "/topo.js"
   [headers.values]
     Cache-Control = "no-cache"

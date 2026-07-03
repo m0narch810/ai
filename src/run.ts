@@ -4,13 +4,14 @@ import cron from "node-cron";
 import { getStore } from "@netlify/blobs";
 import { activeSession, config, isAiScoreTime, nowInSessionTz, RTH_MIN, type SessionDef } from "./config.js";
 import { captureTick, compactSnapshot, loadDayGreek, loadDaySnapshots } from "./capture.js";
-import { detectMany } from "./detect.js";
-import { fetchSessionBars, liveQqqEquivSpot } from "./market.js";
+import { computeDayGate } from "./dayGate.js";
+import { detectMany, gradeTradeCall } from "./detect.js";
+import { fetchSessionBars, liveQqqEquivSpot, liveQqqSpot } from "./market.js";
 import { buildNarrative, narrativeJsonPath, writeNarrative } from "./narrative.js";
 import { deploySite, publish } from "./publish.js";
 import { dayContextFromNarrative, scoreBoard, scoreBoardDeterministic } from "./score.js";
 import { fetchCloudCaptures, type CloudTick } from "./cloudCaptures.js";
-import type { Board, CaptureRecord, DataSnapshot, DetectedLevel, GreekTimeseries, Narrative, RegimeSummary } from "./types.js";
+import type { Bar, Board, CaptureRecord, DataSnapshot, DetectedLevel, GreekTimeseries, Narrative, RegimeSummary } from "./types.js";
 
 /** ~90 min of context at a 15-min cadence — enough to read trend without diluting deltas. */
 const LOOKBACK = 6;
@@ -19,18 +20,20 @@ const LOOKBACK = 6;
 // the same tick. O_EXCL is atomic on Windows NTFS — only one process can create the file.
 const LOCK_FILE = path.join(path.resolve("data", "scored"), ".scoring.lock");
 
+function isPidAlive(pid: number): boolean {
+  try { process.kill(pid, 0); return true; } catch { return false; }
+}
+
 async function acquireLock(): Promise<boolean> {
   // Check for an existing lock; reclaim it if it's stale (dead process or too old).
   try {
     const existing = JSON.parse(await fs.readFile(LOCK_FILE, "utf8")) as { pid: number; ts: number };
     const ageMs = Date.now() - existing.ts;
-    if (ageMs < config.scoreIntervalMin * 2 * 60_000) {
-      try {
-        process.kill(existing.pid, 0); // throws if PID is gone
-        return false; // lock is held by a live process
-      } catch {
-        // dead process — fall through to reclaim
-      }
+    // A lock held by a LIVE process is only stealable once it's implausibly old (a wedged
+    // process, not just a slow tick) — 4 intervals, not 2, so a slow deploy can't be raced.
+    const staleMs = config.scoreIntervalMin * (isPidAlive(existing.pid) ? 4 : 2) * 60_000;
+    if (ageMs < staleMs && isPidAlive(existing.pid)) {
+      return false; // lock is held by a live, plausibly-working process
     }
     // Stale lock (dead PID or older than 2 intervals): unlink it so the O_EXCL
     // create below can succeed. Without this, a lock left by a killed/crashed
@@ -93,7 +96,6 @@ async function loadLatestBoardAny(): Promise<Board | null> {
   }
 }
 
-/** Today's pre-open narrative, if one was generated for this date (used to tilt scoring). */
 /**
  * Read the cloud Regime tab's latest output from Netlify Blobs (the SAME data the dashboard
  * shows). Fed to the AI scorer so the displayed regime governs the board. Best-effort: if
@@ -104,14 +106,25 @@ async function loadRegime(): Promise<RegimeSummary | null> {
   const token = process.env.NETLIFY_AUTH_TOKEN?.trim();
   if (!siteID || !token) return null;
   try {
-    const r = await getStore({ name: "regime-cache", siteID, token }).get("latest", { type: "json" }) as RegimeSummary | null;
-    return r && Array.isArray(r.pivots) ? r : null;
+    const r = await getStore({ name: "regime-cache", siteID, token }).get("latest", { type: "json" }) as (RegimeSummary & { scored_at?: number; state?: string }) | null;
+    if (!r || !Array.isArray(r.pivots)) return null;
+    // Never let a placeholder or stale blob GOVERN the board (the prompt treats this block as
+    // highest-order context). Stale regime = worse than none: the scorer has an explicit
+    // fall-back path (Altaris gex_regime + Hurst + GARCH) when the block is null.
+    if (r.state === "INSUFFICIENT DATA") return null;
+    const ageMin = (Date.now() - (r.scored_at ?? 0)) / 60_000;
+    if (ageMin > 30) {
+      console.warn(`regime blob stale (${Math.round(ageMin)}m old) — scoring without it`);
+      return null;
+    }
+    return r;
   } catch (err) {
     console.warn("regime read failed (scoring continues without it):", err instanceof Error ? err.message : err);
     return null;
   }
 }
 
+/** Today's pre-open narrative, if one was generated for this date (used to tilt scoring). */
 async function loadTodayNarrative(date: string): Promise<Narrative | null> {
   try {
     const n = JSON.parse(await fs.readFile(narrativeJsonPath, "utf8")) as Narrative;
@@ -121,15 +134,53 @@ async function loadTodayNarrative(date: string): Promise<Narrative | null> {
   }
 }
 
-async function persist(date: string, board: Board, detected: unknown) {
+async function persist(date: string, board: Board, detected: unknown, bars?: Bar[]) {
   await fs.mkdir(config.paths.scored, { recursive: true });
-  await fs.writeFile(path.join(config.paths.scored, "latest.json"), JSON.stringify(board, null, 2), "utf8");
+  // Atomic write: `npm run publish` (and anything else) reads latest.json concurrently —
+  // a plain writeFile can be read half-written and blow up its JSON.parse.
+  const latest = path.join(config.paths.scored, "latest.json");
+  await fs.writeFile(latest + ".tmp", JSON.stringify(board, null, 2), "utf8");
+  await fs.rename(latest + ".tmp", latest);
   await fs.appendFile(path.join(config.paths.scored, `${date}.boards.jsonl`), JSON.stringify(board) + "\n", "utf8");
   await fs.appendFile(
     path.join(config.paths.scored, `${date}.calibration.jsonl`),
     JSON.stringify({ as_of: board.as_of, detected }) + "\n",
     "utf8",
   );
+  await persistCalls(date, board, bars);
+}
+
+/**
+ * THE CALLS LEDGER — the tape's one committed trade per tick, persisted as its own calibration
+ * object and re-graded every tick like a real resting order (fill → target-before-stop, strictly
+ * sequential). This is the number that answers "if I took every call, how accurate is it?" —
+ * one decided call per tick, not a probability menu. AI boards only (the rule fallback has no tape).
+ */
+async function persistCalls(date: string, board: Board, bars?: Bar[]) {
+  const callsFile = path.join(config.paths.scored, `${date}.calls.jsonl`);
+  const t = board.tape?.trade;
+  if (t && board.scoring_method === "ai" && Number.isFinite(t.entry) && Number.isFinite(t.target)) {
+    // Append only DISTINCT calls (same side/entry/target repeated across ticks is one standing call).
+    let isNew = true;
+    try {
+      const lines = (await fs.readFile(callsFile, "utf8")).trim().split("\n").filter(Boolean);
+      const prev = lines.length ? (JSON.parse(lines[lines.length - 1]!) as { side: string; entry: number; target: number }) : null;
+      if (prev && prev.side === t.side && prev.entry === t.entry && prev.target === t.target) isNew = false;
+    } catch { /* first call of the day */ }
+    if (isNew) {
+      await fs.appendFile(callsFile, JSON.stringify({ as_of: board.as_of, side: t.side, entry: t.entry, target: t.target, why: t.why, spot: board.spot }) + "\n", "utf8");
+    }
+  }
+  // Re-grade every call made today against the bars SINCE each call (no look-back fills).
+  if (!bars?.length) return;
+  try {
+    const calls = (await fs.readFile(callsFile, "utf8")).trim().split("\n").filter(Boolean)
+      .map((l) => JSON.parse(l) as { as_of: string; side: "long" | "short"; entry: number; target: number; why: string; spot: number });
+    const graded = calls.map((c) => ({ ...c, grade: gradeTradeCall(bars.filter((b) => b.ts >= c.as_of), c.side, c.entry, c.target) }));
+    const gradedFile = path.join(config.paths.scored, `${date}.calls.graded.json`);
+    await fs.writeFile(gradedFile + ".tmp", JSON.stringify(graded, null, 1), "utf8");
+    await fs.rename(gradedFile + ".tmp", gradedFile);
+  } catch { /* no calls yet today */ }
 }
 
 function printBoard(board: Board, session: SessionDef, spot: number) {
@@ -142,13 +193,15 @@ function printBoard(board: Board, session: SessionDef, spot: number) {
   console.log("");
 }
 
-/** Reversal detection runs on Yahoo OHLC bars (real wicks); a fetch failure must not block scoring. */
-async function detectForSession(session: SessionDef, strikes: number[], date?: string): Promise<DetectedLevel[]> {
+/** Reversal detection runs on session OHLC bars (real wicks); a fetch failure must not block scoring.
+ *  Returns the bars too — the calls ledger re-grades the day's tape trades against them. */
+async function detectForSession(session: SessionDef, strikes: number[], date?: string): Promise<{ bars: Bar[]; detected: DetectedLevel[] }> {
   try {
-    return detectMany(await fetchSessionBars(session, date), strikes);
+    const bars = await fetchSessionBars(session, date);
+    return { bars, detected: detectMany(bars, strikes) };
   } catch (err) {
     console.warn("market data unavailable, skipping reversal detection:", err instanceof Error ? err.message : err);
-    return [];
+    return { bars: [], detected: [] };
   }
 }
 
@@ -173,13 +226,13 @@ async function effectiveSpot(session: SessionDef, altarisSpot: number): Promise<
  * an explicit `greek` (the tick's as-of timeseries, not whatever's on disk now), and `publish:
  * false` (score many recovered ticks, deploy once at the end instead of per tick).
  */
-interface ScoreOpts { prior?: Board | null; greek?: GreekTimeseries | null; publish?: boolean }
+interface ScoreOpts { prior?: Board | null; greek?: GreekTimeseries | null; publish?: boolean; persist?: boolean }
 async function scoreFromHistory(date: string, history: CaptureRecord[], session: SessionDef, opts: ScoreOpts = {}) {
   const cur = history[history.length - 1]!.data;
   const prior = opts.prior !== undefined ? opts.prior : await loadLatestBoard(date);
 
   const candidateStrikes = [...named(cur), ...(prior?.levels.map((l) => l.strike) ?? [])];
-  const [detected, spot, greek, narrative, regime] = await Promise.all([
+  const [{ bars, detected }, spot, greek, narrative, regime] = await Promise.all([
     detectForSession(session, candidateStrikes, date),
     effectiveSpot(session, cur.spot),
     opts.greek !== undefined ? Promise.resolve(opts.greek) : loadDayGreek(date),
@@ -187,6 +240,26 @@ async function scoreFromHistory(date: string, history: CaptureRecord[], session:
     isAiScoreTime() ? loadRegime() : Promise.resolve(null), // regime only feeds the AI pass
   ]);
   const dayContext = dayContextFromNarrative(narrative); // tilt scoring toward the pre-open call
+
+  // Stale-feed guard (US only — in Asia the Altaris chain is intentionally prior-close and we
+  // already source spot from NQ). If the chain's spot has drifted far from the live market, the
+  // whole greek layer (walls/GEX/charm/vanna) is frozen/corrupt; scoring it just publishes
+  // phantom levels. Skip the cycle so the board goes honestly stale (watchdog will alert).
+  if (session.name !== "Asia") {
+    try {
+      const live = await liveQqqSpot();
+      const drift = Math.abs(cur.spot - live) / live;
+      if (drift > config.staleFeedMaxPct) {
+        const msg = `[${new Date().toISOString()}] [${session.name}] stale-feed guard: Altaris chain spot ${cur.spot} vs live QQQ ${live.toFixed(2)} (${(drift * 100).toFixed(1)}% drift > ${(config.staleFeedMaxPct * 100).toFixed(1)}%). Chain frozen — skipping score.`;
+        console.warn(msg);
+        await fs.appendFile(path.join(config.paths.scored, "scoring-errors.log"), msg + "\n\n", "utf8").catch(() => {});
+        return prior ?? (await loadLatestBoardAny());
+      }
+    } catch (err) {
+      // Live reference unavailable — don't block scoring on a Yahoo hiccup; proceed normally.
+      console.warn("stale-feed guard skipped (no live reference):", err instanceof Error ? err.message : err);
+    }
+  }
 
   let board: Board;
   if (isAiScoreTime()) {
@@ -203,7 +276,14 @@ async function scoreFromHistory(date: string, history: CaptureRecord[], session:
   } else {
     board = await scoreBoardDeterministic(history.slice(-LOOKBACK), prior, detected, session, spot);
   }
-  await persist(date, board, detected);
+  // Advisory day gate (calendar × flow × regime): "should I rest limits at all today?"
+  // Computed on every board (AI or rule) so the dashboard always carries a verdict.
+  try {
+    board.day_gate = computeDayGate(history[history.length - 1]!, spot, dayContext);
+  } catch (err) {
+    console.warn("day gate computation failed (board publishes without it):", err instanceof Error ? err.message : err);
+  }
+  if (opts.persist !== false) await persist(date, board, detected, bars);
   printBoard(board, session, spot);
 
   // Hybrid model: scoring is local, the board auto-publishes to the phone dashboard.
@@ -232,7 +312,7 @@ async function refreshTick(session: SessionDef) {
   }
   const strikes = prior.levels.map((l) => l.strike);
   const today = nowInSessionTz().date;
-  const [detected, spot] = await Promise.all([
+  const [{ detected }, spot] = await Promise.all([
     detectForSession(session, strikes, today),
     effectiveSpot(session, prior.spot),
   ]);
@@ -274,9 +354,18 @@ async function liveTickInner(session: SessionDef, force = false) {
   let { date } = nowInSessionTz();
   if (force || isAiScoreTime()) {
     console.log(`[${new Date().toISOString()}] [${session.name}] capture + AI score (RTH)...`);
-    await captureTick();
+    // A transient capture failure (network blip, degraded /api/data payload) must not abort
+    // the whole RTH tick — score from the snapshots we already have so the board stays live.
+    try { await captureTick(); } catch (err) {
+      console.warn("RTH capture failed, scoring from last available data:", err instanceof Error ? err.message : err);
+    }
     const history = await loadDaySnapshots(date);
-    await scoreFromHistory(date, history, session);
+    if (history.length) {
+      await scoreFromHistory(date, history, session);
+    } else {
+      console.warn("no captures available for today — falling back to refresh");
+      await refreshTick(session);
+    }
   } else {
     console.log(`[${new Date().toISOString()}] [${session.name}] off-RTH rule score...`);
     try { await captureTick(); } catch (err) {
@@ -303,7 +392,9 @@ async function fixtureRun() {
   console.log("Fixture mode: scoring against fixtures/ (no Altaris call).");
   const raw = JSON.parse(await fs.readFile(path.join(config.paths.fixtures, "data.sample.json"), "utf8")) as DataSnapshot & Record<string, unknown>;
   const record: CaptureRecord = { capturedAt: nowInSessionTz().iso, data: compactSnapshot(raw) };
-  await scoreFromHistory(nowInSessionTz().date, [record], activeSession() ?? US_SESSION);
+  // Pure smoke test: never persist a fixture board into data/scored (a later `npm run publish`
+  // would ship the fixture to the phone) and never publish/deploy from here.
+  await scoreFromHistory(nowInSessionTz().date, [record], activeSession() ?? US_SESSION, { publish: false, persist: false });
 }
 
 /**
@@ -312,6 +403,25 @@ async function fixtureRun() {
  * Runs once ~09:00 ET (before the 09:15 AI score window) so the board can then tilt to it.
  */
 async function narrativeTick(session: SessionDef) {
+  // Serialize with the scoring tick: at 09:00 both crons fire together — without the lock the
+  // two captureTick() calls interleave appends to the same data.jsonl and the two Netlify
+  // deploys race each other.
+  if (!await acquireLock()) {
+    console.warn(`[${new Date().toISOString()}] [${session.name}] scoring lock held — narrative waiting one minute...`);
+    await new Promise((r) => setTimeout(r, 60_000));
+    if (!await acquireLock()) {
+      console.warn("scoring lock still held — skipping narrative tick (retry manually with npm run narrative)");
+      return;
+    }
+  }
+  try {
+    await narrativeTickInner(session);
+  } finally {
+    await releaseLock();
+  }
+}
+
+async function narrativeTickInner(session: SessionDef) {
   const { date, iso } = nowInSessionTz();
   console.log(`[${new Date().toISOString()}] [${session.name}] building pre-open narrative...`);
   await captureTick();
@@ -442,9 +552,11 @@ async function backfillDay(dateArg?: string) {
   await resortDayLogs(date);
   const final = (await loadBoardsForDate(date)).at(-1);
   if (final) {
-    await fs.writeFile(path.join(config.paths.scored, "latest.json"), JSON.stringify(final, null, 2), "utf8");
+    const latest = path.join(config.paths.scored, "latest.json");
+    await fs.writeFile(latest + ".tmp", JSON.stringify(final, null, 2), "utf8");
+    await fs.rename(latest + ".tmp", latest);
     try {
-      const detected = await detectForSession(session, final.levels.map((l) => l.strike), nowInSessionTz().date);
+      const { detected } = await detectForSession(session, final.levels.map((l) => l.strike), nowInSessionTz().date);
       await publish(final, detected, session.name);
       console.log("Published the recovered day's latest board.");
     } catch (err) {
@@ -464,10 +576,28 @@ async function main() {
   if (arg === "--narrative") return narrativeTick(activeSession() ?? US_SESSION); // manual pre-open narrative
 
   // Scheduled mode — runs in the US and Asia windows; AI-scores only during RTH.
+  //
+  // SINGLE-INSTANCE TAKEOVER: Stop-ScheduledTask does NOT kill the spawned npm/node tree
+  // (observed live: nine stale loop instances stacked up, the oldest — running outdated
+  // code — kept winning the scoring lock). Instead of relying on external kills, the newest
+  // instance claims ownership by writing its PID here; every older instance notices on its
+  // next cron fire and exits itself. Restart procedure is therefore just Start-ScheduledTask.
+  const LOOP_PID_FILE = path.join(path.resolve("data"), ".loop.pid");
+  await fs.mkdir(path.resolve("data"), { recursive: true });
+  await fs.writeFile(LOOP_PID_FILE, String(process.pid), "utf8");
+  const stillOwner = async (): Promise<boolean> => {
+    try { return (await fs.readFile(LOOP_PID_FILE, "utf8")).trim() === String(process.pid); }
+    catch { return true; } // unreadable file must not kill the only live loop
+  };
+
   const expr = `*/${config.scoreIntervalMin} * * * *`;
   console.log(`Scheduler armed: every ${config.scoreIntervalMin}m. AI score ${config.aiScoreStart}-${config.aiScoreEnd} (RTH); off-RTH = spot+reversal refresh. Pre-open narrative ${config.narrativeTime} ET (Mon-Fri). Windows US ${config.sessionStart}-${config.sessionEnd}, Asia ${config.asiaStart}-${config.asiaEnd} ${config.sessionTz}.`);
   let tickRunning = false;
   cron.schedule(expr, async () => {
+    if (!await stillOwner()) {
+      console.warn(`[${new Date().toISOString()}] newer loop instance took over — this one (pid ${process.pid}) exits.`);
+      process.exit(0);
+    }
     const session = activeSession();
     if (!session) return;
     if (tickRunning) {
@@ -487,6 +617,7 @@ async function main() {
   // Pre-open narrative: once per weekday at config.narrativeTime ET (default 09:00), before RTH scoring.
   const [nh, nm] = config.narrativeTime.split(":").map(Number);
   cron.schedule(`${nm ?? 0} ${nh ?? 9} * * 1-5`, async () => {
+    if (!await stillOwner()) return; // superseded — the main cron will exit the process
     try {
       await narrativeTick(activeSession() ?? US_SESSION);
     } catch (err) {

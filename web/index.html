@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Noto+Sans+JP:wght@500;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=23" />
+  <link rel="stylesheet" href="styles.css?v=24" />
 </head>
 <body>
 
@@ -17,6 +17,7 @@
 <main id="app">
 
   <!-- ── HEADER ── -->
+  <div class="ruler" aria-hidden="true"></div>
   <header class="topbar">
     <div class="brand">
       <span class="brand-mark">鳥居</span>
@@ -32,6 +33,11 @@
       <span class="next-score" id="nextScore" data-tip="Time until the next scheduled scoring tick">
         <span class="ns-label" id="nsLabel">NEXT SCORE</span>
         <span class="ns-time" id="nsTime">--:--</span>
+      </span>
+      <span class="status-sep"></span>
+      <span class="account-badge">
+        <span class="account-user" id="accountUser"></span>
+        <button class="signout-btn" id="signoutBtn" type="button" title="Sign out">⏻</button>
       </span>
     </div>
   </header>
@@ -75,7 +81,46 @@
       <div class="sec-body"><p id="heroRead"></p></div>
     </section>
 
+    <!-- TAPE — the desk's continuous action narrative: committed direction, expected path, THE trade -->
+    <section class="sec tape-sec" id="tapeWrap" hidden>
+      <div class="sec-label"><span><i class="ix">03A</i> TAPE</span><span class="jp">実況</span></div>
+      <div class="sec-body">
+        <div class="tape-head">
+          <span class="tape-dir" id="tapeDir">—</span>
+          <span class="tape-now" id="tapeNow"></span>
+        </div>
+        <p id="tapeNarrative"></p>
+        <div class="tape-path" id="tapePath"></div>
+        <div class="tape-trade" id="tapeTrade" hidden></div>
+      </div>
+    </section>
+
     <div class="banner" id="banner" hidden></div>
+
+    <!-- DAY GATE — advisory "take levels today?" verdict (calendar × flow × regime) -->
+    <section class="sec day-gate" id="dayGate" hidden>
+      <div class="sec-label"><span><i class="ix">04</i> DAY GATE</span><span class="jp">日次判定</span></div>
+      <div class="sec-body">
+        <div class="dg-head">
+          <span class="dg-verdict" id="dgVerdict">—</span>
+          <span class="dg-score" id="dgScore"></span>
+          <span class="dg-note">advisory · calendar × flow × regime</span>
+        </div>
+        <ul class="dg-reasons" id="dgReasons"></ul>
+      </div>
+    </section>
+
+    <!-- TOPOGRAPHY — rotating 3D terrain of the dealer book (drag to rotate, hover to read) -->
+    <section class="sec topo-sec" id="topoSec" hidden>
+      <div class="sec-label">
+        <span><i class="ix">T</i> TOPOGRAPHY</span>
+        <span class="topo-tools"><span class="topo-readout" id="topoReadout"></span><span class="topo-chips" id="topoChips"></span><span class="jp">地形</span></span>
+      </div>
+      <div class="sec-body topo-body">
+        <canvas id="topoCanvas"></canvas>
+        <div class="topo-caption" id="topoCaption"></div>
+      </div>
+    </section>
 
     <div class="charts-section" id="chartsSection">
       <section class="sec chart-panel">
@@ -148,7 +193,33 @@
     </section>
 
     <section class="sec">
-      <div class="sec-label"><span><i class="ix">R3</i> TOPOLOGY PIVOTS</span><span class="jp">転換点</span></div>
+      <div class="sec-label"><span><i class="ix">R3</i> MONITORS</span><span class="jp">監視</span></div>
+      <div class="sec-body">
+        <div class="viz-row">
+          <div class="viz-card viz-card--grow">
+            <div class="viz-lbl" style="align-self:flex-start;margin-bottom:8px">HURST OSCILLATOR</div>
+            <div class="viz-canvas-wrap">
+              <canvas id="hurstChart"></canvas>
+            </div>
+          </div>
+          <div class="viz-card">
+            <div class="viz-lbl" style="margin-bottom:8px">REGIME RADAR</div>
+            <div class="viz-canvas-wrap viz-canvas-sq">
+              <canvas id="radarChart"></canvas>
+            </div>
+          </div>
+        </div>
+        <div class="viz-card viz-wave-card">
+          <div class="viz-lbl" style="align-self:flex-start;margin-bottom:8px">IV SMILE · QQQ OPTIONS FLOW</div>
+          <div class="viz-canvas-wrap viz-canvas-wave">
+            <canvas id="ivSmileChart"></canvas>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="sec">
+      <div class="sec-label"><span><i class="ix">R4</i> TOPOLOGY PIVOTS</span><span class="jp">転換点</span></div>
       <div class="sec-body" id="regPivots"></div>
     </section>
 
@@ -157,7 +228,7 @@
   <!-- ════════════ NARRATIVE VIEW ════════════ -->
   <section id="viewNarrative" class="view" hidden>
 
-    <div class="specbar" id="narrSpec">YYY SYNTHESIS — ENTROPY GATE × TOPOLOGY × GEX LEVELS × MACRO BIAS</div>
+    <div class="specbar" id="narrSpec">PRE-OPEN BRIEF — QQQ OPTIONS · ALTARIS · YAHOO FINANCE · FRED</div>
 
     <!-- SIZE RULE — the gate, first thing visible -->
     <div class="size-rule-banner" id="sizeRuleBanner" hidden>
@@ -187,7 +258,7 @@
     </section>
 
     <section class="sec" id="liveMacroWrap" hidden>
-      <div class="sec-label"><span><i class="ix">M</i> LIVE MACRO</span><span class="jp">生マクロ · YYY</span></div>
+      <div class="sec-label"><span><i class="ix">M</i> LIVE MACRO</span><span class="jp">生マクロ</span></div>
       <div class="sec-body" id="liveMacro"></div>
     </section>
 
@@ -229,6 +300,8 @@
 </main>
 
 <div id="tip" class="tip" hidden></div>
-<script src="app.js?v=37"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js" integrity="sha384-NrKB+u6Ts6AtkIhwPixiKTzgSKNblyhlk0Sohlgar9UHUBzai/sgnNNWWd291xqt" crossorigin="anonymous"></script>
+<script src="topo.js?v=1"></script>
+<script src="app.js?v=41"></script>
 </body>
 </html>

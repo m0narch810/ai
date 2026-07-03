@@ -2,6 +2,64 @@ import { config } from "./config.js";
 import type { Bar, DetectedLevel, Side } from "./types.js";
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
+const pct4 = (n: number) => Math.round(n * 10000) / 10000;
+
+/**
+ * Max favorable run after a confirmed reversal, for calibration: did this level originate a BIG
+ * move (0.5% min / 1%+ ideal) or just a bounce? Scans forward from the confirming bar; within
+ * each bar the ADVERSE side is checked first (a bar that both extends the run and breaks the
+ * level freezes the run at the prior bar — no retroactive wins). Stops at a later hard-stop
+ * break: the run is what the trade could have captured before the level failed.
+ */
+function maxRunFrom(bars: Bar[], from: number, strike: number, side: Side, hardStop: number, seed: number): number {
+  let maxReject = seed;
+  for (let k = from; k < bars.length; k++) {
+    const bk = bars[k]!;
+    const os = side === "resistance" ? bk.high - strike : strike - bk.low;
+    if (os >= hardStop) break;
+    const reject = side === "resistance" ? strike - bk.low : bk.high - strike;
+    if (reject > maxReject) maxReject = reject;
+  }
+  return maxReject;
+}
+
+/** Graded outcome of ONE committed tape trade-call ("limit at entry, runs to target"). */
+export interface CallGrade {
+  /** no_fill = price never reached the entry (limit never filled — neutral, not a loss). */
+  status: "no_fill" | "win" | "stopped" | "open";
+  filledAt?: string;
+  resolvedAt?: string;
+  /** Max favorable excursion after the fill, % of entry — how far toward/through target it got. */
+  mfe_pct?: number;
+}
+
+/**
+ * Grade the tape's committed trade-call exactly like a resting limit order, strictly sequential
+ * (trading rule: within a bar the ADVERSE side resolves first — a bar that hits both stop and
+ * target grades as a stop, never a retroactive win). Stop = hard_stop_pts beyond the entry.
+ */
+export function gradeTradeCall(bars: Bar[], side: "long" | "short", entry: number, target: number): CallGrade {
+  const hardStop = config.hardStopPts;
+  let fi = -1;
+  for (let i = 0; i < bars.length; i++) {
+    const b = bars[i]!;
+    if (side === "long" ? b.low <= entry : b.high >= entry) { fi = i; break; }
+  }
+  if (fi === -1) return { status: "no_fill" };
+  const filledAt = bars[fi]!.ts;
+  let mfe = 0;
+  for (let i = fi; i < bars.length; i++) {
+    const b = bars[i]!;
+    const adverse = side === "long" ? entry - b.low : b.high - entry;
+    if (adverse >= hardStop) return { status: "stopped", filledAt, resolvedAt: b.ts, mfe_pct: pct4(mfe / entry) };
+    const fav = side === "long" ? b.high - entry : entry - b.low;
+    if (fav > mfe) mfe = fav;
+    if (side === "long" ? b.high >= target : b.low <= target) {
+      return { status: "win", filledAt, resolvedAt: b.ts, mfe_pct: pct4(mfe / entry) };
+    }
+  }
+  return { status: "open", filledAt, mfe_pct: pct4(mfe / entry) };
+}
 
 /**
  * Wick-and-reject reversal detection on OHLC bars (Yahoo) — graded for CALIBRATION HISTORY,
@@ -64,7 +122,8 @@ export function detectLevel(bars: Bar[], strike: number): DetectedLevel {
     if (reject >= swing) {
       return {
         strike, side, touched: true, outcome: "reversed", touchedAt, resolvedAt: b.ts,
-        reversalPct: Math.round((reject / strike) * 10000) / 10000,
+        reversalPct: pct4(reject / strike),
+        maxRunPct: pct4(maxRunFrom(bars, i + 1, strike, side, hardStop, reject) / strike),
         overshoot: r2(worstOvershoot), clean: worstOvershoot <= cleanTol,
       };
     }
@@ -114,7 +173,8 @@ export function detectLevel(bars: Bar[], strike: number): DetectedLevel {
           return {
             strike, side, touched: true, outcome: "retested",
             touchedAt, retestAt, resolvedAt: bk.ts,
-            reversalPct: Math.round((reject / strike) * 10000) / 10000,
+            reversalPct: pct4(reject / strike),
+            maxRunPct: pct4(maxRunFrom(bars, k + 1, strike, side, hardStop, reject) / strike),
             overshoot: r2(Math.max(worstOvershoot, retestOvershoot)),
             clean: retestOvershoot <= cleanTol,
           };

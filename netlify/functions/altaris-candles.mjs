@@ -1,6 +1,26 @@
 // Server-side proxy for Altaris candle data — credentials never reach the browser.
 // Logs in with ALTARIS_USER/ALTARIS_PASS, fetches /api/candles?days=1, returns JSON.
+import { createHmac, timingSafeEqual } from "node:crypto";
+function verifyToken(authHeader) {
+  const token = (authHeader ?? "").replace(/^Bearer\s+/, "");
+  if (!token || !process.env.AUTH_SECRET) return false;
+  const dot = token.lastIndexOf(".");
+  if (dot < 0) return false;
+  const payload = token.slice(0, dot), sig = token.slice(dot + 1);
+  const expected = createHmac("sha256", process.env.AUTH_SECRET).update(payload).digest("base64url");
+  const a = Buffer.from(sig), b = Buffer.from(expected);
+  if (a.length !== b.length || !timingSafeEqual(a, b)) return false;
+  try { const { exp } = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")); return Number.isFinite(exp) && Date.now() < exp; }
+  catch { return false; }
+}
+
 export default async function handler(req, context) {
+  if (!verifyToken(req.headers.get("authorization"))) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+      headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+    });
+  }
   const base = (process.env.ALTARIS_BASE_URL || "https://altaris.up.railway.app/api").replace(/\/$/, "");
   const user = process.env.ALTARIS_USER;
   const pass = process.env.ALTARIS_PASS;

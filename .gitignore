@@ -3,9 +3,15 @@
 .env.local
 *.cookie
 
-# captured data
+# captured data + local runtime artifacts
 data/raw/
 data/scored/
+data/deploy-stage/
+data/.loop.pid
+
+# source PDFs for the knowledge base — copyrighted trading docs, stay local
+# (knowledge/ is re-extracted from them via npm run extract-knowledge)
+pdfs/
 
 # captured API samples (live account data)
 fixtures/

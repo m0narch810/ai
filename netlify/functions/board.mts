@@ -14,7 +14,21 @@
 // levels then keep updating, flagged rule-based (lower confidence) instead of frozen. Env:
 // ALTARIS_USER / ALTARIS_PASS (same as capture.mjs) — fetchCandles auto-logs-in via src/auth.ts.
 import { connectLambda, getStore } from "@netlify/blobs";
+import { createHmac, timingSafeEqual } from "node:crypto";
+function verifyToken(authHeader: string | undefined): boolean {
+  const token = (authHeader ?? "").replace(/^Bearer\s+/, "");
+  if (!token || !process.env.AUTH_SECRET) return false;
+  const dot = token.lastIndexOf(".");
+  if (dot < 0) return false;
+  const payload = token.slice(0, dot), sig = token.slice(dot + 1);
+  const expected = createHmac("sha256", process.env.AUTH_SECRET).update(payload).digest("base64url");
+  const a = Buffer.from(sig), b = Buffer.from(expected);
+  if (a.length !== b.length || !timingSafeEqual(a, b)) return false;
+  try { const { exp } = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")); return Number.isFinite(exp) && Date.now() < exp; }
+  catch { return false; }
+}
 import { detectMany } from "../../src/detect.js";
+import { computeDayGate } from "../../src/dayGate.js";
 import { scoreBoardDeterministic } from "../../src/score.js";
 import { buildDashboard } from "../../src/dashboard.js";
 import { fetchCandles } from "../../src/altaris.js";
@@ -68,6 +82,10 @@ const json = (body: unknown, code = 200) => ({
 });
 
 export const handler = async (event: unknown) => {
+  const ev = event as Record<string, Record<string, string>>;
+  if (!verifyToken(ev?.headers?.["authorization"] ?? ev?.headers?.["Authorization"])) {
+    return { statusCode: 401, headers: { "content-type": "application/json", "access-control-allow-origin": "*" }, body: JSON.stringify({ error: "Unauthorized" }) };
+  }
   try {
     connectLambda(event as never); // wire Blobs context (classic Lambda-signature function)
     const cache = getStore("board");
@@ -87,7 +105,7 @@ export const handler = async (event: unknown) => {
     if (!blobs.length) return json({ error: "no capture found (today or yesterday)" }, 503);
     const latestKey = blobs.map((b) => b.key).sort().at(-1)!;
     const cap = (await captures.get(latestKey, { type: "json" })) as
-      | (Pick<CaptureRecord, "capturedAt" | "data" | "iv">) | null;
+      | (Pick<CaptureRecord, "capturedAt" | "data" | "iv" | "entropy" | "hurst" | "garch" | "hedge_pressure">) | null;
     if (!cap) return json({ error: "capture unreadable" }, 503);
 
     // Fetch 2 days so the yesterday-fallback path also has candles to grade against.
@@ -99,8 +117,14 @@ export const handler = async (event: unknown) => {
     const spot = bars.at(-1)?.close ?? cap.data.spot; // freshest price we have
     const detected = detectMany(bars, candidateStrikes(cap.data, spot));
 
-    const history: CaptureRecord[] = [{ capturedAt: cap.capturedAt, data: cap.data, iv: cap.iv }];
+    const history: CaptureRecord[] = [{
+      capturedAt: cap.capturedAt, data: cap.data, iv: cap.iv,
+      // Round-trip the context blocks the cloud capture now stores, so the cloud board carries
+      // entropy_state etc. exactly like a local board.
+      entropy: cap.entropy, hurst: cap.hurst, garch: cap.garch, hedge_pressure: cap.hedge_pressure,
+    }];
     const board = await scoreBoardDeterministic(history, null, detected, US_SESSION, spot);
+    try { board.day_gate = computeDayGate(history[0]!, spot); } catch { /* advisory — board still serves */ }
     const dash = { ...buildDashboard(board, detected, "US"), cloud: true }; // rule-based, box-offline
 
     await cache.setJSON("latest", { ts: Date.now(), data: dash });

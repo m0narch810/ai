@@ -11,22 +11,51 @@ import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { getStore } from "@netlify/blobs";
 import { config } from "./config.js";
 import { buildDashboard, writeDashboard, type DashboardData } from "./dashboard.js";
 import type { Board, DetectedLevel } from "./types.js";
 
 const NETLIFY_BIN = process.env.NETLIFY_BIN?.trim() || "netlify";
 
+// Data JSONs are NOT shipped in the public deploy: a static file bypasses the login entirely
+// (anyone can fetch /dashboard.json). They stay in web/ for LAN viewing (npm run web); the
+// deployed site reads them through the token-checked functions (dashboard.mjs, narrative.mjs)
+// backed by Netlify Blobs instead.
+const PRIVATE_DATA_FILES = new Set(["dashboard.json", "narrative.json", "regime.json"]);
+
+/** Copy web/ to a staging dir minus the private data JSONs — what actually gets deployed. */
+async function stageWebDir(): Promise<string> {
+  const src = path.join(config.paths.root, "web");
+  const dst = path.join(config.paths.root, "data", "deploy-stage");
+  await fs.rm(dst, { recursive: true, force: true });
+  await fs.cp(src, dst, { recursive: true, filter: (s) => !PRIVATE_DATA_FILES.has(path.basename(s)) });
+  return dst;
+}
+
+/**
+ * Push the board to the Netlify Blobs "dashboard" store — the source the authed dashboard
+ * function, the watchdog, and the regime engine read. Best-effort: requires NETLIFY_SITE_ID +
+ * NETLIFY_AUTH_TOKEN in the local .env (same creds the backfill uses).
+ */
+async function pushDashboardBlob(data: DashboardData): Promise<void> {
+  const siteID = process.env.NETLIFY_SITE_ID?.trim();
+  const token = process.env.NETLIFY_AUTH_TOKEN?.trim();
+  if (!siteID || !token) return;
+  await getStore({ name: "dashboard", siteID, token }).setJSON("latest", data);
+}
+
 /** Deploy web/ as pre-built static files (no build step → no Netlify build minutes). */
-export function netlifyDeploy(): Promise<void> {
+export async function netlifyDeploy(): Promise<void> {
   const siteId = process.env.NETLIFY_SITE_ID?.trim();
+  const stagedDir = await stageWebDir();
   // Run via a shell: on Windows the CLI is netlify.cmd, which Node can't spawn
   // directly (EINVAL) — shell:true resolves it through PATHEXT. Quote the dir for spaces.
   // --functions ships the live-spot service alongside the static web/ dir; without
   // it, deploying with --dir would drop the function and the spot would go stale too.
   const cmd = [
     NETLIFY_BIN, "deploy", "--prod",
-    "--dir", `"${path.join(config.paths.root, "web")}"`,
+    "--dir", `"${stagedDir}"`,
     "--functions", `"${path.join(config.paths.root, "netlify", "functions")}"`,
   ]
     .concat(siteId ? ["--site", siteId] : [])
@@ -44,10 +73,19 @@ export function netlifyDeploy(): Promise<void> {
   });
 }
 
-/** Build + write the dashboard JSON, then deploy if a target is configured. */
+/** Build + write the dashboard JSON, push it to Blobs, then deploy if a target is configured. */
 export async function publish(board: Board, detected: DetectedLevel[], session?: string | null): Promise<DashboardData> {
   const data = buildDashboard(board, detected, session);
   await writeDashboard(data);
+
+  // The phone dashboard reads the board through the token-checked function backed by this
+  // blob — the deploy no longer ships dashboard.json publicly. A blob failure must not stop
+  // the deploy (the UI still has the cloud rule-board fallback).
+  try {
+    await pushDashboardBlob(data);
+  } catch (err) {
+    console.warn("dashboard Blobs push failed:", err instanceof Error ? err.message : err);
+  }
 
   if (process.env.PUBLISH_TARGET?.trim() === "netlify") {
     await netlifyDeploy();

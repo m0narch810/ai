@@ -20,19 +20,33 @@ const NTFY_SERVER = (process.env.NTFY_SERVER || "https://ntfy.sh").replace(/\/$/
 const NTFY_TOPIC = process.env.NTFY_TOPIC?.trim();
 const STALE_MIN = Number(process.env.WATCHDOG_STALE_MIN || 35);
 
-/** ET weekday (0=Sun) + minutes-since-midnight, matching the rest of the system. */
+/** ET weekday (0=Sun) + minutes-since-midnight + date, matching the rest of the system. */
 function etNow() {
   const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/New_York", weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false,
+    timeZone: "America/New_York", weekday: "short", year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", hour12: false,
   }).formatToParts(new Date());
   const get = (t) => parts.find((p) => p.type === t)?.value;
   const WD = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
-  return { wd: WD[get("weekday")] ?? 0, minutes: Number(get("hour")) * 60 + Number(get("minute")) };
+  return {
+    wd: WD[get("weekday")] ?? 0,
+    minutes: Number(get("hour")) * 60 + Number(get("minute")),
+    date: `${get("year")}-${get("month")}-${get("day")}`,
+  };
 }
+
+// US market holidays (observed) — keep in sync with US_MARKET_HOLIDAYS in src/config.ts.
+// Without this the watchdog fires a false "scoring stalled" alert every holiday.
+const HOLIDAYS = new Set([
+  "2026-01-01", "2026-01-19", "2026-02-16", "2026-04-03", "2026-05-25", "2026-06-19",
+  "2026-07-03", "2026-09-07", "2026-11-26", "2026-12-25",
+  "2027-01-01", "2027-01-18", "2027-02-15", "2027-03-26", "2027-05-31", "2027-06-18",
+  "2027-07-05", "2027-09-06", "2027-11-25", "2027-12-24",
+]);
 
 // Watch 09:50–16:00 ET, Mon–Fri. Starts after 09:50 (not 09:15) so the morning's first RTH
 // score has time to land — before then the board is legitimately the held overnight one.
-const isWatchWindow = (wd, minutes) => wd >= 1 && wd <= 5 && minutes >= 590 && minutes <= 960;
+const isWatchWindow = (wd, minutes, date) => wd >= 1 && wd <= 5 && minutes >= 590 && minutes <= 960 && !HOLIDAYS.has(date);
 
 async function notify(title, message, priority, tags) {
   if (!NTFY_TOPIC) return;
@@ -47,18 +61,23 @@ export const handler = async (event) => {
   connectLambda(event); // wire Blobs context from the event (classic Lambda-signature function)
   if (!NTFY_TOPIC) return { statusCode: 200, body: "NTFY_TOPIC not set — nothing to do" };
 
-  const { wd, minutes } = etNow();
-  if (!isWatchWindow(wd, minutes)) return { statusCode: 200, body: "outside watch window" };
+  const { wd, minutes, date } = etNow();
+  if (!isWatchWindow(wd, minutes, date)) return { statusCode: 200, body: "outside watch window" };
 
   const store = getStore("watchdog");
   const state = (await store.get("state", { type: "json" }).catch(() => null)) || { alerted: false };
 
   try {
-    const res = await fetch(`${process.env.URL}/dashboard.json?t=${Date.now()}`, {
-      headers: { "cache-control": "no-store" },
-    });
-    if (!res.ok) throw new Error(`dashboard.json HTTP ${res.status}`);
-    const d = await res.json();
+    // Board now lives in Blobs (pushed by the local publisher); fall back to the static file
+    // for older deploys that still ship dashboard.json.
+    let d = await getStore("dashboard").get("latest", { type: "json" }).catch(() => null);
+    if (!d) {
+      const res = await fetch(`${process.env.URL}/dashboard.json?t=${Date.now()}`, {
+        headers: { "cache-control": "no-store" },
+      });
+      if (!res.ok) throw new Error(`dashboard HTTP ${res.status} (no blob either)`);
+      d = await res.json();
+    }
 
     const scoredAt = typeof d.scored_at === "number" ? d.scored_at : Date.parse(d.generated_at || "");
     const ageMin = Math.round((Date.now() - scoredAt) / 60000);
@@ -66,7 +85,7 @@ export const handler = async (event) => {
 
     if (stale && !state.alerted) {
       await notify(
-        "⚠️ Altaris scoring stalled",
+        "Altaris scoring stalled",
         `No fresh board in ~${ageMin} min during market hours. The scoring box is likely offline — check it.`,
         "high", "warning,chart_with_downwards_trend",
       );
@@ -74,7 +93,7 @@ export const handler = async (event) => {
       return { statusCode: 200, body: `ALERT sent (stale ${ageMin}m)` };
     }
     if (!stale && state.alerted) {
-      await notify("✅ Altaris scoring recovered", `Board is updating again (last scored ${ageMin}m ago).`, "default", "white_check_mark");
+      await notify("Altaris scoring recovered", `Board is updating again (last scored ${ageMin}m ago).`, "default", "white_check_mark");
       await store.setJSON("state", { alerted: false, since: Date.now() });
       return { statusCode: 200, body: `RECOVERED (fresh ${ageMin}m)` };
     }
@@ -82,7 +101,7 @@ export const handler = async (event) => {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     if (!state.alerted) {
-      await notify("⚠️ Altaris board unreachable", `Watchdog couldn't read the board: ${msg}`, "high", "warning");
+      await notify("Altaris board unreachable", `Watchdog couldn't read the board: ${msg}`, "high", "warning");
       await store.setJSON("state", { alerted: true, since: Date.now() });
       return { statusCode: 200, body: `ALERT sent (unreachable: ${msg})` };
     }

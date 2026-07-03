@@ -12,6 +12,19 @@
 //   5. Kaufman efficiency ratio + Anis-Lloyd-corrected Hurst (trend vs mean-reversion).
 // Dealer gamma comes from the published board (static off-RTH, which is correct).
 import { connectLambda, getStore } from "@netlify/blobs";
+import { createHmac, timingSafeEqual } from "node:crypto";
+function verifyToken(authHeader) {
+  const token = (authHeader ?? "").replace(/^Bearer\s+/, "");
+  if (!token || !process.env.AUTH_SECRET) return false;
+  const dot = token.lastIndexOf(".");
+  if (dot < 0) return false;
+  const payload = token.slice(0, dot), sig = token.slice(dot + 1);
+  const expected = createHmac("sha256", process.env.AUTH_SECRET).update(payload).digest("base64url");
+  const a = Buffer.from(sig), b = Buffer.from(expected);
+  if (a.length !== b.length || !timingSafeEqual(a, b)) return false;
+  try { const { exp } = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")); return Number.isFinite(exp) && Date.now() < exp; }
+  catch { return false; }
+}
 
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36";
 const CACHE_TTL_MS = 15 * 60 * 1000;
@@ -95,7 +108,6 @@ function yangZhangSeries(o, h, l, c, win) {
   const out = [];
   for (let end = win; end < c.length; end++) {
     const s = end - win + 1;            // window [s..end]; uses c[s-1] as the first prior close
-    if (s < 1) continue;
     const ovn = [], oc = []; let rs = 0;
     for (let i = s; i <= end; i++) {
       ovn.push(Math.log(o[i] / c[i - 1]));
@@ -292,7 +304,43 @@ const json = (statusCode, body) => ({
   body: JSON.stringify(body),
 });
 
+/**
+ * Full recompute + cache write. Shared by the HTTP handler and the scheduled
+ * regime-cron function (which keeps the cache fresh for the headless scorer —
+ * without it the regime the board obeys only refreshes when someone views the tab).
+ * Caller must have wired Blobs (connectLambda) first.
+ */
+export async function computeRegime(store) {
+  // Dealer-gamma label + board strikes come from the published board. Prefer the Blobs copy
+  // (pushed by the local publisher); fall back to the static file for older deploys.
+  let gammaRegime = "", boardStrikes = [];
+  try {
+    let d = await getStore("dashboard").get("latest", { type: "json" }).catch(() => null);
+    if (!d) {
+      const dres = await fetch(`${process.env.URL}/dashboard.json?t=${Date.now()}`, { headers: { "cache-control": "no-store" } });
+      if (dres.ok) d = await dres.json();
+    }
+    if (d) { gammaRegime = d.regime || ""; boardStrikes = (d.levels || []).map((l) => l.strike); }
+  } catch { /* board optional — regime still computes from price alone */ }
+
+  const [intraJ, dailyJ, vxnJ] = await Promise.all([
+    yahoo("QQQ", "1mo", "15m"),
+    yahoo("QQQ", "3y", "1d"),
+    yahoo("^VXN", "3y", "1d").catch(() => null), // implied vol — tolerate a miss
+  ]);
+  const intraday = closeSeries(intraJ), dailyD = datedOhlc(dailyJ);
+  const daily = { o: dailyD.o, h: dailyD.h, l: dailyD.l, c: dailyD.c };
+  const vxn = vxnJ ? datedClose(vxnJ) : [];
+  const regime = buildRegime({ spot: intraday[intraday.length - 1] ?? null, intraday, daily, dailyDates: dailyD.dates, vxn, gammaRegime, boardStrikes });
+  // A cache-write failure must not discard a freshly-computed regime.
+  await store.setJSON("latest", regime).catch(() => {});
+  return regime;
+}
+
 export const handler = async (event) => {
+  if (!verifyToken(event.headers["authorization"] ?? event.headers["Authorization"])) {
+    return { statusCode: 401, headers: { "content-type": "application/json", "access-control-allow-origin": "*" }, body: JSON.stringify({ error: "Unauthorized" }) };
+  }
   connectLambda(event); // wire Blobs context from the event (classic Lambda-signature function)
   const force = event?.queryStringParameters?.force === "1";
   const store = getStore("regime-cache");
@@ -303,24 +351,7 @@ export const handler = async (event) => {
   }
 
   try {
-    // Dealer-gamma label + board strikes come from the published board (static off-RTH = correct).
-    let gammaRegime = "", boardStrikes = [];
-    try {
-      const dres = await fetch(`${process.env.URL}/dashboard.json?t=${Date.now()}`, { headers: { "cache-control": "no-store" } });
-      if (dres.ok) { const d = await dres.json(); gammaRegime = d.regime || ""; boardStrikes = (d.levels || []).map((l) => l.strike); }
-    } catch { /* board optional — regime still computes from price alone */ }
-
-    const [intraJ, dailyJ, vxnJ] = await Promise.all([
-      yahoo("QQQ", "1mo", "15m"),
-      yahoo("QQQ", "3y", "1d"),
-      yahoo("^VXN", "3y", "1d").catch(() => null), // implied vol — tolerate a miss
-    ]);
-    const intraday = closeSeries(intraJ), dailyD = datedOhlc(dailyJ);
-    const daily = { o: dailyD.o, h: dailyD.h, l: dailyD.l, c: dailyD.c };
-    const vxn = vxnJ ? datedClose(vxnJ) : [];
-    const regime = buildRegime({ spot: intraday[intraday.length - 1] ?? null, intraday, daily, dailyDates: dailyD.dates, vxn, gammaRegime, boardStrikes });
-    await store.setJSON("latest", regime);
-    return json(200, regime);
+    return json(200, await computeRegime(store));
   } catch (err) {
     // On a Yahoo hiccup, serve the last good cached regime rather than nothing.
     const cached = await store.get("latest", { type: "json" }).catch(() => null);

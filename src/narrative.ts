@@ -8,6 +8,7 @@ import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { config } from "./config.js";
+import { expiryContext } from "./expiries.js";
 import { fetchMacro } from "./macro.js";
 import type { Board, DataSnapshot, EntropySummary, GarchSummary, HurstSummary, MacroSnapshot, Narrative } from "./types.js";
 
@@ -27,7 +28,7 @@ const SYSTEM = `You are dxrk's pre-open analyst for QQQ (=NQ). You produce ONE p
 
 METHOD 1 — MARKET OPEN PREDICTION (classify the day into ONE of four open types):
 1) "manip_down_real_up": price sits just below/at the put wall (obvious stops to trigger); DEX POSITIVE (dealers must BUY further drops — this is REQUIRED; negative DEX disqualifies this type); max pain well above; chain shows CALL buying at strikes above price while weak; clean air down to the put wall then strong support there. Tell: call buying DURING weakness WITH positive DEX.
-2) "manip_up_real_down": price sits just below/at a call wall OR near gamma flip; DEX NEGATIVE (dealers must SELL rallies — this is the defining signal); max pain below; VEX elevated → sharp reversal after the squeeze. Tell: ANY fresh call buying DURING weakness with negative DEX is actually front-running the fake opening pump (smart money rides the squeeze up then exits) — this is the manip_up tell, NOT manip_down_real_up. The real move is DOWN because dealers cap every rally and bearish macro gravity resumes.
+2) "manip_up_real_down": price sits just below/at a call wall OR near gamma flip; DEX NEGATIVE (dealers must SELL rallies — this is the defining signal); max pain below; VEX elevated → sharp reversal after the squeeze. DEFINING CHAIN TELL: fresh PUT buying at strikes BELOW current price while futures were strong overnight — puts bought INTO the strength (smart money positioning for the real move down while the pump runs). Secondary tell: ANY fresh call buying DURING weakness with negative DEX is front-running the fake opening pump (rides the squeeze up then exits) — this is a manip_up tell, NOT manip_down_real_up. The real move is DOWN because dealers cap every rally and bearish macro gravity resumes.
 3) "real_pump": price well ABOVE gamma flip, call wall far above (room); DEX strongly positive (dealers fuel rallies); max pain above; BROAD overnight call buying across MULTIPLE strikes/expiries (not one strike); clean air above; charm drifts up; VEX low → smooth trend.
 4) "real_dump": price well BELOW gamma flip; DEX strongly negative (dealers sell every bounce); max pain below; BROAD overnight put buying across multiple strikes; clean air below; VEX high → fast sharp, convincing-but-failing bounces.
 
@@ -47,6 +48,7 @@ METHOD 2 — RTH MACRO BIAS:
 - OAS credit spreads (macro.oas): ICE BofA High Yield OAS — YYY guide Ch.12.2 weekly layer. CREDIT LEADS EQUITIES. <3% = healthy/bullish; 3-4% = mild caution/neutral; 4-5% = elevated stress/bearish; >5% = crisis/maximum bearish. Use this as a background risk-on/risk-off read.
 - VIX term structure (macro.vix_term): "contango" (9-day VIX < 1-month VIX) = normal vol, range levels reliable. "backwardation" (9-day > 1-month) = stressed regime — DO NOT fade large directional moves; GEX levels are more likely to get run through; momentum is more likely to persist.
 - Auction day (macro.auction_today): if true, a 10Y/20Y/30Y note/bond auctions today. SIZE DOWN regardless of bias — large auctions temporarily pull liquidity, raising intraday vol without directional clarity. Mention this in the summary.
+- Expiration calendar (expiries — computed CBOE dates): days_to_vix_settlement 0 = VIX monthly settlement THIS MORNING (AM settlement) — the session tends to CHOP as vol positioning unwinds; lean clean_or_choppy "choppy", be quicker to call "unclear", de-rate reversal_zones conviction, and SAY it's VIX settlement in the summary. 1 = settlement tomorrow (unwind chop often starts the prior afternoon). days_to_monthly_opex 0 = monthly OPEX (charm/pinning dominate into the close; quad_witching_opex = Mar/Jun/Sep/Dec triple witching, heavier unwind flows). The days right after OPEX often lack structure while OI rebuilds.
 - Surprise mechanism: gap between expectation and print drives big moves; first 15min after a release is noise, real institutional move is 30–90min later.
 - BOJ/carry: fast YEN STRENGTHENING (USD/JPY falling hard) forces carry unwind → sell equities regardless of US data.
 - Crowding/COT: speculators at extremes (>80 = crowded long, no buyers left, reversal risk; <20 = crowded short). Below 50 = room for buyers.
@@ -65,6 +67,16 @@ Read the cross-asset basket as the market pricing geopolitics/commodities in rea
 
 METHOD 2.6 — LIVE NEWS & EVENTS (macro.headlines + web search):
 You have macro.headlines: recent market-moving headlines (keyless GDELT feed). You ALSO have WebSearch/WebFetch — USE them to verify and deepen the picture before deciding the bias. Specifically: search for today's pre-open macro drivers — breaking geopolitics (oil/energy supply, conflict, sanctions), the latest Fed/FOMC commentary and rate-cut/hike odds, and any major overnight headline moving equity futures. Cross-check the headlines and the cross-asset basket: e.g. if oil is spiking AND a Strait-of-Hormuz / supply story is live, that's a confirmed risk-off catalyst — weight it heavily and say so. Ignore stale or non-market noise. Treat one unconfirmed headline cautiously; multiple corroborating sources = real. If web search is unavailable, fall back to macro.headlines alone. Record what you actually used in news_events with a per-item impact (bullish/bearish/neutral for NQ) and reflect it in macro_bias and the summary. Do NOT invent events — only report what the feed or your searches actually returned.
+
+METHOD 2.7 — ALTARIS MACRO PANEL (macro.altaris, when present — the terminal's own macro engine; corroboration for Methods 2–2.6, and the source for signals we don't compute directly):
+- regime: hawk/dove score (positive = hawkish = downside gravity for NQ; negative = dovish) with its driving factors (cpi/curve/real_yields/vol). Weigh it WITH the yield-curve bias — hawkish regime + rising 2Y = the bearish read is corroborated from two independent engines.
+- events + event_risk: the FRED release calendar with days-out (FOMC/CPI/Retail/ISM/PCE/GDP) and a composite event-risk score/label. FOMC or CPI within 1-2 days = position-squaring gravity toward max pain, less conviction in directional expansion — say so in the summary and lean clean_or_choppy "choppy" when event_risk is high ("HIGH"/"EXTREME"). An event 5+ days out is context, not a today-driver.
+- vix_intel: a VIX fair-value model (percentile, fair_value vs actual, mispricing, signal). VIX materially BELOW fair value = complacency into a hawkish/event window (protection cheap — sharp downside expansions possible); ABOVE fair = fear already paid for (fade extremes more confidently).
+- real_yields (10Y TIPS, breakevens): real yields rising fast = the most direct equity-valuation headwind (bearish NQ, growth duration hit); breakevens falling with yields rising = policy-tightening read.
+- fin_cond (NFCI, stress index, HY spread, TWI dollar): corroborate the OAS/credit read — NFCI/stress rising together = conditions tightening (bearish background), loosening = supportive.
+- inflation (CPI/core CPI/core PCE YoY, NFP, unemployment): the regime behind the Fed — cpi rising + hawkish lean = rallies get sold at macro resistance; disinflation + dovish = dips get bought.
+- sectors (leading/lagging by rate/growth/vol sensitivity): defensives (XLU/XLRE/XLP) leading while cyclicals/financials lag = risk-off rotation under the surface even when the index is flat — corroborates a bearish/choppy call; tech leading with growth sectors = risk-on.
+- net_liquidity: Altaris's Fed BS − TGA − RRP composite. NOTE: its TGA input is the weekly FRED average, which lags — when it disagrees with our daily tga reading (Method 2), trust OURS for direction and use theirs only for the level.
 
 SYNTHESIS:
 - Combine: the macro bias is the day's gravity; the open-type is the mechanics of the first move. State the TRUE EXPANSION DIRECTION at the open (where price actually goes once the open-type resolves), the exact level targeted, how far it runs, what confirms the move is complete, and the next target.
@@ -268,6 +280,8 @@ export async function buildNarrative(
     as_of: asOf,
     spot,
     minutes_to_open: minutesToOpen(asOf),
+    // Computed CBOE expiration calendar (VIX settlement / OPEX / quad witching) — see SYSTEM.
+    expiries: expiryContext(asOf),
     flow,
     macro,
     board_levels: boardLevels,
@@ -331,13 +345,21 @@ function fallbackNarrative(
   let score = 0;
   const drivers: Narrative["macro_drivers"] = [];
   if (macro.us2y) {
+    // dxrk PDF-2 §1: "slow drift means nothing" — the 2Y signal is the SPEED of the pre-open
+    // move. Full ±25 only for a fast move (≥3bp in ~30min); slow drift (or no intraday
+    // velocity, e.g. the daily FRED fallback) gets reduced weight.
+    const fast = Math.abs(macro.us2y.velocity ?? 0) >= 0.03;
+    const w = fast ? 25 : 10;
     const bear = macro.us2y.dir === "rising";
-    score += bear ? -25 : macro.us2y.dir === "falling" ? 25 : 0;
-    drivers.push({ label: "2Y Yield", reading: `${macro.us2y.last} (${macro.us2y.dir})`, lean: bear ? "bear" : macro.us2y.dir === "falling" ? "bull" : "neutral" });
+    score += bear ? -w : macro.us2y.dir === "falling" ? w : 0;
+    // Fast-rising 2Y WITHOUT the 10Y following = the strongest bearish version of the signal.
+    if (fast && bear && macro.us10y && Math.abs(macro.us10y.velocity ?? 0) < 0.015) score -= 8;
+    const speed = macro.us2y.velocity != null ? (fast ? ", fast" : ", slow drift") : "";
+    drivers.push({ label: "2Y Yield", reading: `${macro.us2y.last} (${macro.us2y.dir}${speed})`, lean: bear ? "bear" : macro.us2y.dir === "falling" ? "bull" : "neutral" });
   }
-  if (macro.tga) { const bull = macro.tga.dir === "falling"; score += bull ? 15 : -10; drivers.push({ label: "TGA", reading: `${macro.tga.last} (${macro.tga.dir})`, lean: bull ? "bull" : "bear" }); }
-  if (macro.rrp) { const bull = macro.rrp.dir === "falling"; score += bull ? 15 : -10; drivers.push({ label: "RRP", reading: `${macro.rrp.last} (${macro.rrp.dir})`, lean: bull ? "bull" : "bear" }); }
-  if (macro.cot) { const bear = macro.cot.percentile > 80; score += bear ? -15 : macro.cot.percentile < 50 ? 10 : 0; drivers.push({ label: "COT", reading: `${macro.cot.percentile}th pct`, lean: bear ? "bear" : "neutral" }); }
+  if (macro.tga) { const d = macro.tga.dir; score += d === "falling" ? 15 : d === "rising" ? -10 : 0; drivers.push({ label: "TGA", reading: `${macro.tga.last} (${d})`, lean: d === "falling" ? "bull" : d === "rising" ? "bear" : "neutral" }); }
+  if (macro.rrp) { const d = macro.rrp.dir; score += d === "falling" ? 15 : d === "rising" ? -10 : 0; drivers.push({ label: "RRP", reading: `${macro.rrp.last} (${d})`, lean: d === "falling" ? "bull" : d === "rising" ? "bear" : "neutral" }); }
+  if (macro.cot) { const bear = macro.cot.percentile > 80; const bull = macro.cot.percentile < 50; score += bear ? -15 : bull ? 10 : 0; drivers.push({ label: "COT", reading: `${macro.cot.percentile}th pct`, lean: bear ? "bear" : bull ? "bull" : "neutral" }); }
   // OAS credit spreads (YYY Ch.12.2)
   if (macro.oas) {
     if (macro.oas.level === "crisis") { score -= 20; drivers.push({ label: "OAS", reading: `${macro.oas.last}% CRISIS`, lean: "bear" }); }
@@ -353,6 +375,17 @@ function fallbackNarrative(
     const bull = macro.reserve_bal.dir === "rising";
     score += bull ? 8 : -8;
     drivers.push({ label: "Reserve Bal", reading: `${macro.reserve_bal.dir}`, lean: bull ? "bull" : "bear" });
+  }
+  // Fed balance sheet (WALCL — slow monthly layer)
+  if (macro.walcl && macro.walcl.dir !== "flat") {
+    const bull = macro.walcl.dir === "rising";
+    score += bull ? 6 : -6;
+    drivers.push({ label: "Fed BS", reading: `${macro.walcl.last}B WALCL (${macro.walcl.dir})`, lean: bull ? "bull" : "bear" });
+  }
+  // BOJ carry: yen strengthening fast forces carry unwind → sell equities (PDF-2 §4).
+  if (macro.usdjpy?.dir === "falling") {
+    score -= 15;
+    drivers.push({ label: "USD/JPY", reading: `${macro.usdjpy.last} (yen strengthening — carry unwind)`, lean: "bear" });
   }
   // Cross-asset risk-off overlay: a fast oil/VIX/dollar move is bearish NQ even if yields are calm.
   const oil = macro.cross?.brent ?? macro.cross?.wti;

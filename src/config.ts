@@ -57,6 +57,10 @@ export const config = {
   aiScoreEnd: process.env.AI_SCORE_END?.trim() || "16:00",
   // Pre-open day-narrative pass (dxrk macro bias + open-type), once per weekday at this ET time.
   narrativeTime: process.env.NARRATIVE_TIME?.trim() || "09:00",
+  // Stale-feed guard: if the Altaris chain's spot diverges from the live market by more than
+  // this fraction during the US session, the options chain is frozen/corrupt (e.g. premarket
+  // before the chain wakes, or a feed outage). Skip scoring rather than publish phantom levels.
+  staleFeedMaxPct: num("STALE_FEED_MAX_PCT", 0.02),
 
   // Scoring runs through Claude Code headless on the Max subscription — no API key.
   // model is a CLI alias ("opus"/"sonnet") or a full id.
@@ -72,9 +76,14 @@ export const config = {
   // fully tool-locked. Set NARRATIVE_WEBSEARCH=false to force the deterministic path.
   narrativeWebSearch: (process.env.NARRATIVE_WEBSEARCH?.trim() ?? "true") !== "false",
 
-  // Min take-profit floor: ~100 NQ points at current QQQ/NQ ratio (~41.5:1) ≈ 2.5 QQQ pts ≈ 0.34% of spot.
-  // Used in AI prompt as min_reversal_move_pts; only levels with a far structural target this far away score high.
-  tpMinPct: num("TP_MIN_PCT", 0.0034),
+  // Min take-profit floor: 0.5% of spot (~150 MNQ pts at NQ ~29.5k) — the SMALLEST reversal the
+  // board hunts. Used in the AI prompt as min_reversal_move_pts; only levels with a far structural
+  // target this far away score high. Sub-0.5% bounce candidates are noise by design.
+  tpMinPct: num("TP_MIN_PCT", 0.005),
+  // The IDEAL reversal size: 1%+ of spot (~300 MNQ pts) — the archetype trade (bottom-tick at a
+  // pre-called wall, a couple points drawdown, running the full range). A-tier scores belong to
+  // levels positioned to originate a move of this size.
+  tpIdealPct: num("TP_IDEAL_PCT", 0.01),
   // Swing size that confirms a level actually reversed (a "hold", not a poke).
   // Set above the TP min so minor chop near a level doesn't count as a reversal.
   reversalSwingPct: num("REVERSAL_SWING_PCT", 0.005),
@@ -134,6 +143,19 @@ function etWeekday(d: Date): number {
 /** RTH for the OHLC detector, ET minutes (used for the US session bar filter). */
 export const RTH_MIN = { start: 9 * 60 + 30, end: 16 * 60 };
 
+/**
+ * US market holidays (observed dates) — no options trading, chain frozen, AI scoring pointless.
+ * Keep in sync with the HOLIDAYS sets in netlify/functions/capture.mjs / watchdog.mjs / regime-cron.mjs.
+ * Extend annually (NYSE calendar): New Year, MLK, Presidents, Good Friday, Memorial, Juneteenth,
+ * July 4th, Labor, Thanksgiving, Christmas.
+ */
+export const US_MARKET_HOLIDAYS = new Set([
+  "2026-01-01", "2026-01-19", "2026-02-16", "2026-04-03", "2026-05-25", "2026-06-19",
+  "2026-07-03", "2026-09-07", "2026-11-26", "2026-12-25",
+  "2027-01-01", "2027-01-18", "2027-02-15", "2027-03-26", "2027-05-31", "2027-06-18",
+  "2027-07-05", "2027-09-06", "2027-11-25", "2027-12-24",
+]);
+
 export interface SessionDef {
   name: "US" | "Asia";
   source: "QQQ" | "NQ=F";
@@ -171,7 +193,8 @@ export function activeSession(d = new Date()): SessionDef | null {
  */
 export function isAiScoreTime(d = new Date()): boolean {
   const wd = etWeekday(d);
-  const { minutes } = nowInSessionTz(d);
+  const { date, minutes } = nowInSessionTz(d);
+  if (US_MARKET_HOLIDAYS.has(date)) return false; // chain frozen — nothing real to score
   const s = hhmmToMinutes(config.aiScoreStart), e = hhmmToMinutes(config.aiScoreEnd);
   return wd >= 1 && wd <= 5 && minutes >= s && minutes <= e;
 }

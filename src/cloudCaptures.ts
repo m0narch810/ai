@@ -37,13 +37,18 @@ export async function fetchCloudCaptures(date: string): Promise<CloudTick[]> {
   const ticks = await Promise.all(
     blobs.map(async ({ key }) => {
       const v = (await store.get(key, { type: "json" })) as
-        | { capturedAt: string; data: CaptureRecord["data"]; iv?: CaptureRecord["iv"]; greek?: GreekTimeseries }
+        | (Omit<CaptureRecord, "capturedAt"> & { capturedAt: string; greek?: GreekTimeseries })
         | null;
       if (!v) return null;
       return {
         key,
-        // entropy/hurst/garch not captured by capture.mjs — backfilled boards score without regime endpoints
-        record: { capturedAt: v.capturedAt, data: v.data, iv: v.iv } as CaptureRecord,
+        record: {
+          capturedAt: v.capturedAt, data: v.data, iv: v.iv,
+          // Round-trip everything capture.mjs stores — dropping fields here silently degrades
+          // backfilled scoring vs live scoring (hedge_pressure was lost this way once).
+          hedge_pressure: v.hedge_pressure,
+          entropy: v.entropy, hurst: v.hurst, garch: v.garch,
+        } as CaptureRecord,
         greek: v.greek ?? null,
       } satisfies CloudTick;
     }),

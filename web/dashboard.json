@@ -1,647 +1,1270 @@
 {
-  "as_of": "2026-06-26T17:00:00",
-  "scored_at": 1782507604376,
-  "generated_at": "2026-06-26T22:17:15.086Z",
-  "session": null,
-  "spot": 704.995,
+  "as_of": "2026-07-03T00:30:00",
+  "scored_at": 1783053003609,
+  "generated_at": "2026-07-03T04:37:29.497Z",
+  "session": "Asia",
+  "spot": 718.2167512246674,
   "regime": "negative",
-  "read": "Rule-based: resistance near $705.00, support near $700.00.",
+  "read": "Rule-based: resistance near $730.00, support near $710.00.",
   "hard_stop_pts": 0.48,
   "clean_reversal_pts": 0.1,
   "iv": {
-    "current": 22.35,
-    "direction": "RISING"
+    "current": 15.3,
+    "direction": "STABLE"
   },
-  "expected_move": 12.21,
+  "expected_move": 6.86,
   "scoring_method": "rule",
   "gex_profile": [
     {
-      "strike": 688,
-      "gex_m": -17.4
-    },
-    {
-      "strike": 689,
-      "gex_m": -17.1
-    },
-    {
-      "strike": 690,
-      "gex_m": -208.1
-    },
-    {
-      "strike": 691,
-      "gex_m": -11.4
-    },
-    {
-      "strike": 692,
-      "gex_m": -25.1
-    },
-    {
-      "strike": 693,
-      "gex_m": -60.2
-    },
-    {
-      "strike": 694,
-      "gex_m": -48.3
-    },
-    {
-      "strike": 695,
-      "gex_m": -314.4
-    },
-    {
-      "strike": 696,
-      "gex_m": -30.4
-    },
-    {
-      "strike": 697,
-      "gex_m": -18
-    },
-    {
-      "strike": 698,
-      "gex_m": -35.8
-    },
-    {
-      "strike": 699,
-      "gex_m": -14.3
-    },
-    {
-      "strike": 700,
-      "gex_m": -450.8
-    },
-    {
       "strike": 701,
-      "gex_m": -17.9
+      "gex_m": -19.1
     },
     {
       "strike": 702,
-      "gex_m": -21.7
+      "gex_m": -26.3
     },
     {
       "strike": 703,
-      "gex_m": -19.3
+      "gex_m": -25
     },
     {
       "strike": 704,
-      "gex_m": -36.5
+      "gex_m": -28.7
     },
     {
       "strike": 705,
-      "gex_m": -807.5
+      "gex_m": -105.9
     },
     {
       "strike": 706,
-      "gex_m": -72
+      "gex_m": -23.6
     },
     {
       "strike": 707,
-      "gex_m": -267.4
+      "gex_m": -42.3
     },
     {
       "strike": 708,
-      "gex_m": -136.6
+      "gex_m": -17.3
     },
     {
       "strike": 709,
-      "gex_m": -327
+      "gex_m": -101.9
     },
     {
       "strike": 710,
-      "gex_m": -692.6
+      "gex_m": -185.9
     },
     {
       "strike": 711,
-      "gex_m": -103.8
+      "gex_m": 109.2
     },
     {
       "strike": 712,
-      "gex_m": -81.4
+      "gex_m": -34.4
     },
     {
       "strike": 713,
-      "gex_m": -31.4
+      "gex_m": -65.7
     },
     {
       "strike": 714,
-      "gex_m": -11.6
+      "gex_m": -28.3
     },
     {
       "strike": 715,
-      "gex_m": -403.9
+      "gex_m": -148.3
     },
     {
       "strike": 716,
-      "gex_m": -17.8
+      "gex_m": -33.3
     },
     {
       "strike": 717,
-      "gex_m": -14.7
+      "gex_m": -15.1
     },
     {
       "strike": 717.5,
-      "gex_m": -0.2
+      "gex_m": -1
     },
     {
       "strike": 718,
-      "gex_m": -18.7
+      "gex_m": -35.7
     },
     {
       "strike": 719,
-      "gex_m": -16.5
+      "gex_m": -34.1
     },
     {
       "strike": 720,
-      "gex_m": -120.3
+      "gex_m": -201.2
     },
     {
       "strike": 721,
-      "gex_m": 1.4
+      "gex_m": 8.2
     },
     {
       "strike": 722,
-      "gex_m": -0.7
+      "gex_m": -62.5
     },
     {
       "strike": 722.5,
-      "gex_m": 1.1
+      "gex_m": 1.6
+    },
+    {
+      "strike": 723,
+      "gex_m": -5.7
+    },
+    {
+      "strike": 724,
+      "gex_m": -98.9
+    },
+    {
+      "strike": 725,
+      "gex_m": -93.9
+    },
+    {
+      "strike": 726,
+      "gex_m": -22.2
+    },
+    {
+      "strike": 727,
+      "gex_m": 6.6
+    },
+    {
+      "strike": 727.5,
+      "gex_m": -1
+    },
+    {
+      "strike": 728,
+      "gex_m": -47.3
+    },
+    {
+      "strike": 729,
+      "gex_m": 29.4
+    },
+    {
+      "strike": 730,
+      "gex_m": 81.4
+    },
+    {
+      "strike": 731,
+      "gex_m": 10.5
+    },
+    {
+      "strike": 732,
+      "gex_m": 12.6
+    },
+    {
+      "strike": 732.5,
+      "gex_m": 0.5
+    },
+    {
+      "strike": 733,
+      "gex_m": 28
+    },
+    {
+      "strike": 734,
+      "gex_m": 5.7
+    },
+    {
+      "strike": 735,
+      "gex_m": -19.2
+    },
+    {
+      "strike": 736,
+      "gex_m": 3.5
+    }
+  ],
+  "term_profile": [
+    {
+      "strike": 701,
+      "gex": [
+        0,
+        -6.7,
+        -10.5,
+        -1.9
+      ],
+      "charm": [
+        0,
+        -403.7,
+        -214,
+        -17
+      ]
+    },
+    {
+      "strike": 702,
+      "gex": [
+        0,
+        -11.2,
+        -12.2,
+        -2.9
+      ],
+      "charm": [
+        0,
+        -843.6,
+        -223.7,
+        -23.1
+      ]
+    },
+    {
+      "strike": 703,
+      "gex": [
+        0,
+        -20,
+        -4.5,
+        -0.5
+      ],
+      "charm": [
+        0,
+        -1112.3,
+        -83,
+        -4.1
+      ]
+    },
+    {
+      "strike": 704,
+      "gex": [
+        0,
+        -9.4,
+        -17.1,
+        -2.2
+      ],
+      "charm": [
+        0,
+        -525.6,
+        -318.9,
+        -14.9
+      ]
+    },
+    {
+      "strike": 705,
+      "gex": [
+        0,
+        -21.7,
+        -72.7,
+        -11.5
+      ],
+      "charm": [
+        0,
+        -1279.1,
+        -1123.5,
+        -67.8
+      ]
+    },
+    {
+      "strike": 706,
+      "gex": [
+        0,
+        -14.8,
+        -8.3,
+        -0.6
+      ],
+      "charm": [
+        0,
+        -718.9,
+        -99.9,
+        -1.9
+      ]
+    },
+    {
+      "strike": 707,
+      "gex": [
+        0,
+        -26.3,
+        -8.4,
+        -7.6
+      ],
+      "charm": [
+        0,
+        -852.7,
+        -82.9,
+        -36.7
+      ]
+    },
+    {
+      "strike": 708,
+      "gex": [
+        0,
+        -11.3,
+        -5.6,
+        -0.5
+      ],
+      "charm": [
+        0,
+        -379.4,
+        -47,
+        -1.5
+      ]
+    },
+    {
+      "strike": 709,
+      "gex": [
+        0,
+        -27,
+        -73.9,
+        -1
+      ],
+      "charm": [
+        0,
+        -720.6,
+        -440.9,
+        -0.8
+      ]
+    },
+    {
+      "strike": 710,
+      "gex": [
+        0,
+        -64.5,
+        -110,
+        -11.5
+      ],
+      "charm": [
+        0,
+        -1305,
+        -477.5,
+        -5.2
+      ]
+    },
+    {
+      "strike": 711,
+      "gex": [
+        0,
+        -22.2,
+        138.5,
+        -7
+      ],
+      "charm": [
+        0,
+        -515.1,
+        316.1,
+        4.6
+      ]
+    },
+    {
+      "strike": 712,
+      "gex": [
+        0,
+        -19.5,
+        -6.6,
+        -8.3
+      ],
+      "charm": [
+        0,
+        -278.5,
+        -2.6,
+        9.7
+      ]
+    },
+    {
+      "strike": 713,
+      "gex": [
+        0,
+        -25.8,
+        -39.7,
+        -0.1
+      ],
+      "charm": [
+        0,
+        -128.7,
+        58.6,
+        0.3
+      ]
+    },
+    {
+      "strike": 714,
+      "gex": [
+        0,
+        -16.8,
+        -12.5,
+        1
+      ],
+      "charm": [
+        0,
+        25.8,
+        42.8,
+        -3.2
+      ]
+    },
+    {
+      "strike": 715,
+      "gex": [
+        0,
+        -39.8,
+        -99.5,
+        -9
+      ],
+      "charm": [
+        0,
+        341.1,
+        533.5,
+        42.6
+      ]
+    },
+    {
+      "strike": 716,
+      "gex": [
+        0,
+        -19.5,
+        -14.5,
+        0.6
+      ],
+      "charm": [
+        0,
+        376.8,
+        104.8,
+        -3.6
+      ]
+    },
+    {
+      "strike": 717,
+      "gex": [
+        0,
+        -14.5,
+        0.8,
+        -1.4
+      ],
+      "charm": [
+        0,
+        306.4,
+        -6.3,
+        9.1
+      ]
+    },
+    {
+      "strike": 717.5,
+      "gex": [
+        0,
+        -1,
+        0,
+        0
+      ],
+      "charm": [
+        0,
+        16.4,
+        0,
+        0
+      ]
+    },
+    {
+      "strike": 718,
+      "gex": [
+        0,
+        -16.4,
+        -17.5,
+        -1.8
+      ],
+      "charm": [
+        0,
+        590.1,
+        194.7,
+        14.4
+      ]
+    },
+    {
+      "strike": 719,
+      "gex": [
+        0,
+        -25.9,
+        -7.7,
+        -0.5
+      ],
+      "charm": [
+        0,
+        829.7,
+        118,
+        4.9
+      ]
+    },
+    {
+      "strike": 720,
+      "gex": [
+        0,
+        -52,
+        -154.4,
+        5.2
+      ],
+      "charm": [
+        0,
+        2528.4,
+        2390.3,
+        -59.1
+      ]
+    },
+    {
+      "strike": 721,
+      "gex": [
+        0,
+        1.9,
+        7.2,
+        -0.8
+      ],
+      "charm": [
+        0,
+        -159.9,
+        -124.8,
+        8.9
+      ]
+    },
+    {
+      "strike": 722,
+      "gex": [
+        0,
+        7.1,
+        -69.9,
+        0.4
+      ],
+      "charm": [
+        0,
+        -564.8,
+        1837.2,
+        -4.7
+      ]
+    },
+    {
+      "strike": 722.5,
+      "gex": [
+        0,
+        1.6,
+        0,
+        0
+      ],
+      "charm": [
+        0,
+        -62.5,
+        0,
+        0
+      ]
+    },
+    {
+      "strike": 723,
+      "gex": [
+        0,
+        -5.2,
+        -0.3,
+        -0.2
+      ],
+      "charm": [
+        0,
+        207,
+        8.8,
+        2.5
+      ]
+    },
+    {
+      "strike": 724,
+      "gex": [
+        0,
+        -97.7,
+        -0.5,
+        -0.7
+      ],
+      "charm": [
+        0,
+        7377.3,
+        44.4,
+        9.9
+      ]
+    },
+    {
+      "strike": 725,
+      "gex": [
+        0,
+        -11.4,
+        -56.1,
+        -26.3
+      ],
+      "charm": [
+        0,
+        1056.3,
+        1511.4,
+        451.5
+      ]
+    },
+    {
+      "strike": 726,
+      "gex": [
+        0,
+        -18.8,
+        -3.4,
+        0
+      ],
+      "charm": [
+        0,
+        1549.9,
+        92.6,
+        -2
+      ]
+    },
+    {
+      "strike": 727,
+      "gex": [
+        0,
+        6.3,
+        1.2,
+        -0.8
+      ],
+      "charm": [
+        0,
+        -1093.4,
+        -30.8,
+        15.2
+      ]
+    },
+    {
+      "strike": 727.5,
+      "gex": [
+        0,
+        -1,
+        0,
+        0
+      ],
+      "charm": [
+        0,
+        55,
+        0,
+        0
+      ]
+    },
+    {
+      "strike": 728,
+      "gex": [
+        0,
+        -42.3,
+        -1.3,
+        -3.7
+      ],
+      "charm": [
+        0,
+        2671.8,
+        44.2,
+        59.7
+      ]
+    },
+    {
+      "strike": 729,
+      "gex": [
+        0,
+        26.8,
+        2.8,
+        -0.2
+      ],
+      "charm": [
+        0,
+        -3371.2,
+        -106.6,
+        3.1
+      ]
+    },
+    {
+      "strike": 730,
+      "gex": [
+        0,
+        45.7,
+        33,
+        2.7
+      ],
+      "charm": [
+        0,
+        -3228.7,
+        -1128.2,
+        -53.4
+      ]
+    },
+    {
+      "strike": 731,
+      "gex": [
+        0,
+        8.2,
+        1,
+        1.3
+      ],
+      "charm": [
+        0,
+        -466.6,
+        -33.5,
+        -27.2
+      ]
+    },
+    {
+      "strike": 732,
+      "gex": [
+        0,
+        8.7,
+        4.7,
+        -0.7
+      ],
+      "charm": [
+        0,
+        -814.2,
+        -197.6,
+        17.9
+      ]
+    },
+    {
+      "strike": 732.5,
+      "gex": [
+        0,
+        0.5,
+        0,
+        0
+      ],
+      "charm": [
+        0,
+        -41.4,
+        0,
+        0
+      ]
+    },
+    {
+      "strike": 733,
+      "gex": [
+        0,
+        9.2,
+        17.6,
+        1.2
+      ],
+      "charm": [
+        0,
+        -934.6,
+        -679.7,
+        -33.3
+      ]
+    },
+    {
+      "strike": 734,
+      "gex": [
+        0,
+        3.4,
+        1.6,
+        0.8
+      ],
+      "charm": [
+        0,
+        -133.8,
+        -64.2,
+        -21
+      ]
+    },
+    {
+      "strike": 735,
+      "gex": [
+        0,
+        21.5,
+        -42.3,
+        1.6
+      ],
+      "charm": [
+        0,
+        -986.7,
+        1866.7,
+        -38.6
+      ]
+    },
+    {
+      "strike": 736,
+      "gex": [
+        0,
+        4.3,
+        0.3,
+        -1.1
+      ],
+      "charm": [
+        0,
+        -190.4,
+        -54.9,
+        24.4
+      ]
     }
   ],
   "coverage": [
     {
+      "strike": 736,
+      "side": "resistance",
+      "reaction": "mixed",
+      "tags": [],
+      "prob": 35,
+      "iv": 27.9,
+      "rnd": 1
+    },
+    {
+      "strike": 735,
+      "side": "resistance",
+      "reaction": "mixed",
+      "tags": [
+        "OI 53k",
+        "0DTE Pin"
+      ],
+      "prob": 44,
+      "iv": 22.1,
+      "rnd": 1.05
+    },
+    {
+      "strike": 734,
+      "side": "resistance",
+      "reaction": "mixed",
+      "tags": [],
+      "prob": 35,
+      "iv": 30.1,
+      "rnd": 1.12
+    },
+    {
+      "strike": 733,
+      "side": "resistance",
+      "reaction": "clean",
+      "tags": [
+        "0DTE Pin"
+      ],
+      "prob": 47,
+      "iv": 27.5,
+      "rnd": 1.18
+    },
+    {
+      "strike": 732.5,
+      "side": "resistance",
+      "reaction": "mixed",
+      "tags": [],
+      "prob": 30,
+      "iv": 27.5,
+      "rnd": 1.21
+    },
+    {
+      "strike": 732,
+      "side": "resistance",
+      "reaction": "mixed",
+      "tags": [
+        "0DTE Pin"
+      ],
+      "prob": 41,
+      "iv": 24.4,
+      "rnd": 1.25
+    },
+    {
+      "strike": 731,
+      "side": "resistance",
+      "reaction": "mixed",
+      "tags": [
+        "0DTE Pin"
+      ],
+      "prob": 40,
+      "iv": 17.2,
+      "rnd": 1.32
+    },
+    {
+      "strike": 730,
+      "side": "resistance",
+      "reaction": "clean",
+      "tags": [
+        "Call Wall",
+        "GEX +81M",
+        "OI 52k",
+        "0DTE Pin"
+      ],
+      "prob": 67,
+      "iv": 24.4,
+      "rnd": 1.39
+    },
+    {
+      "strike": 729,
+      "side": "resistance",
+      "reaction": "clean",
+      "tags": [
+        "0DTE Pin"
+      ],
+      "prob": 47,
+      "iv": 17.7,
+      "rnd": 1.46
+    },
+    {
+      "strike": 728,
+      "side": "resistance",
+      "reaction": "mixed",
+      "tags": [],
+      "prob": 47,
+      "iv": 21.5,
+      "rnd": 1.53
+    },
+    {
+      "strike": 727.5,
+      "side": "resistance",
+      "reaction": "mixed",
+      "tags": [],
+      "prob": 25,
+      "iv": 21.5,
+      "rnd": 1.57
+    },
+    {
+      "strike": 727,
+      "side": "resistance",
+      "reaction": "mixed",
+      "tags": [
+        "0DTE Pin"
+      ],
+      "prob": 42,
+      "iv": 19.2,
+      "rnd": 1.61
+    },
+    {
+      "strike": 726,
+      "side": "resistance",
+      "reaction": "mixed",
+      "tags": [],
+      "prob": 44,
+      "iv": 19.1,
+      "rnd": 1.69
+    },
+    {
+      "strike": 725,
+      "side": "resistance",
+      "reaction": "clean",
+      "tags": [
+        "GEX −94M",
+        "OI 55k",
+        "0DTE Pin"
+      ],
+      "prob": 53,
+      "iv": 15.6,
+      "rnd": 1.76
+    },
+    {
+      "strike": 724,
+      "side": "resistance",
+      "reaction": "mixed",
+      "tags": [
+        "GEX −99M"
+      ],
+      "prob": 48,
+      "iv": 16.6,
+      "rnd": 1.84
+    },
+    {
+      "strike": 723,
+      "side": "resistance",
+      "reaction": "mixed",
+      "tags": [],
+      "prob": 38,
+      "iv": 16.5,
+      "rnd": 1.92
+    },
+    {
       "strike": 722.5,
       "side": "resistance",
       "reaction": "mixed",
       "tags": [],
-      "prob": 19,
-      "iv": 41.9
+      "prob": 25,
+      "iv": 16.5,
+      "rnd": 1.96
     },
     {
       "strike": 722,
       "side": "resistance",
       "reaction": "mixed",
       "tags": [
-        "0DTE Pin"
+        "GEX −62M"
       ],
-      "prob": 38,
-      "iv": 41.3
+      "prob": 47,
+      "iv": 13.2,
+      "rnd": 2
     },
     {
       "strike": 721,
       "side": "resistance",
       "reaction": "mixed",
-      "tags": [
-        "Vol Trigger",
-        "0DTE Pin",
-        "OI Building"
-      ],
-      "prob": 53,
-      "iv": 39.1
+      "tags": [],
+      "prob": 38,
+      "iv": 13.5,
+      "rnd": 2.07
     },
     {
       "strike": 720,
       "side": "resistance",
-      "reaction": "mixed",
+      "reaction": "clean",
       "tags": [
-        "GEX −120M",
-        "OI 86k",
-        "0DTE Pin",
-        "OI Building"
+        "GEX −201M",
+        "OI 72k",
+        "0DTE Pin"
       ],
-      "prob": 60,
-      "iv": 36.9
+      "prob": 56,
+      "iv": 14.5,
+      "rnd": 2.14
     },
     {
       "strike": 719,
       "side": "resistance",
       "reaction": "mixed",
       "tags": [
-        "0DTE Pin",
-        "OI Building"
+        "0DTE Pin"
       ],
-      "prob": 49,
-      "iv": 34.7
+      "prob": 45,
+      "iv": 14,
+      "rnd": 2.21
     },
     {
       "strike": 718,
-      "side": "resistance",
+      "side": "support",
       "reaction": "mixed",
       "tags": [
-        "0DTE Pin",
-        "OI Building"
+        "0DTE Pin"
       ],
-      "prob": 50,
-      "iv": 32.5
+      "prob": 43,
+      "iv": 14.3,
+      "rnd": 2.28
     },
     {
       "strike": 717.5,
-      "side": "resistance",
+      "side": "support",
       "reaction": "mixed",
       "tags": [],
-      "prob": 14,
-      "iv": 32.5
+      "prob": 22,
+      "iv": 14.3,
+      "rnd": 2.31
     },
     {
       "strike": 717,
-      "side": "resistance",
+      "side": "support",
       "reaction": "mixed",
-      "tags": [
-        "0DTE Pin"
-      ],
-      "prob": 47,
-      "iv": 30.2
+      "tags": [],
+      "prob": 41,
+      "iv": 14.8,
+      "rnd": 2.35
     },
     {
       "strike": 716,
-      "side": "resistance",
-      "reaction": "clean",
-      "tags": [
-        "Call Wall",
-        "0DTE Pin",
-        "OI Building"
-      ],
-      "prob": 75,
-      "iv": 27.9
+      "side": "support",
+      "reaction": "mixed",
+      "tags": [],
+      "prob": 43,
+      "iv": 14.8,
+      "rnd": 2.41
     },
     {
       "strike": 715,
-      "side": "resistance",
+      "side": "support",
       "reaction": "mixed",
       "tags": [
-        "GEX −404M",
-        "OI 108k",
-        "0DTE Pin",
-        "OI Building"
+        "GEX −148M",
+        "OI 100k"
       ],
-      "prob": 61,
-      "iv": 25.7
+      "prob": 49,
+      "iv": 15.2,
+      "rnd": 2.46
     },
     {
       "strike": 714,
-      "side": "resistance",
+      "side": "support",
       "reaction": "mixed",
-      "tags": [
-        "0DTE Pin",
-        "OI Building"
-      ],
-      "prob": 49,
-      "iv": 38.4
+      "tags": [],
+      "prob": 38,
+      "iv": 15.3,
+      "rnd": 2.5
     },
     {
       "strike": 713,
-      "side": "resistance",
+      "side": "support",
       "reaction": "mixed",
       "tags": [
-        "0DTE Pin",
-        "OI Building"
+        "GEX −66M"
       ],
-      "prob": 56,
-      "iv": 35.4
+      "prob": 41,
+      "iv": 15.6,
+      "rnd": 2.54
     },
     {
       "strike": 712,
-      "side": "resistance",
+      "side": "support",
       "reaction": "mixed",
-      "tags": [
-        "GEX −81M",
-        "0DTE Pin"
-      ],
-      "prob": 57,
-      "iv": 32.6
+      "tags": [],
+      "prob": 43,
+      "iv": 15.8,
+      "rnd": 2.57
     },
     {
       "strike": 711,
-      "side": "resistance",
-      "reaction": "mixed",
+      "side": "support",
+      "reaction": "clean",
       "tags": [
-        "GEX −104M",
+        "GEX +109M",
         "0DTE Pin"
       ],
-      "prob": 54,
-      "iv": 15.8
+      "prob": 52,
+      "iv": 16,
+      "rnd": 2.58
     },
     {
       "strike": 710,
-      "side": "resistance",
-      "reaction": "mixed",
+      "side": "support",
+      "reaction": "clean",
       "tags": [
-        "GEX −0.7B",
-        "OI 79k",
-        "0DTE Pin",
-        "OI Building"
+        "Put Wall",
+        "GEX −186M",
+        "OI 85k",
+        "0DTE Pin"
       ],
-      "prob": 60,
-      "iv": 13.1
+      "prob": 67,
+      "iv": 16.4,
+      "rnd": 2.59
     },
     {
       "strike": 709,
-      "side": "resistance",
-      "reaction": "mixed",
+      "side": "support",
+      "reaction": "clean",
       "tags": [
-        "GEX −327M",
+        "GEX −102M",
         "0DTE Pin"
       ],
-      "prob": 56,
-      "iv": 13.7
+      "prob": 46,
+      "iv": 16.7,
+      "rnd": 2.59
     },
     {
       "strike": 708,
-      "side": "resistance",
+      "side": "support",
       "reaction": "mixed",
-      "tags": [
-        "GEX −137M",
-        "0DTE Pin"
-      ],
-      "prob": 55,
-      "iv": 16.8
+      "tags": [],
+      "prob": 41,
+      "iv": 16.6,
+      "rnd": 2.57
     },
     {
       "strike": 707,
-      "side": "resistance",
+      "side": "support",
       "reaction": "mixed",
-      "tags": [
-        "GEX −267M",
-        "0DTE Pin"
-      ],
-      "prob": 56,
-      "iv": 18.2
+      "tags": [],
+      "prob": 43,
+      "iv": 18.4,
+      "rnd": 2.55
     },
     {
       "strike": 706,
-      "side": "resistance",
+      "side": "support",
       "reaction": "mixed",
       "tags": [
-        "GEX −72M",
         "0DTE Pin"
       ],
-      "prob": 53,
-      "iv": 22.9
+      "prob": 42,
+      "iv": 17.3,
+      "rnd": 2.51
     },
     {
       "strike": 705,
-      "side": "resistance",
+      "side": "support",
       "reaction": "clean",
       "tags": [
-        "Major Wall",
-        "GEX −0.8B",
-        "OI 71k",
+        "GEX −106M",
         "0DTE Pin"
       ],
-      "prob": 78,
-      "iv": 22.3
+      "prob": 50,
+      "iv": 18.8,
+      "rnd": 2.49
     },
     {
       "strike": 704,
       "side": "support",
       "reaction": "mixed",
-      "tags": [
-        "Put Wall",
-        "0DTE Pin",
-        "Shadow Gamma"
-      ],
-      "prob": 78,
-      "iv": 35.9
+      "tags": [],
+      "prob": 42,
+      "iv": 17.7,
+      "rnd": 2.55
     },
     {
       "strike": 703,
       "side": "support",
       "reaction": "mixed",
-      "tags": [
-        "0DTE Pin",
-        "Shadow Gamma"
-      ],
-      "prob": 57,
-      "iv": 40.2
+      "tags": [],
+      "prob": 40,
+      "iv": 17.9,
+      "rnd": 3.04
     },
     {
       "strike": 702,
       "side": "support",
       "reaction": "mixed",
       "tags": [
-        "0DTE Pin",
-        "OI Building",
-        "Shadow Gamma"
+        "0DTE Pin"
       ],
-      "prob": 53,
-      "iv": 26.2
+      "prob": 41,
+      "iv": 20,
+      "rnd": 4.09
     },
     {
       "strike": 701,
       "side": "support",
       "reaction": "mixed",
-      "tags": [
-        "0DTE Pin",
-        "Shadow Gamma"
-      ],
-      "prob": 51,
-      "iv": 27.6
-    },
-    {
-      "strike": 700,
-      "side": "support",
-      "reaction": "clean",
-      "tags": [
-        "Put Wall",
-        "GEX −451M",
-        "OI 132k",
-        "0DTE Pin"
-      ],
-      "prob": 78,
-      "iv": 31
-    },
-    {
-      "strike": 699,
-      "side": "support",
-      "reaction": "mixed",
-      "tags": [
-        "0DTE Pin",
-        "Shadow Gamma"
-      ],
-      "prob": 52,
-      "iv": 32.2
-    },
-    {
-      "strike": 698,
-      "side": "support",
-      "reaction": "mixed",
-      "tags": [
-        "0DTE Pin",
-        "OI Building",
-        "Shadow Gamma"
-      ],
-      "prob": 56,
-      "iv": 35.6
-    },
-    {
-      "strike": 697,
-      "side": "support",
-      "reaction": "mixed",
-      "tags": [
-        "0DTE Pin",
-        "OI Building",
-        "Shadow Gamma"
-      ],
-      "prob": 54,
-      "iv": 37.9
-    },
-    {
-      "strike": 696,
-      "side": "support",
-      "reaction": "mixed",
-      "tags": [
-        "0DTE Pin",
-        "OI Building",
-        "Shadow Gamma"
-      ],
-      "prob": 52,
-      "iv": 40.2
-    },
-    {
-      "strike": 695,
-      "side": "support",
-      "reaction": "mixed",
-      "tags": [
-        "Put Wall",
-        "GEX −314M",
-        "OI 77k",
-        "0DTE Pin"
-      ],
-      "prob": 76,
-      "iv": 42.4
-    },
-    {
-      "strike": 694,
-      "side": "support",
-      "reaction": "mixed",
-      "tags": [
-        "0DTE Pin",
-        "Shadow Gamma"
-      ],
-      "prob": 54,
-      "iv": 44.6
-    },
-    {
-      "strike": 693,
-      "side": "support",
-      "reaction": "mixed",
-      "tags": [
-        "GEX −60M",
-        "0DTE Pin",
-        "OI Building",
-        "Shadow Gamma"
-      ],
-      "prob": 54,
-      "iv": 46.8
-    },
-    {
-      "strike": 692,
-      "side": "support",
-      "reaction": "mixed",
-      "tags": [
-        "0DTE Pin",
-        "OI Building",
-        "Shadow Gamma"
-      ],
-      "prob": 54,
-      "iv": 49.1
-    },
-    {
-      "strike": 691,
-      "side": "support",
-      "reaction": "mixed",
-      "tags": [
-        "0DTE Pin",
-        "OI Building",
-        "Shadow Gamma"
-      ],
-      "prob": 51,
-      "iv": 51.3
-    },
-    {
-      "strike": 690,
-      "side": "support",
-      "reaction": "mixed",
-      "tags": [
-        "GEX −208M",
-        "OI 131k",
-        "0DTE Pin",
-        "OI Building"
-      ],
-      "prob": 60,
-      "iv": 51.8
-    },
-    {
-      "strike": 689,
-      "side": "support",
-      "reaction": "mixed",
-      "tags": [
-        "0DTE Pin",
-        "OI Building",
-        "Shadow Gamma"
-      ],
-      "prob": 52,
-      "iv": 53.9
-    },
-    {
-      "strike": 688,
-      "side": "support",
-      "reaction": "mixed",
-      "tags": [
-        "0DTE Pin",
-        "Shadow Gamma"
-      ],
-      "prob": 51,
-      "iv": 56
+      "tags": [],
+      "prob": 37,
+      "iv": 19.8,
+      "rnd": 4.69
     }
   ],
-  "zero_gamma": 720.99,
-  "vol_trigger": 721,
-  "net_gex": -4997579110.75,
+  "zero_gamma": 711.76,
+  "vol_trigger": 711.8,
+  "net_gex": -2251340043.959999,
+  "pc_ratio": 0.95,
+  "gex_0dte_ratio": 0.11,
   "entropy_state": "NORMAL",
-  "entropy_ratio": 0.49,
+  "entropy_ratio": 0.58,
+  "day_gate": {
+    "verdict": "TAKE",
+    "majors": 0,
+    "minors": 2,
+    "reasons": [
+      {
+        "severity": "minor",
+        "label": "Negative net gamma — dealers amplify moves, non-dominant levels get blown through"
+      },
+      {
+        "severity": "minor",
+        "label": "Strongly trending tape (Hurst 0.81) — only the terminal wall is a fade, intermediates are targets"
+      }
+    ]
+  },
   "levels": [
     {
-      "strike": 700,
-      "reversal_prob": 58,
-      "side": "support",
-      "reaction": "clean",
-      "tags": [
-        "Put Wall",
-        "GEX −451M",
-        "OI 132k",
-        "0DTE Pin"
-      ],
-      "why": "primary put wall, 451M GEX, 132k OI",
-      "target_strike": 705,
-      "outcome": "none",
-      "touched": false
-    },
-    {
-      "strike": 705,
+      "strike": 730,
       "reversal_prob": 58,
       "side": "resistance",
       "reaction": "clean",
       "tags": [
-        "Major Wall",
-        "GEX −0.8B",
-        "OI 71k",
+        "Call Wall",
+        "GEX +81M",
+        "OI 52k",
         "0DTE Pin"
       ],
-      "why": "major wall, 0.8B GEX, 71k OI",
-      "target_strike": 700,
+      "why": "secondary call wall, 81M GEX, 52k OI",
+      "target_strike": 710,
       "outcome": "untouched",
       "touched": false
     },
     {
-      "strike": 704,
-      "reversal_prob": 55,
+      "strike": 710,
+      "reversal_prob": 58,
       "side": "support",
-      "reaction": "mixed",
+      "reaction": "clean",
       "tags": [
         "Put Wall",
-        "0DTE Pin",
-        "Shadow Gamma"
+        "GEX −186M",
+        "OI 85k",
+        "0DTE Pin"
       ],
-      "why": "primary put wall",
-      "target_strike": 705,
-      "outcome": "none",
+      "why": "secondary put wall, 186M GEX, 85k OI",
+      "target_strike": 730,
+      "outcome": "untouched",
+      "touched": false
+    },
+    {
+      "strike": 720,
+      "reversal_prob": 51,
+      "side": "resistance",
+      "reaction": "clean",
+      "tags": [
+        "GEX −201M",
+        "OI 72k",
+        "0DTE Pin"
+      ],
+      "why": "201M GEX, 72k OI",
+      "target_strike": 710,
+      "outcome": "untouched",
       "touched": false
     }
   ]

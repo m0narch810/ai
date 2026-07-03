@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { config, nowInSessionTz } from "./config.js";
-import { compactEntropy, compactGarch, compactHedgePressure, compactHurst, compactLadder, fetchData, fetchEntropy, fetchGarch, fetchGreekTimeseries, fetchHedgePressure, fetchHurst, fetchIvTracker, fetchLadder, fetchOiChange, fetchVolSkewMulti } from "./altaris.js";
+import { compactAnomalies, compactEntropy, compactGarch, compactHedgePressure, compactHestonSurface, compactHiro, compactHurst, compactLadder, compactLevelAssessment, compactLiquidityMap, compactOi365, compactOiAnalytics, compactOpexGravity, compactPutCallSkew, compactRegimeIntraday, compactRegimeV2, compactSkewIndex, compactUnusualActivity, compactVolRegimeScore, compactVolStats, fetchAnomalies, fetchData, fetchEntropy, fetchGarch, fetchGreekTimeseries, fetchHedgePressure, fetchHestonSurface, fetchHiro, fetchHurst, fetchIvTracker, fetchLadder, fetchLevelAssessment, fetchLiquidityMap, fetchOi365, fetchOiAnalytics, fetchOiChange, fetchOpexGravity, fetchPutCallSkew, fetchRegimeIntraday, fetchRegimeV2, fetchSkewIndex, fetchUnusualActivity, fetchVolRegimeScore, fetchVolSkewMulti, fetchVolStats } from "./altaris.js";
 import type { CaptureRecord, DataSnapshot, GreekTimeseries, IvSummary, OiChangeResponse, StrikeMap, StrikePair, TermBuckets, VolSkewResponse } from "./types.js";
 
 interface Heatmap { expirations?: { label: string; dte: number }[]; rows?: { strike: number; cells: number[] }[] }
@@ -89,6 +89,7 @@ export function compactSnapshot(raw: DataSnapshot & Record<string, unknown>): Da
     // scorer can read term structure: a same-day pin that fades vs durable multi-expiry structure.
     gex_term: bucketHmByDte(raw.gex_hm as Heatmap),
     charm_term: bucketHmByDte(raw.cex_hm as Heatmap),
+    vanna_term: bucketHmByDte(raw.vannex_hm as Heatmap),
     atm_iv: raw.atm_iv, expected_move: raw.expected_move, atm_iv_avg: raw.atm_iv_avg,
     gex_regime: raw.gex_regime, realized_vol: raw.realized_vol, net_vanna: raw.net_vanna,
     pc_ratio,
@@ -121,6 +122,14 @@ export function skewToStrikeMap(skew: VolSkewResponse | null | undefined): Strik
   return Object.keys(out).length ? out : undefined;
 }
 
+/** DTE of the front (nearest) expiration in the skew — needed to build the risk-neutral density. */
+export function frontSkewDte(skew: VolSkewResponse | null | undefined): number | undefined {
+  const exps = skew?.expirations;
+  if (!exps?.length) return undefined;
+  const dte = exps.reduce((a, b) => (b.dte < a.dte ? b : a)).dte;
+  return Number.isFinite(dte) ? dte : undefined;
+}
+
 const numOr = (v: unknown, d = 0) => (typeof v === "number" ? v : d);
 const strOr = (v: unknown, d = "") => (typeof v === "string" ? v : d);
 
@@ -146,9 +155,14 @@ export async function captureTick(): Promise<{ record: CaptureRecord; greek: Gre
   await fs.mkdir(config.paths.raw, { recursive: true });
   const { date, iso } = nowInSessionTz();
 
-  const [rawData, greek, ivRaw, skewRaw, oiChangeRaw, entropyRaw, hurstRaw, garchRaw, ladderRaw, hedgeRaw] = await Promise.all([
-    fetchData(),
-    fetchGreekTimeseries(),
+  // STAGED capture — the Altaris server has a small worker pool, and the two heavy on-demand
+  // computes (heston ~22s, regime_intraday ~35s) can starve the CRITICAL fetches past their
+  // timeout if everything is fired at once (seen live: /api/data aborted behind them).
+  // Wave 1: the two fatal endpoints alone. Wave 2: the cheap optional set. Wave 3: the slow computes.
+  const [rawData, greek] = await Promise.all([fetchData(), fetchGreekTimeseries()]);
+  const [ivRaw, skewRaw, oiChangeRaw, entropyRaw, hurstRaw, garchRaw, ladderRaw, hedgeRaw,
+    assessRaw, opexRaw, oiAnalyticsRaw, liqRaw, hiroRaw, regimeV2Raw, volStatsRaw,
+    anomaliesRaw, pcSkewRaw, skewIdxRaw, volRegimeRaw, oi365Raw] = await Promise.all([
     fetchIvTracker().catch(() => null),
     fetchVolSkewMulti().catch(() => null),
     fetchOiChange().catch(() => null),
@@ -157,6 +171,23 @@ export async function captureTick(): Promise<{ record: CaptureRecord; greek: Gre
     fetchGarch().catch(() => null),
     fetchLadder().catch(() => null),
     fetchHedgePressure().catch(() => null),
+    fetchLevelAssessment().catch(() => null),
+    fetchOpexGravity().catch(() => null),
+    fetchOiAnalytics().catch(() => null),
+    fetchLiquidityMap().catch(() => null),
+    fetchHiro().catch(() => null),
+    fetchRegimeV2().catch(() => null),
+    fetchVolStats().catch(() => null),
+    fetchAnomalies().catch(() => null),
+    fetchPutCallSkew().catch(() => null),
+    fetchSkewIndex().catch(() => null),
+    fetchVolRegimeScore().catch(() => null),
+    fetchOi365().catch(() => null),
+  ]);
+  const [unusualRaw, hestonRaw, regimeIntradayRaw] = await Promise.all([
+    fetchUnusualActivity().catch(() => null), // ~10s
+    fetchHestonSurface().catch(() => null), // ~20s server-side calibration; own 45s timeout
+    fetchRegimeIntraday().catch(() => null), // ~35s server compute; own 50s timeout
   ]);
   // Surface silent degradation: a non-fatal source going dark for days quietly lowers
   // scoring quality with no error. Log which optional feeds came back empty this tick.
@@ -164,6 +195,11 @@ export async function captureTick(): Promise<{ record: CaptureRecord; greek: Gre
     ["iv_tracker", ivRaw], ["vol_skew", skewRaw], ["oi_change", oiChangeRaw],
     ["entropy", entropyRaw], ["hurst", hurstRaw], ["garch", garchRaw],
     ["ladder", ladderRaw], ["hedge_pressure", hedgeRaw],
+    ["level_assessment", assessRaw], ["opex_gravity", opexRaw], ["oi_analytics", oiAnalyticsRaw],
+    ["liquidity_map", liqRaw], ["unusual_activity", unusualRaw], ["hiro", hiroRaw],
+    ["heston_surface", hestonRaw], ["regime_v2", regimeV2Raw], ["vol_stats", volStatsRaw],
+    ["anomalies", anomaliesRaw], ["put_call_skew", pcSkewRaw], ["skew_index", skewIdxRaw],
+    ["vol_regime_score", volRegimeRaw], ["regime_intraday", regimeIntradayRaw], ["oi365", oi365Raw],
   ].filter(([, v]) => v == null).map(([k]) => k);
   if (missing.length) console.warn(`[${iso}] capture: optional feeds unavailable: ${missing.join(", ")}`);
 
@@ -174,6 +210,7 @@ export async function captureTick(): Promise<{ record: CaptureRecord; greek: Gre
     throw new Error(`/api/data returned a degraded snapshot (spot=${data.spot}, gex strikes=${Object.keys(data.gex_bar ?? {}).length}) — refusing to score`);
   }
   data.iv_skew = skewToStrikeMap(skewRaw);
+  data.iv_skew_dte = frontSkewDte(skewRaw);
   data.oi_day_bar = oiChangeToBar(oiChangeRaw);
   if (ladderRaw) {
     const ladder = compactLadder(ladderRaw as Record<string, unknown>);
@@ -188,6 +225,21 @@ export async function captureTick(): Promise<{ record: CaptureRecord; greek: Gre
     hurst: hurstRaw ? compactHurst(hurstRaw) : undefined,
     garch: garchRaw ? compactGarch(garchRaw) : undefined,
     hedge_pressure: hedgeRaw ? compactHedgePressure(hedgeRaw) : undefined,
+    level_assessment: assessRaw ? compactLevelAssessment(assessRaw, data.spot) : undefined,
+    opex_gravity: opexRaw ? compactOpexGravity(opexRaw, data.spot) : undefined,
+    oi_analytics: oiAnalyticsRaw ? compactOiAnalytics(oiAnalyticsRaw) : undefined,
+    liquidity: liqRaw ? compactLiquidityMap(liqRaw, data.spot) : undefined,
+    unusual_activity: unusualRaw ? compactUnusualActivity(unusualRaw, data.spot) : undefined,
+    hiro: hiroRaw ? compactHiro(hiroRaw) : undefined,
+    heston: hestonRaw ? compactHestonSurface(hestonRaw) : undefined,
+    regime_v2: regimeV2Raw ? compactRegimeV2(regimeV2Raw) : undefined,
+    vol_stats: volStatsRaw ? compactVolStats(volStatsRaw) : undefined,
+    anomalies: anomaliesRaw ? compactAnomalies(anomaliesRaw, date) : undefined,
+    pc_skew: pcSkewRaw ? compactPutCallSkew(pcSkewRaw) : undefined,
+    skew_index: skewIdxRaw ? compactSkewIndex(skewIdxRaw) : undefined,
+    vol_regime_score: volRegimeRaw ? compactVolRegimeScore(volRegimeRaw) : undefined,
+    regime_intraday: regimeIntradayRaw ? compactRegimeIntraday(regimeIntradayRaw) : undefined,
+    oi365: oi365Raw ? compactOi365(oi365Raw) : undefined,
   };
 
   await fs.appendFile(rawDataFile(date), JSON.stringify(record) + "\n", "utf8");
