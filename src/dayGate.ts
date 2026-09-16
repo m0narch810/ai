@@ -71,6 +71,17 @@ export function computeDayGate(latest: CaptureRecord, spot: number, dayContext?:
     }
   }
   if (dayContext?.auction_today) minor("10Y/20Y/30Y auction today — liquidity pulled, vol without direction");
+  // Scheduled macro releases (ForexFactory USD high-impact calendar via the pre-open narrative;
+  // this was the Altaris FRED calendar until Altaris was retired 2026-09-01). An FOMC decision
+  // lands MID-SESSION (14:00 ET) — the pre-print squaring + post-print repricing break the
+  // resting-limit edge on their own → major. CPI/NFP/PCE print pre-open (08:30) and shape the
+  // whole tape → minor. (Altaris's composite event_risk score had no replacement and is gone.)
+  const eventsToday = (dayContext?.upcoming_events ?? []).filter((e) => e.days === 0);
+  if (eventsToday.some((e) => /fomc|rate decision|fed funds/i.test(e.name))) {
+    major("FOMC decision today — mid-session repricing breaks the resting-limit edge");
+  } else if (eventsToday.some((e) => /cpi|nfp|payroll|pce|ism/i.test(e.name))) {
+    minor(`Major macro print today (${eventsToday.map((e) => e.name).join(", ")}) — event-driven tape`);
+  }
 
   // ── Live flow state (this tick's capture) ─────────────────────────────────────
   const ent = latest.entropy;
@@ -110,6 +121,11 @@ export function computeDayGate(latest: CaptureRecord, spot: number, dayContext?:
   // ── Pre-open call ─────────────────────────────────────────────────────────────
   if (dayContext?.topology_alignment === "conflicted") {
     minor("Topology conflicted (trend axis vs vol/gamma axis disagree) — sized-down day per the pre-open read");
+  }
+  // A committed chop/rotation call means the expected range rarely clears the 0.5% large-reversal
+  // objective — contextual, degrades the day only in combination (rotation CAN still reach a range end).
+  if (dayContext?.open_type === "chop_day") {
+    minor("Pre-open call is a chop/rotation day — no directional expansion expected, range ends only");
   }
 
   const majors = reasons.filter((r) => r.severity === "major").length;

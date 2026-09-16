@@ -6,11 +6,10 @@
 // Every fetch is independent and non-fatal: a failure is recorded in notes[] and the
 // narrative scorer simply weights the rest. Nothing here throws.
 import YahooFinance from "yahoo-finance2";
-import { compactAltarisMacro, fetchMacroPanel } from "./altaris.js";
 import { config } from "./config.js";
-import type { AltarisMacroSummary, CrossAssetSnapshot, MacroReading, MacroSnapshot, NewsEvent } from "./types.js";
+import type { CrossAssetSnapshot, MacroPulse, MacroReading, MacroSnapshot, NewsEvent } from "./types.js";
 
-const yf = new YahooFinance();
+const yf = new YahooFinance({ suppressNotices: ["yahooSurvey"] });
 
 const round = (n: number, p = 3) => { const f = 10 ** p; return Math.round(n * f) / f; };
 const dirOf = (chg: number, eps: number): MacroReading["dir"] =>
@@ -34,7 +33,10 @@ async function yahooReading(symbol: string, eps: number): Promise<MacroReading |
     const now = new Date();
     const start = new Date(now.getTime() - 8 * 3600 * 1000);
     const [q, chart] = await Promise.all([
-      yf.quote(symbol),
+      // validateResult:false — futures quotes (2YY=F) intermittently fail the lib's schema
+      // (quoteType FUTURE edge case) and would otherwise throw + spam the loop's log; the
+      // fields we read (regularMarketPrice/PreviousClose) are present regardless.
+      yf.quote(symbol, undefined, { validateResult: false }),
       yf.chart(symbol, { period1: start, period2: now, interval: "1m" }).catch(() => null),
     ]);
     const last = Number(q?.regularMarketPrice);
@@ -261,6 +263,101 @@ async function fetchNews(): Promise<NewsEvent[]> {
   }
 }
 
+/**
+ * Today's scheduled USD "High"-impact releases with minutes-until, from the same public
+ * ForexFactory feed news-cron.mjs alerts from (each event's `date` already carries an ET
+ * offset). The per-tick scorer's EVENT CLOCK: negative minutes_until = already printed.
+ */
+async function eventsToday(): Promise<MacroPulse["events_today"]> {
+  try {
+    const res = await fetch("https://nfs.faireconomy.media/ff_calendar_thisweek.json", {
+      headers: { "cache-control": "no-store", accept: "application/json" },
+    });
+    if (!res.ok) return undefined;
+    const all = (await res.json()) as { title?: string; country?: string; impact?: string; date?: string }[];
+    if (!Array.isArray(all)) return undefined;
+    const date = etIso().slice(0, 10);
+    const now = Date.now();
+    return all
+      .filter((e) => e.country === "USD" && e.impact === "High" && typeof e.date === "string" && e.date.startsWith(date))
+      .map((e) => ({
+        name: e.title || "release",
+        time_et: new Date(e.date!).toLocaleTimeString("en-US", { timeZone: config.sessionTz, hour: "numeric", minute: "2-digit" }),
+        minutes_until: Math.round((Date.parse(e.date!) - now) / 60_000),
+      }))
+      .sort((a, b) => a.minutes_until - b.minutes_until);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The week's scheduled USD "High"-impact releases with days-out, from the same public
+ * ForexFactory feed as eventsToday(). This replaces the Altaris macro panel's FRED release
+ * calendar (Altaris retired 2026-09-01); the day gate grades FOMC/CPI/NFP/PCE/ISM off it via
+ * DayContext.upcoming_events, so losing it would silently drop those factors.
+ * days = 0 for today, 1 for tomorrow, etc. Past events are excluded. Never throws.
+ */
+export async function upcomingEvents(): Promise<{ name: string; days: number }[] | undefined> {
+  try {
+    const res = await fetch("https://nfs.faireconomy.media/ff_calendar_thisweek.json", {
+      headers: { "cache-control": "no-store", accept: "application/json" },
+    });
+    if (!res.ok) return undefined;
+    const all = (await res.json()) as { title?: string; country?: string; impact?: string; date?: string }[];
+    if (!Array.isArray(all)) return undefined;
+    const today = etIso().slice(0, 10);
+    const dayMs = 86_400_000;
+    const base = Date.parse(`${today}T00:00:00Z`);
+    return all
+      .filter((e) => e.country === "USD" && e.impact === "High" && typeof e.date === "string")
+      .map((e) => ({
+        name: e.title || "release",
+        days: Math.round((Date.parse(`${e.date!.slice(0, 10)}T00:00:00Z`) - base) / dayMs),
+      }))
+      .filter((e) => Number.isFinite(e.days) && e.days >= 0)
+      .sort((a, b) => a.days - b.days);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * LIVE MACRO PULSE — the intraday counterpart of fetchMacro(), light enough to run on EVERY
+ * scoring tick. The pre-open narrative captures the day's macro gravity at ~09:00; this keeps
+ * the per-tick scorer aware of what changed SINCE: a 2Y ripping at 13:00, oil spiking on a
+ * headline, USD/JPY carry unwinding, the VIX term structure flipping to backwardation — the
+ * exact shocks that run price through otherwise-valid options structure. Yahoo-only + the
+ * public release calendar; every fetch independent and non-fatal. Never throws.
+ */
+export async function fetchMacroPulse(): Promise<MacroPulse> {
+  const notes: string[] = [];
+  const [us2y, us10y, usdjpy, oil, dxy, vix, vxn, vix9d, events_today] = await Promise.all([
+    yahooReading("2YY=F", 0.01),
+    yahooReading("^TNX", 0.01),
+    crossReading("JPY=X"),
+    crossReading("CL=F"),
+    crossReading("DX-Y.NYB"),
+    crossReading("^VIX"),
+    crossReading("^VXN"),
+    crossReading("^VIX9D"),
+    eventsToday(),
+  ]);
+  for (const [name, r] of [["2Y", us2y], ["10Y", us10y], ["USD/JPY", usdjpy], ["oil", oil], ["DXY", dxy], ["VIX", vix], ["VXN", vxn], ["VIX9D", vix9d]] as const) {
+    if (!r) notes.push(`${name} unavailable`);
+  }
+  if (!events_today) notes.push("release calendar unavailable");
+  return {
+    asOf: etIso(),
+    us2y, us10y,
+    curve2s10s: us10y && us2y ? round(us10y.last - us2y.last, 3) : undefined,
+    usdjpy, oil, dxy, vix, vxn, vix9d,
+    vix_term: vixTermStructure(vix9d, vix),
+    events_today,
+    notes,
+  };
+}
+
 /** Pull every macro input concurrently. Never throws; failures land in notes[]. */
 export async function fetchMacro(): Promise<MacroSnapshot> {
   const notes: string[] = [];
@@ -268,7 +365,7 @@ export async function fetchMacro(): Promise<MacroSnapshot> {
   let us2y = await yahooReading("2YY=F", 0.01);
   if (!us2y) us2y = await fredReading("DGS2", 0.01);
   const etDate = etIso().slice(0, 10);
-  const [us10y, usdjpy, tga, rrp, cot, crossResult, headlines, vix9d, wresbal, walcl, oas, auction_today, altarisMacro] = await Promise.all([
+  const [us10y, usdjpy, tga, rrp, cot, crossResult, headlines, vix9d, wresbal, walcl, oas, auction_today, events] = await Promise.all([
     yahooReading("^TNX", 0.01),
     yahooReading("JPY=X", 0.05),
     tgaReading(),                 // Treasury General Account — daily (DTS), weekly FRED fallback
@@ -281,12 +378,7 @@ export async function fetchMacro(): Promise<MacroSnapshot> {
     fredReading("WALCL", 1),      // Fed total assets (weekly)
     oasReading(),                 // High-yield OAS credit spreads
     auctionDayCheck(etDate),      // 10Y/20Y/30Y auction today?
-    // Altaris /api/macro — the terminal's own macro tab (hawk/dove regime, FRED release calendar,
-    // event-risk score, VIX fair-value model, real yields, NFCI/stress, sector rotation).
-    // ENRICHMENT alongside our direct feeds, not a replacement: our TGA is the daily Treasury DTS
-    // (Altaris uses the lagging weekly WTREGEN), and keeping FRED direct means the narrative
-    // still works when the Altaris box is down. Requires ALTARIS creds; best-effort like the rest.
-    fetchMacroPanel().then((r) => compactAltarisMacro(r)).catch(() => undefined as AltarisMacroSummary | undefined),
+    upcomingEvents(),             // week-ahead USD high-impact releases (day gate + narrative)
   ]);
 
   if (!us2y) notes.push("2Y yield unavailable");
@@ -300,7 +392,7 @@ export async function fetchMacro(): Promise<MacroSnapshot> {
   if (!walcl) notes.push("WALCL (Fed balance sheet) unavailable");
   if (crossResult.missing.length) notes.push(`cross-asset unavailable: ${crossResult.missing.join(", ")}`);
   if (!headlines.length) notes.push("news (GDELT) unavailable");
-  if (!altarisMacro) notes.push("Altaris macro panel unavailable");
+  if (!events) notes.push("release calendar (ForexFactory) unavailable");
 
   const curve = us10y && us2y ? round(us10y.last - us2y.last, 3) : undefined;
   const cross = crossResult.cross;
@@ -311,6 +403,6 @@ export async function fetchMacro(): Promise<MacroSnapshot> {
   return {
     asOf: etIso(), us2y, us10y, curve2s10s: curve, usdjpy, tga, rrp, cot,
     oas, vix_term, auction_today, reserve_bal: wresbal, walcl, copper_gold_ratio,
-    cross, headlines, altaris: altarisMacro, notes,
+    cross, headlines, events, notes,
   };
 }

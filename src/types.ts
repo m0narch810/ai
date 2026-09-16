@@ -80,14 +80,26 @@ export interface DataSnapshot {
   gex_0dte_bar?: StrikeMap<number>;
   charm_0dte_bar?: StrikeMap<number>;
   vanna_0dte_bar?: StrikeMap<number>;
+  /** 0DTE theta: on expiry day decay concentrates at the ATM strike — the theta-harvest pin
+   * (dealers scalp price ONTO the strike to collect decay into the close). The blended tex_bar
+   * dilutes this across expiries and can rank the pin strike second (seen 2026-07-08 at 710). */
+  tex_0dte_bar?: StrikeMap<number>;
+  /** 0DTE delta & vega slices — same-day isolation for the remaining greeks (YYY /heatmap grids). */
+  dex_0dte_bar?: StrikeMap<number>;
+  vex_0dte_bar?: StrikeMap<number>;
   /**
-   * Per-strike gamma & charm exposure split by tenor (0DTE / this-week / next-week / monthly+),
-   * from the raw strike×expiration heatmaps (gex_hm / cex_hm). Lets the scorer read the TERM
-   * STRUCTURE of a level — durable multi-expiry structure vs a same-day pin that fades after today.
+   * Per-strike greek exposure split by tenor (0DTE / this-week / next-week / monthly+),
+   * from the raw strike×expiration heatmaps. Lets the scorer read the TERM STRUCTURE of a
+   * level — durable multi-expiry structure vs a same-day pin that fades after today.
+   * Under YYY, ladders come from /heatmap (8 front expiries ≈ 0-8 DTE): the `m` bucket is
+   * structurally empty and `w2` is the deepest durability horizon the feed can see.
    */
   gex_term?: StrikeMap<TermBuckets>;
   charm_term?: StrikeMap<TermBuckets>;
   vanna_term?: StrikeMap<TermBuckets>;
+  dex_term?: StrikeMap<TermBuckets>;
+  vex_term?: StrikeMap<TermBuckets>;
+  tex_term?: StrikeMap<TermBuckets>;
   /** Day-over-day OI change per strike (calls/puts) from /api/oi_change — where walls are BUILDING. */
   oi_day_bar?: StrikeMap<StrikePair>;
   /**
@@ -507,22 +519,6 @@ export interface AltarisCandle {
   d?: number;  // net delta (buyer minus seller volume)
 }
 
-/** Full response shape from GET /api/candles[?days=N]. */
-export interface AltarisCandlesResponse {
-  ticker: string;
-  candles: AltarisCandle[];
-  emas: { t: string; e20: number; e50: number }[];
-  vwap_z: { t: string; vwap: number; z: number; c: number }[];
-  delta_profile: { price: number; delta: number }[];
-  levels: {
-    spot: number;
-    call_wall: number; put_wall: number; major_wall: number;
-    max_pain: number; zero_gamma: number; vol_trigger: number;
-    gex_top5: { strike: number; gex: number }[];
-    gex_profile: { s: number; g: number }[];
-    [key: string]: unknown;
-  };
-}
 
 export type Side = "support" | "resistance";
 
@@ -541,11 +537,9 @@ export interface ScoredLevel {
    * "clean" = instant touch-and-reject; "chop" = grinds/oscillates with drawdown; "mixed" = unclear.
    */
   reaction?: "clean" | "chop" | "mixed";
-  /**
-   * The specific far structural level price is expected to reach on a successful reversal here.
-   * Must be >= min_reversal_move_pts away. Defines the "ping pong" target.
-   */
-  target_strike?: number;
+  // NOTE (2026-08-15): `target_strike` was removed. The bracket is fixed at 80 MNQ pts on every
+  // call, so a per-level destination is neither chosen nor published. Historical boards on disk
+  // still carry the field; nothing reads it.
 }
 
 /**
@@ -592,10 +586,37 @@ export interface BoardTape {
   direction: "down" | "up" | "ranging";
   /** The strikes price meets next, in order, each classified. */
   path: TapeWaypoint[];
-  /** THE trade this read implies — the "set a limit here, expect it to run there" call. Null = no-trade read. */
-  trade: { side: "long" | "short"; entry: number; target: number; why: string } | null;
+  /**
+   * THE trade this read implies — the "set a limit here" call. Null = no-trade read.
+   * No `target`: the bracket is fixed (config.callTpPts / config.hardStopPts), so the only
+   * decisions left are side and entry strike.
+   */
+  trade: { side: "long" | "short"; entry: number; why: string } | null;
   /** The full flowing narrative paragraph, first person, committed. */
   narrative: string;
+}
+
+/**
+ * The four IV wall levels for the session — the ~19-delta (|Δ| = 0.1925) strikes of the front
+ * expiry on each wing (inner walls) plus fixed-width outer brackets, computed once from the
+ * session's first usable chain and FROZEN for the day. Chain-derived structure (the option
+ * market's own priced move-edge), not a statistical band. See src/ivWalls.ts + the spec PDF.
+ */
+export interface IvWalls {
+  u_inner: number;
+  u_outer: number;
+  l_inner: number;
+  l_outer: number;
+  /** Spot the walls were computed from (frozen; live spot will drift off it). */
+  spot_at_calc: number;
+  /** ATM IV (%) of the chain at compute time — reference context. */
+  sigma_atm_pct: number;
+  /** |Δ| threshold used for the inner walls (0.1925 per the spec). */
+  delta: number;
+  /** ET ISO of the computation — walls are frozen from here for the rest of the session. */
+  computed_at: string;
+  /** DTE of the chain used (0 = today's expiry). */
+  dte: number;
 }
 
 /** The board the AI returns each tick. */
@@ -638,6 +659,14 @@ export interface Board {
   pc_ratio?: number;
   /** Fraction of total |GEX| in the 0DTE slice at score time (0-1). */
   gex_0dte_ratio?: number;
+  /** Gamma-Theta Breakeven Range: daily % move at which dealer gamma P&L offsets today's theta
+   * decay. Inside = theta dominates, dealers pin/range; broken = gamma P&L overtakes theta and
+   * forced rebalancing amplifies the move. See gtbrPct() in score.ts. */
+  gtbr_pct?: number;
+  /** GTBR converted to QQQ points at the scored spot. */
+  gtbr_pts?: number;
+  /** The day's frozen IV wall brackets (19Δ wings of the front expiry) — see IvWalls. */
+  iv_walls?: IvWalls;
 }
 
 // ── Pre-open narrative (dxrk: market-open prediction + RTH macro bias) ────────────
@@ -681,9 +710,39 @@ export interface NewsEvent {
   url?: string;
 }
 
+/**
+ * LIVE MACRO PULSE — the lightweight intraday refresher fed to the per-tick scorer (the full
+ * MacroSnapshot below is pre-open only). Direction + ~30-min velocity of the handful of
+ * cross-asset series that can run price THROUGH options structure mid-session: 2Y/10Y yields,
+ * carry (USD/JPY), oil, dollar, VIX/VXN/VIX9D + term structure — plus today's scheduled
+ * high-impact USD releases with minutes-until (the event clock). Best-effort; never throws.
+ */
+export interface MacroPulse {
+  asOf: string;
+  us2y?: MacroReading;
+  us10y?: MacroReading;
+  curve2s10s?: number;
+  usdjpy?: MacroReading;
+  oil?: MacroReading;
+  dxy?: MacroReading;
+  vix?: MacroReading;
+  vxn?: MacroReading;
+  vix9d?: MacroReading;
+  vix_term?: { front: number; back: number; ratio: number; structure: "contango" | "backwardation" | "flat" };
+  /** Today's USD "High"-impact releases (ForexFactory feed): negative minutes_until = already printed. */
+  events_today?: { name: string; time_et: string; minutes_until: number }[];
+  notes: string[];
+}
+
 /** The macro inputs behind dxrk's RTH bias (yields, liquidity, carry, crowding). */
 export interface MacroSnapshot {
   asOf: string;
+  /**
+   * Week-ahead USD high-impact releases with days-out (0 = today), from the public ForexFactory
+   * calendar. Replaced the Altaris macro panel's FRED release calendar when Altaris was retired
+   * 2026-09-01. Feeds DayContext.upcoming_events → the day gate's FOMC/CPI/NFP factors.
+   */
+  events?: { name: string; days: number }[];
   us2y?: MacroReading;
   us10y?: MacroReading;
   /** 10y − 2y, in basis-point-style points (same units as the yield series). */
@@ -718,44 +777,19 @@ export interface MacroSnapshot {
   cross?: CrossAssetSnapshot;
   /** Recent market-moving headlines (GDELT, keyless) — the deterministic event backstop. */
   headlines?: NewsEvent[];
-  /** The Altaris terminal's own Macro tab (/api/macro) — enrichment, complements our direct feeds. */
-  altaris?: AltarisMacroSummary;
   /** Any source that failed to load, for honest display. */
   notes: string[];
 }
 
-/**
- * Compact of the Altaris /api/macro dashboard. Fields chosen to COMPLEMENT (not duplicate)
- * our direct FRED/Treasury/CFTC feeds: hawk/dove regime score, FRED release calendar with
- * days-out, event-risk score, VIX fair-value model, real yields/breakevens, financial
- * conditions, inflation YoY, and sector rotation extremes.
- */
-export interface AltarisMacroSummary {
-  /** Hawk/dove read: score (negative = dovish, positive = hawkish), label, driving factors. */
-  regime: { score: number; label: string; factors: Record<string, string> } | null;
-  /** Upcoming FRED releases (FOMC/CPI/Retail/ISM/PCE/GDP…) with days until each. */
-  events: { name: string; date: string; days: number }[];
-  /** Event-risk composite (0-10 score, label e.g. "EXTREME") + which events are in window. */
-  event_risk: { score: number; label: string; in_window: string[] } | null;
-  /** VIX cycle model: percentile, regime, fair value vs actual, mispricing, trade signal. */
-  vix_intel: { vix: number; percentile: number; regime: string; fair_value: number; mispricing: number; signal: string } | null;
-  /** Net liquidity ($T): Fed balance sheet − TGA − RRP (Altaris uses weekly FRED TGA). */
-  net_liquidity: number | null;
-  /** 10Y TIPS real yield + 10Y breakeven (%, latest). */
-  real_yields: { tips_10y: number | null; breakeven_10y: number | null };
-  /** Financial conditions: NFCI, financial stress index, HY spread, trade-weighted dollar. */
-  fin_cond: { nfci: number | null; stress: number | null; hy_spread: number | null; dxy_twi: number | null };
-  /** Inflation/labor YoY prints: CPI, core CPI, core PCE, plus NFP + unemployment. */
-  inflation: Record<string, number>;
-  /** Sector rotation extremes: top-3 and bottom-3 by rate/growth/vol-sensitivity score. */
-  sectors: { leading: string[]; lagging: string[] };
-}
 
 export type OpenType =
   | "manip_down_real_up"
   | "manip_up_real_down"
   | "real_pump"
   | "real_dump"
+  // Committed rotation call: signals AGREE there is no directional expansion (pinning dominates).
+  // Distinct from "unclear", which means the signals conflict and the call is to wait.
+  | "chop_day"
   | "unclear";
 
 export interface NarrativeZone {

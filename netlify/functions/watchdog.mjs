@@ -85,7 +85,7 @@ export const handler = async (event) => {
 
     if (stale && !state.alerted) {
       await notify(
-        "Altaris scoring stalled",
+        "Board scoring stalled",
         `No fresh board in ~${ageMin} min during market hours. The scoring box is likely offline — check it.`,
         "high", "warning,chart_with_downwards_trend",
       );
@@ -93,7 +93,7 @@ export const handler = async (event) => {
       return { statusCode: 200, body: `ALERT sent (stale ${ageMin}m)` };
     }
     if (!stale && state.alerted) {
-      await notify("Altaris scoring recovered", `Board is updating again (last scored ${ageMin}m ago).`, "default", "white_check_mark");
+      await notify("Board scoring recovered", `Board is updating again (last scored ${ageMin}m ago).`, "default", "white_check_mark");
       await store.setJSON("state", { alerted: false, since: Date.now() });
       return { statusCode: 200, body: `RECOVERED (fresh ${ageMin}m)` };
     }
@@ -101,7 +101,7 @@ export const handler = async (event) => {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     if (!state.alerted) {
-      await notify("Altaris board unreachable", `Watchdog couldn't read the board: ${msg}`, "high", "warning");
+      await notify("Board unreachable", `Watchdog couldn't read the board: ${msg}`, "high", "warning");
       await store.setJSON("state", { alerted: true, since: Date.now() });
       return { statusCode: 200, body: `ALERT sent (unreachable: ${msg})` };
     }

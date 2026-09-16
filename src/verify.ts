@@ -7,7 +7,7 @@ const session: SessionDef = activeSession() ?? { name: "US", source: "QQQ", star
 const { record } = await captureTick();
 const cur = record.data;
 
-console.log(`CAPTURE OK  ${record.capturedAt}  [${session.name}]  altaris_spot=${cur.spot}  regime=${cur.gex_regime}`);
+console.log(`CAPTURE OK  ${record.capturedAt}  [${session.name}]  spot=${cur.spot}  regime=${cur.gex_regime}`);
 console.log(`  named: call_wall=${cur.call_wall} put_wall=${cur.put_wall} major_wall=${cur.major_wall} max_pain=${cur.max_pain} zero_gamma=${cur.zero_gamma}`);
 if (record.iv) console.log(`  iv: ${record.iv.current_iv} (start ${record.iv.session_start_iv}, ${record.iv.direction}) — ${record.iv.vanna_note}`);
 

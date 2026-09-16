@@ -24,24 +24,20 @@ function num(name: string, fallback: number): number {
   return n;
 }
 
-/** Normalize the cookie env into a full `altaris_session=<token>` header value. */
-function normalizeCookie(raw: string): string {
-  const v = raw.trim();
-  return v.includes("=") ? v : `altaris_session=${v}`;
-}
 
-const baseUrl = (process.env.ALTARIS_BASE_URL?.trim() || "https://altaris.up.railway.app/api").replace(/\/$/, "");
-const rawCookie = process.env.ALTARIS_COOKIE?.trim();
+// The bracket is specified in MNQ points (what the trader executes) and converted once here, so
+// every consumer — scorer prompt, calls ledger, detector, dashboard — reads the SAME QQQ numbers.
+const MNQ_PER_QQQ = num("MNQ_PTS_PER_QQQ_PT", 40.7);
+const STOP_MNQ = num("STOP_MNQ_PTS", 40);
+const TARGET_MNQ = num("TARGET_MNQ_PTS", 80);
 
 export const config = {
-  baseUrl,
-  // A pasted cookie is now optional: if ALTARIS_USER/PASS are set we log in for it.
-  cookie: rawCookie ? normalizeCookie(rawCookie) : "",
-  // Credentials for auto-login + cookie refresh on expiry (src/auth.ts).
-  altarisUser: process.env.ALTARIS_USER?.trim() || "",
-  altarisPass: process.env.ALTARIS_PASS?.trim() || "",
-  loginUrl: `${baseUrl}/login`,
-  symbol: process.env.ALTARIS_SYMBOL?.trim() || "QQQ",
+  // The ONLY options-flow provider. YYY is the public research backend behind yyy-bias-web —
+  // unauthenticated, and it computes the same per-strike GEX/DEX/charm/vanna surface plus its own
+  // level/bias engine. Altaris was retired 2026-09-01 (Railway app deleted; every path 404s), so
+  // there is no provider switch and no credentials any more.
+  yyyBaseUrl: (process.env.YYY_BASE_URL?.trim() || "https://web-production-8a6973.up.railway.app").replace(/\/$/, ""),
+  symbol: process.env.SYMBOL?.trim() || "QQQ",
 
   sessionTz: process.env.SESSION_TZ?.trim() || "America/New_York",
   sessionStart: process.env.SESSION_START?.trim() || "08:30",
@@ -62,6 +58,20 @@ export const config = {
   // before the chain wakes, or a feed outage). Skip scoring rather than publish phantom levels.
   staleFeedMaxPct: num("STALE_FEED_MAX_PCT", 0.02),
 
+  // Fast-move override: the 15-min grid can leave a converging level with only one tick of
+  // lead time (a level 6+ pts away doesn't even appear until the tick that lands 1-2 pts out).
+  // A cheap spot-only poll (no capture/AI) runs every fastPollSec during RTH; if live spot has
+  // moved fastTickMovePct since the last scored board, it fires an out-of-schedule full tick
+  // early instead of waiting for the grid boundary. fastTickCooldownSec prevents back-to-back
+  // AI calls while price keeps trending through the threshold.
+  fastTickMovePct: num("FAST_TICK_MOVE_PCT", 0.0025),
+  // Approach trigger: an early tick also fires when live spot CONVERGES on a level the last
+  // board called (was outside this window at score time, inside it now) — a sub-threshold
+  // drift can still walk straight into a called strike (2026-07-10: 722.44 -> 724 = 0.22%).
+  fastTickApproachPts: num("FAST_TICK_APPROACH_PTS", 1.25),
+  fastPollSec: num("FAST_POLL_SEC", 60),
+  fastTickCooldownSec: num("FAST_TICK_COOLDOWN_SEC", 180),
+
   // Scoring runs through Claude Code headless on the Max subscription — no API key.
   // model is a CLI alias ("opus"/"sonnet") or a full id.
   model: process.env.ANTHROPIC_MODEL?.trim() || "sonnet",
@@ -76,26 +86,33 @@ export const config = {
   // fully tool-locked. Set NARRATIVE_WEBSEARCH=false to force the deterministic path.
   narrativeWebSearch: (process.env.NARRATIVE_WEBSEARCH?.trim() ?? "true") !== "false",
 
-  // Min take-profit floor: 0.5% of spot (~150 MNQ pts at NQ ~29.5k) — the SMALLEST reversal the
-  // board hunts. Used in the AI prompt as min_reversal_move_pts; only levels with a far structural
-  // target this far away score high. Sub-0.5% bounce candidates are noise by design.
-  tpMinPct: num("TP_MIN_PCT", 0.005),
-  // The IDEAL reversal size: 1%+ of spot (~300 MNQ pts) — the archetype trade (bottom-tick at a
-  // pre-called wall, a couple points drawdown, running the full range). A-tier scores belong to
-  // levels positioned to originate a move of this size.
-  tpIdealPct: num("TP_IDEAL_PCT", 0.01),
-  // Swing size that confirms a level actually reversed (a "hold", not a poke).
-  // Set above the TP min so minor chop near a level doesn't count as a reversal.
-  reversalSwingPct: num("REVERSAL_SWING_PCT", 0.005),
   touchTolerancePct: num("TOUCH_TOLERANCE_PCT", 0.0010),
   breakBufferPct: num("BREAK_BUFFER_PCT", 0.0015),
-  nearSpotBandPct: num("NEAR_SPOT_BAND_PCT", 0.025),
+  // Candidate universe for level nomination, ± this fraction of spot. WAS 0.025 (±2.5% ≈ ±18
+  // QQQ pts ≈ ±745 MNQ pts) — far wider than a day's range, so the ranking (alignment tier,
+  // then raw gamma magnitude) kept nominating the biggest structural walls near the edge of the
+  // band instead of strikes price could actually reach. Median published level sat 7.8 pts from
+  // spot and 93% of graded levels were never touched (Jun 17 - Aug 14 calibration). ±1.0% keeps
+  // the whole plausible session range in play and nothing beyond it. This also re-bases the
+  // band-relative role classification (bandStats) onto a REACHABLE window, so "dominant" now
+  // means dominant among strikes in play, not among every wall within 2.5%.
+  nearSpotBandPct: num("NEAR_SPOT_BAND_PCT", 0.010),
 
-  // Reversal grading in ABSOLUTE QQQ POINTS, sized to the trader's MNQ-futures method
-  // (entries are limit orders at the exact strike; ~41.5 MNQ pts per QQQ pt).
-  // hardStopPts ≈ the 20-MNQ-point stop (20 / ~41.5). A turn within cleanReversalPts
-  // (~4 MNQ pts) is a clean, near-to-the-tick reversal; beyond the stop = broken.
-  hardStopPts: num("HARD_STOP_PTS", 0.48),
+  // ── THE BRACKET (user spec 2026-08-15) ────────────────────────────────────────────────
+  // Fixed, symmetric-in-nothing, denominated in MNQ POINTS because that is what the trader
+  // actually executes: rest a limit at the exact strike, 40 MNQ stop, 80 MNQ target. There is
+  // no per-level target SELECTION any more — the bracket is the same on every call, so the only
+  // job left for the scorer is judging greek alignment AT a strike.
+  // Prior spec (Jul 13 - Aug 15) was 0.5 QQQ stop / 3.0 QQQ target (≈20 MNQ / 122 MNQ, 1:6).
+  mnqPtsPerQqqPt: MNQ_PER_QQQ,
+  stopMnqPts: STOP_MNQ,
+  targetMnqPts: TARGET_MNQ,
+  /** 40 MNQ pts in QQQ terms (~0.98). Doubles as the level-BREAK threshold in detect.ts: a level
+   *  has broken exactly when price went far enough past it to take the stop. */
+  hardStopPts: STOP_MNQ / MNQ_PER_QQQ,
+  /** 80 MNQ pts in QQQ terms (~1.97). The booked take-profit AND the swing the detector requires
+   *  before it will grade a touch as "reversed" — ledger and calibration agree by construction. */
+  callTpPts: TARGET_MNQ / MNQ_PER_QQQ,
   cleanReversalPts: num("CLEAN_REVERSAL_PTS", 0.10),
   // How close price must actually trade to a level to count as TESTED. Expanded to 0.15 pts
   // to catch near-miss reversals (e.g. price reaches 743.85 before reversing off a 744 strike).

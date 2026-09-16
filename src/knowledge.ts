@@ -15,7 +15,15 @@ import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const SCRIPTS_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "../scripts");
+// import.meta.url is undefined in CJS-bundled environments (Netlify esbuild output), where
+// fileURLToPath then throws at module load — which took the whole cloud board function down,
+// since it imports score.ts. Same cwd() fallback config.ts uses; the cloud path never retrieves.
+let SCRIPTS_DIR: string;
+try {
+  SCRIPTS_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "../scripts");
+} catch {
+  SCRIPTS_DIR = path.join(process.cwd(), "scripts");
+}
 const RETRIEVE_PY = path.join(SCRIPTS_DIR, "retrieve-knowledge.py");
 
 export interface KnowledgeExcerpt { source: string; excerpt: string; score: number; }

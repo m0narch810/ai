@@ -6,13 +6,13 @@
 // `detectMany`, and `buildDashboard` the local loop uses (esbuild bundles the TS from src/), so
 // there's zero logic drift: the only difference from a live board is scoring_method:"rule".
 //
-// Input is the latest snapshot that capture.mjs stored in Blobs + live Altaris candles (for the
-// Yahoo-equivalent reversal grading we instead use Altaris's own 15-min candle feed, same as the
-// US path of market.ts). Result is cached 5 min in Blobs so viewer polls don't hammer Altaris.
+// Input is the latest snapshot that capture.mjs stored in Blobs + Yahoo QQQ bars for reversal
+// grading — the exact same `fetchSessionBars` the local loop uses, so there is no source drift.
+// Result is cached 5 min in Blobs so viewer polls stay cheap.
 //
 // The frontend hits this only when the published board is stale during RTH (box offline); the
 // levels then keep updating, flagged rule-based (lower confidence) instead of frozen. Env:
-// ALTARIS_USER / ALTARIS_PASS (same as capture.mjs) — fetchCandles auto-logs-in via src/auth.ts.
+// No credentials needed: bars come from Yahoo via src/market.ts (Altaris was retired 2026-09-01).
 import { connectLambda, getStore } from "@netlify/blobs";
 import { createHmac, timingSafeEqual } from "node:crypto";
 function verifyToken(authHeader: string | undefined): boolean {
@@ -31,9 +31,10 @@ import { detectMany } from "../../src/detect.js";
 import { computeDayGate } from "../../src/dayGate.js";
 import { scoreBoardDeterministic } from "../../src/score.js";
 import { buildDashboard } from "../../src/dashboard.js";
-import { fetchCandles } from "../../src/altaris.js";
+import { fetchSessionBars } from "../../src/market.js";
 import { config, RTH_MIN, type SessionDef } from "../../src/config.js";
-import type { AltarisCandlesResponse, Bar, CaptureRecord, DataSnapshot } from "../../src/types.js";
+import { computeIvWalls, tYearsFor } from "../../src/ivWalls.js";
+import type { CaptureRecord, DataSnapshot, IvWalls } from "../../src/types.js";
 
 const CACHE_MS = 5 * 60_000;
 const US_SESSION: SessionDef = { name: "US", source: "QQQ", startMin: RTH_MIN.start, endMin: RTH_MIN.end };
@@ -44,19 +45,6 @@ function etDate(offsetDays = 0) {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit",
   }).format(d);
-}
-
-/** RTH-windowed bars from the Altaris candle feed (mirrors the US branch of market.ts). */
-function rthBars(resp: AltarisCandlesResponse, date: string): Bar[] {
-  return resp.candles
-    .filter((c) => {
-      if (!c.t.startsWith(date)) return false;
-      const m = /T(\d{2}):(\d{2})/.exec(c.t);
-      if (!m) return false;
-      const min = Number(m[1]) * 60 + Number(m[2]);
-      return min >= RTH_MIN.start && min <= RTH_MIN.end;
-    })
-    .map((c) => ({ ts: c.t, open: c.o, high: c.h, low: c.l, close: c.c, volume: c.v, delta: c.d }));
 }
 
 const GEX_THRESHOLD = 50e6; // mirrors run.ts GEX_WALL_THRESHOLD
@@ -73,6 +61,38 @@ function candidateStrikes(data: DataSnapshot, spot: number): number[] {
     .map(([s]) => Number(s))
     .filter((k) => Math.abs(k - spot) <= band);
   return [...new Set([...explicit, ...nearGex])];
+}
+
+/**
+ * The day's frozen IV walls for the cloud path. The local pipeline freezes them to
+ * data/scored/<date>.ivwalls.json, which the cloud can't read — so recompute them here from the
+ * *first* capture of the date (the 09:00 ET cloud snapshot), never the latest one: the walls are a
+ * frozen pre-session bracket, so the answer must not depend on what time a viewer happens to load
+ * the board. Cached per date in Blobs so it's one extra fetch a day. Best-effort — the board still
+ * serves without walls.
+ */
+async function ivWallsForCloud(
+  cache: ReturnType<typeof getStore>,
+  captures: ReturnType<typeof getStore>,
+  date: string,
+  firstKey: string,
+): Promise<IvWalls | null> {
+  const key = `ivwalls-${date}`;
+  const cached = (await cache.get(key, { type: "json" }).catch(() => null)) as IvWalls | null;
+  if (cached && Number.isFinite(cached.u_inner) && Number.isFinite(cached.l_inner)) return cached;
+
+  const first = (await captures.get(firstKey, { type: "json" }).catch(() => null)) as
+    | Pick<CaptureRecord, "capturedAt" | "data"> | null;
+  const skew = first?.data?.iv_skew;
+  const spot = first?.data?.spot;
+  if (!skew || !(typeof spot === "number" && spot > 0)) return null;
+
+  const at = first!.capturedAt;
+  const minutes = Number(at.slice(11, 13)) * 60 + Number(at.slice(14, 16));
+  const walls = computeIvWalls(skew, spot, tYearsFor(first!.data.iv_skew_dte, minutes), at, first!.data.iv_skew_dte ?? 0);
+  if (!walls) return null;
+  await cache.setJSON(key, walls).catch(() => { /* recomputed next call */ });
+  return walls;
 }
 
 const json = (body: unknown, code = 200) => ({
@@ -103,17 +123,16 @@ export const handler = async (event: unknown) => {
       blobs = res.blobs;
     }
     if (!blobs.length) return json({ error: "no capture found (today or yesterday)" }, 503);
-    const latestKey = blobs.map((b) => b.key).sort().at(-1)!;
+    const keys = blobs.map((b) => b.key).sort();
+    const latestKey = keys.at(-1)!;
     const cap = (await captures.get(latestKey, { type: "json" })) as
       | (Pick<CaptureRecord, "capturedAt" | "data" | "iv" | "entropy" | "hurst" | "garch" | "hedge_pressure">) | null;
     if (!cap) return json({ error: "capture unreadable" }, 503);
 
-    // Fetch 2 days so the yesterday-fallback path also has candles to grade against.
-    const candles = await fetchCandles(2);
     // Use the capture's own date (not today's) — if yesterday's capture is loaded, grade
     // yesterday's wicks against yesterday's levels, not an empty set of today's bars.
     const capDate = cap.capturedAt.slice(0, 10);
-    const bars = rthBars(candles, capDate);
+    const bars = await fetchSessionBars(US_SESSION, capDate);
     const spot = bars.at(-1)?.close ?? cap.data.spot; // freshest price we have
     const detected = detectMany(bars, candidateStrikes(cap.data, spot));
 
@@ -125,6 +144,12 @@ export const handler = async (event: unknown) => {
     }];
     const board = await scoreBoardDeterministic(history, null, detected, US_SESSION, spot);
     try { board.day_gate = computeDayGate(history[0]!, spot); } catch { /* advisory — board still serves */ }
+    // The board's frozen IV walls — without this the "V · IV WALLS" panel vanishes from the
+    // dashboard the moment the published board goes stale and the frontend swaps to this board.
+    const ivWalls = await ivWallsForCloud(cache, captures, capDate, keys[0]!)
+      .catch(() => null);
+    if (ivWalls) board.iv_walls = ivWalls;
+
     const dash = { ...buildDashboard(board, detected, "US"), cloud: true }; // rule-based, box-offline
 
     await cache.setJSON("latest", { ts: Date.now(), data: dash });

@@ -1,41 +1,27 @@
-// Cloud capture: a scheduled function that snapshots Altaris option-flow even when the PC is off.
+// Cloud capture: a scheduled function that snapshots the YYY options-flow surface even when the
+// PC is off — the box-off backup for the local scoring loop.
 //
 // Why it exists: the local scoring loop (capture→detect→score→publish) runs as a Windows
 // scheduled task ON the PC. If the box is off (you're out), nothing is captured — and the
-// Altaris flow at that moment is gone forever, so a reversal that happened while you were away
+// options flow at that moment is gone forever, so a reversal that happened while you were away
 // can never be calibrated. AI scoring is NOT needed to *preserve* the data: all you need saved
-// is the Altaris snapshot (positioning) + greeks; reversal grading runs later off Yahoo OHLC,
-// which is historical and never lost. This function captures the perishable half into Netlify
-// Blobs every 15 min during RTH, so `npm run backfill` can reconstruct the missed window.
+// is the flow snapshot (positioning) + greeks; reversal grading runs later off Yahoo OHLC, which
+// is historical and never lost. This function captures the perishable half into Netlify Blobs
+// every 15 min during RTH, so `npm run backfill` can reconstruct the missed window.
 //
-// It deliberately does the minimum: log in, fetch the three endpoints, compact, store. No
-// detection, no AI — that's the PC's job when it comes back. Stored shape per tick mirrors a
-// local CaptureRecord (+ the as-of greek timeseries) so backfill needs zero re-parsing.
+// PROVIDER: YYY (the public research backend behind yyy-bias-web). Mirrors buildYyyRecord() in
+// src/yyy.ts so the stored blob is byte-for-byte a local CaptureRecord — keep the two IN SYNC if
+// either changes. YYY is unauthenticated, so unlike the old Altaris path there is no login/cookie.
 //
 // Env (Netlify → Site settings → Environment variables):
-//   ALTARIS_USER, ALTARIS_PASS  (required) — same credentials as the local .env.
-//   ALTARIS_BASE_URL            (optional) — defaults to the Railway terminal.
+//   YYY_BASE_URL  (optional) — defaults to the public Railway backend.
 import { connectLambda, getStore } from "@netlify/blobs";
 
-const BASE = (process.env.ALTARIS_BASE_URL?.trim() || "https://altaris.up.railway.app/api").replace(/\/$/, "");
-const USER = process.env.ALTARIS_USER?.trim();
-const PASS = process.env.ALTARIS_PASS?.trim();
+const BASE = (process.env.YYY_BASE_URL?.trim() || "https://web-production-8a6973.up.railway.app").replace(/\/$/, "");
+const SYMBOL = process.env.SYMBOL?.trim() || "QQQ";
 // Per-request timeout: a connected-but-silent endpoint must not hang the whole scheduled
 // invocation (mirrors config.fetchTimeoutMs in the local loop).
 const FETCH_TIMEOUT_MS = 20000;
-
-const LOGIN_HEADERS = {
-  accept: "application/json",
-  "content-type": "application/json",
-  referer: "https://altaris.up.railway.app/login",
-  "user-agent":
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
-};
-const BROWSER_HEADERS = {
-  accept: "*/*",
-  referer: "https://altaris.up.railway.app/",
-  "user-agent": LOGIN_HEADERS["user-agent"],
-};
 
 /** ET wall-clock parts, matching nowInSessionTz() in src/config.ts. */
 function etParts(d = new Date()) {
@@ -64,401 +50,351 @@ const HOLIDAYS = new Set([
 // plus the 09:00 pre-open snapshot). Off-hours positioning is static prior-close; no need to store it.
 const inCaptureWindow = ({ date, wd, minutes }) => wd >= 1 && wd <= 5 && minutes >= 540 && minutes <= 960 && !HOLIDAYS.has(date);
 
-/** Pull `altaris_session=<token>` out of the login response's Set-Cookie header(s). */
-function extractCookie(res) {
-  const raw = typeof res.headers.getSetCookie === "function"
-    ? res.headers.getSetCookie()
-    : [res.headers.get("set-cookie") ?? ""];
-  for (const line of raw) {
-    const m = /(?:^|;\s*)altaris_session=([^;]+)/.exec(line);
-    if (m?.[1]) return `altaris_session=${m[1]}`;
-  }
-  return null;
-}
-
-async function login() {
-  const res = await fetch(`${BASE}/login`, {
-    method: "POST", headers: LOGIN_HEADERS,
-    body: JSON.stringify({ email: USER, password: PASS }),
-    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-  });
-  if (!res.ok) throw new Error(`Altaris login HTTP ${res.status}: ${(await res.text().catch(() => "")).slice(0, 160)}`);
-  const cookie = extractCookie(res);
-  if (!cookie) throw new Error("Altaris login succeeded but returned no altaris_session cookie.");
-  return cookie;
-}
-
-async function getJson(endpoint, cookie) {
-  const res = await fetch(`${BASE}/${endpoint}`, { headers: { ...BROWSER_HEADERS, cookie }, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+async function getJson(endpoint) {
+  const url = `${BASE}/${endpoint}${endpoint.includes("?") ? "&" : "?"}ticker=${encodeURIComponent(SYMBOL)}`;
+  const res = await fetch(url, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
   if (!res.ok) throw new Error(`GET ${endpoint} HTTP ${res.status}`);
   return res.json();
 }
 
-// --- compaction: mirrors compactSnapshot() / summarizeIv() in src/capture.ts so the stored blob
-// is byte-for-byte a local CaptureRecord. Keep these in sync if the local versions change. ---
-function aggregateHm(hm) {
+// --- mapping: mirrors buildYyyRecord()/its helpers in src/yyy.ts so the stored blob is a local
+// CaptureRecord. Keep these in sync if the local versions change. ---
+const numOr = (v, d = 0) => (typeof v === "number" && Number.isFinite(v) ? v : d);
+const key = (s) => s.toFixed(1);
+
+// YYY exposures are $M-family; the pipeline convention is raw dollars (/1e6 for display).
+const M_TO_RAW = 1e6;
+// /vanna_surface quotes in a much smaller unit base — scaled harder so vanna survives the
+// downstream /1e6 + 1-decimal display (internally consistent within vanna; see src/yyy.ts).
+const VANNA_SCALE = 1e9;
+
+/** Net signed exposure per strike (sum across all DTEs). field = gex|charm|vanna. */
+function netBar(points, field, scale = M_TO_RAW) {
   const out = {};
-  for (const r of hm?.rows ?? []) out[r.strike.toFixed(1)] = r.cells.reduce((a, b) => a + (b ?? 0), 0);
+  for (const p of points ?? []) out[key(p.strike)] = (out[key(p.strike)] ?? 0) + numOr(p[field]) * scale;
   return out;
 }
-/** 0DTE (same-day) column of a strike×expiration heatmap — nearest expiry if no true 0DTE. */
-function zeroDteSlice(hm) {
-  const exps = hm?.expirations;
-  if (!exps?.length || !hm?.rows) return {};
-  let idx = exps.findIndex((e) => e.dte === 0);
-  if (idx < 0) { let min = Infinity; exps.forEach((e, i) => { if (e.dte < min) { min = e.dte; idx = i; } }); }
+/** Same-day (dte===0) slice per strike; nearest expiry if there is no true 0DTE today. */
+function zeroDteBar(points, field, scale = M_TO_RAW) {
+  const dtes = [...new Set((points ?? []).map((p) => p.dte))];
+  if (!dtes.length) return {};
+  const target = dtes.includes(0) ? 0 : Math.min(...dtes);
   const out = {};
-  for (const r of hm.rows) out[r.strike.toFixed(1)] = r.cells?.[idx] ?? 0;
+  for (const p of points) if (p.dte === target) out[key(p.strike)] = (out[key(p.strike)] ?? 0) + numOr(p[field]) * scale;
   return out;
 }
-/** Per-strike gamma/charm split by tenor: d0 (0DTE), w1 (1-7 DTE), w2 (8-14 DTE), m (15+ DTE). */
-function bucketHmByDte(hm) {
-  const exps = hm?.expirations;
-  if (!exps?.length || !hm?.rows) return {};
-  const bucketOf = exps.map((e) => (e.dte <= 0 ? "d0" : e.dte <= 7 ? "w1" : e.dte <= 14 ? "w2" : "m"));
+/** Per-strike exposure split into tenor buckets (d0 / w1 1-7 / w2 8-14 / m 15+). */
+function termBar(points, field, scale = M_TO_RAW) {
   const out = {};
-  for (const r of hm.rows) {
-    const b = { d0: 0, w1: 0, w2: 0, m: 0 };
-    r.cells?.forEach((c, i) => { const k = bucketOf[i]; if (k) b[k] += c ?? 0; });
-    out[r.strike.toFixed(1)] = b;
+  for (const p of points ?? []) {
+    const k = key(p.strike);
+    const b = (out[k] ??= { d0: 0, w1: 0, w2: 0, m: 0 });
+    const bucket = p.dte <= 0 ? "d0" : p.dte <= 7 ? "w1" : p.dte <= 14 ? "w2" : "m";
+    b[bucket] += numOr(p[field]) * scale;
   }
   return out;
 }
-/** Day-over-day OI change (calls/puts) per strike from /api/oi_change. */
-function oiChangeToBar(oc) {
-  if (!oc?.has_previous || !Array.isArray(oc.nodes) || !oc.nodes.length) return undefined;
-  const out = {};
-  for (const n of oc.nodes) if (Number.isFinite(n.strike)) out[n.strike.toFixed(1)] = { calls: n.delta_calls ?? 0, puts: n.delta_puts ?? 0 };
-  return Object.keys(out).length ? out : undefined;
-}
-function compactSnapshot(raw) {
-  const gex_0dte_bar = zeroDteSlice(raw.gex_hm);
-  // P/C ratio: total put volume / total call volume — sentiment read.
-  let totC = 0, totP = 0;
-  for (const v of Object.values(raw.vol_bar ?? {})) { totC += v?.calls ?? 0; totP += v?.puts ?? 0; }
-  const pc_ratio = totC > 0 ? Math.round((totP / totC) * 100) / 100 : undefined;
-  // 0DTE GEX ratio: 0DTE slice / all expirations |GEX|.
-  let totalGexAbs = 0, total0dteAbs = 0;
-  for (const v of Object.values(raw.gex_bar ?? {})) totalGexAbs += Math.abs(v ?? 0);
-  for (const v of Object.values(gex_0dte_bar)) total0dteAbs += Math.abs(v ?? 0);
-  const gex_0dte_ratio = totalGexAbs > 0 ? Math.round((total0dteAbs / totalGexAbs) * 100) / 100 : undefined;
-  return {
-    ticker: raw.ticker, spot: raw.spot, timestamp: raw.timestamp,
-    call_wall: raw.call_wall, put_wall: raw.put_wall, major_wall: raw.major_wall,
-    max_pain: raw.max_pain, zero_gamma: raw.zero_gamma,
-    vol_trigger: raw.vol_trigger, total_vol_trigger: raw.total_vol_trigger,
-    call_wall_0dte: raw.call_wall_0dte, put_wall_0dte: raw.put_wall_0dte, major_wall_0dte: raw.major_wall_0dte,
-    call_walls: raw.call_walls, put_walls: raw.put_walls,
-    oi_bar: raw.oi_bar, vol_bar: raw.vol_bar,
-    gex_bar: raw.gex_bar, dex_bar: raw.dex_bar, vex_bar: raw.vex_bar, rex_bar: raw.rex_bar,
-    charm_bar: aggregateHm(raw.cex_hm), tex_bar: aggregateHm(raw.tex_hm), vanna_bar: aggregateHm(raw.vannex_hm),
-    gex_0dte_bar, charm_0dte_bar: zeroDteSlice(raw.cex_hm), vanna_0dte_bar: zeroDteSlice(raw.vannex_hm),
-    gex_term: bucketHmByDte(raw.gex_hm), charm_term: bucketHmByDte(raw.cex_hm), vanna_term: bucketHmByDte(raw.vannex_hm),
-    atm_iv: raw.atm_iv, expected_move: raw.expected_move, atm_iv_avg: raw.atm_iv_avg,
-    gex_regime: raw.gex_regime, realized_vol: raw.realized_vol, net_vanna: raw.net_vanna,
-    pc_ratio,
-    gex_0dte_ratio,
-  };
-}
-/** Collapse /api/vol_skew_multi to a per-strike IV map for the nearest expiration (mirrors capture.ts). */
-function skewToStrikeMap(skew) {
-  const exps = skew?.expirations;
-  if (!exps?.length) return undefined;
-  const front = exps.reduce((a, b) => (b.dte < a.dte ? b : a));
-  const out = {};
-  for (const { strike, iv } of front.data ?? []) {
-    if (Number.isFinite(strike) && Number.isFinite(iv)) out[strike.toFixed(1)] = iv;
+/** Reduce one /heatmap grid (strike rows × expiry columns) into bar + 0DTE slice + tenor ladder. */
+function gridBars(grid, expiries) {
+  const rows = grid?.rows;
+  if (!rows?.length || !expiries?.length) return null;
+  const dtes = expiries.map((e) => numOr(e.dte, 0));
+  const minDte = Math.min(...dtes);
+  const bar = {}, d0 = {}, term = {};
+  for (const r of rows) {
+    if (!Number.isFinite(r.strike) || !Array.isArray(r.cells)) continue;
+    const k = key(r.strike);
+    const b = (term[k] ??= { d0: 0, w1: 0, w2: 0, m: 0 });
+    for (let i = 0; i < r.cells.length && i < dtes.length; i++) {
+      const v = numOr(r.cells[i]) * M_TO_RAW;
+      if (v === 0) continue;
+      bar[k] = (bar[k] ?? 0) + v;
+      const dte = dtes[i];
+      if (dte === minDte) d0[k] = (d0[k] ?? 0) + v;
+      b[dte <= 0 ? "d0" : dte <= 7 ? "w1" : dte <= 14 ? "w2" : "m"] += v;
+    }
   }
-  return Object.keys(out).length ? out : undefined;
+  return Object.keys(bar).length ? { bar, d0, term } : null;
 }
-/** DTE of the front expiration in the skew — needed to build the risk-neutral density (mirrors capture.ts). */
-function frontSkewDte(skew) {
-  const exps = skew?.expirations;
-  if (!exps?.length) return undefined;
-  const dte = exps.reduce((a, b) => (b.dte < a.dte ? b : a)).dte;
-  return Number.isFinite(dte) ? dte : undefined;
+/** Net-GEX flip strike: cumulative net dealer gamma crosses zero scanning low→high. */
+function netGexFlip(gexBar, spot) {
+  const strikes = Object.keys(gexBar).map(Number).sort((a, b) => a - b);
+  if (!strikes.length) return spot;
+  let cum = 0;
+  for (const k of strikes) {
+    const prev = cum;
+    cum += gexBar[key(k)] ?? 0;
+    if (prev !== 0 && Math.sign(cum) !== Math.sign(prev)) return k;
+  }
+  return spot;
 }
-const numOr = (v, d = 0) => (typeof v === "number" ? v : d);
-const strOr = (v, d = "") => (typeof v === "string" ? v : d);
-function summarizeIv(iv) {
-  return {
-    current_iv: numOr(iv.current_iv), session_start_iv: numOr(iv.session_start_iv),
-    iv_change: numOr(iv.iv_change), direction: strOr(iv.direction, "UNKNOWN"), vanna_note: strOr(iv.vanna_detail),
-  };
+function wallStrikes(gexBar, side, n = 3) {
+  const entries = Object.entries(gexBar).map(([k, v]) => ({ s: Number(k), v }));
+  const sorted = side === "call"
+    ? entries.filter((e) => e.v > 0).sort((a, b) => b.v - a.v)
+    : entries.filter((e) => e.v < 0).sort((a, b) => a.v - b.v);
+  return sorted.slice(0, n).map((e) => e.s);
+}
+/** Per-strike OI + volume by side from /flow.sentiment_data. */
+function oiVolBars(flow) {
+  const oi = {}, vol = {};
+  for (const s of flow?.sentiment_data ?? []) {
+    const k = key(s.strike);
+    (oi[k] ??= { calls: 0, puts: 0 });
+    (vol[k] ??= { calls: 0, puts: 0 });
+    if (s.side === "call") { oi[k].calls += numOr(s.oi); vol[k].calls += numOr(s.volume); }
+    else { oi[k].puts += numOr(s.oi); vol[k].puts += numOr(s.volume); }
+  }
+  return { oi, vol };
+}
+/** Per-strike front/0DTE IV (%) from the /net_iv matrix. */
+function ivSkewFromNetIv(net) {
+  const rows = net?.rows, dtes = net?.dte_list;
+  if (!rows?.length || !dtes?.length) return {};
+  let idx = dtes.indexOf(0);
+  if (idx < 0) idx = dtes.indexOf(Math.min(...dtes));
+  const out = {};
+  for (const r of rows) {
+    const cell = r.cells?.[idx];
+    if (Number.isFinite(r.strike) && typeof cell === "number" && Number.isFinite(cell)) out[key(r.strike)] = cell * 100;
+  }
+  return Object.keys(out).length ? { iv_skew: out, iv_skew_dte: Math.max(0, dtes[idx] ?? 0) } : {};
 }
 
-/** Extract net_gex_flip and premium_bar from /api/ladder (mirrors compactLadder in src/altaris.ts). */
-function compactLadder(raw) {
-  const levels = raw?.levels;
-  const net_gex_flip = typeof levels?.net_gex_flip === "number" && Number.isFinite(levels.net_gex_flip)
-    ? levels.net_gex_flip : null;
-  const premium_bar = {};
-  for (const [k, v] of Object.entries(raw?.premium ?? {})) {
-    if (typeof v?.net === "number" && Number.isFinite(v.net)) premium_bar[k] = v.net;
-  }
-  return { net_gex_flip, premium_bar };
-}
-/** Distil /api/hedge_pressure to the compact summary (no timeseries). */
-function compactHedgePressure(raw) {
+function toGarch(prob, vf) {
+  if (!prob && !vf) return undefined;
+  const persistence = numOr(vf?.persistence, 0.9);
+  const b1 = prob?.bands_1d?.["68"], b2 = prob?.bands_1d?.["95"];
+  const ranges = b1 && b2
+    ? { "0": { vol_pct: numOr(prob?.sigma_daily_pct), low_1s: b1[0], high_1s: b1[1], low_2s: b2[0], high_2s: b2[1] } }
+    : undefined;
   return {
-    score: raw.score, label: raw.label, sensitivity: raw.sensitivity,
-    gamma_pct: raw.gamma_pct, vanna_pct: raw.vanna_pct, charm_pct: raw.charm_pct,
-    momentum: raw.momentum, acceleration: raw.acceleration,
+    daily_vol_pct: numOr(prob?.sigma_daily_pct), annual_vol_pct: numOr(prob?.sigma_ann_pct, numOr(vf?.realized_20)),
+    alpha: 0, beta: 0, persistence,
+    half_life: persistence < 1 ? Math.log(0.5) / Math.log(persistence) : 0,
+    z_score: 0, current_regime: (vf?.vol_regime || "normal").toLowerCase(), ranges,
   };
 }
-// --- untapped-endpoint compaction: mirrors the compact* helpers in src/altaris.ts. NOTE: the
-// cloud tick deliberately SKIPS heston_surface (~22s server calibration) and unusual_activity
-// (~10s) — too slow for the function's time budget; backfilled ticks just score without them. ---
-const NEAR_BAND_PCT = 0.025; // mirrors config.nearSpotBandPct
-const num2 = (v) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
-const str2 = (v) => (typeof v === "string" ? v : "");
-const r2 = (n) => Math.round(n * 100) / 100;
-
-/** Mirror compactLevelAssessment: near-band strikes + A/B grades out to 2× the band. */
-function compactLevelAssessment(raw, spot) {
-  const band = NEAR_BAND_PCT * spot;
-  const rows = Array.isArray(raw.levels) ? raw.levels : [];
-  const levels = rows
-    .filter((l) => {
-      const d = Math.abs(num2(l.strike) - spot);
-      return d <= band || (d <= 2 * band && /^[AB]/.test(str2(l.grade)));
-    })
-    .map((l) => ({
-      strike: num2(l.strike), zone: str2(l.zone), grade: str2(l.grade),
-      archetype: str2(l.reaction_name), level_type: str2(l.level_type),
-      hedge_score: r2(num2(l.hedge_score)), rank_pct: r2(num2(l.rank_pct)),
-      oi: Math.round(num2(l.oi)), hedge_desc: str2(l.hedge_desc), drivers_desc: str2(l.drivers_desc),
-    }))
-    .sort((a, b) => a.strike - b.strike);
-  const dom = raw.dominant;
+function toRegimeV2(bias) {
+  const b = bias?.bias;
+  if (!b) return undefined;
+  const votes = Object.entries(b.votes ?? {}).map(([model, v]) => ({
+    model, vote: v > 0.1 ? "bull" : v < -0.1 ? "bear" : "neutral", confidence: Math.min(1, Math.abs(v)),
+  }));
   return {
-    gamma_flip: typeof raw.gamma_flip === "number" ? raw.gamma_flip : null,
-    zone_label: str2(raw.zone_label),
-    dominant: dom ? { strike: num2(dom.strike), zone: str2(dom.zone), grade: str2(dom.grade), archetype: str2(dom.name) } : null,
+    consensus: `${b.direction ?? "NEUTRAL"} / ${b.size_rule ?? "—"}`, interpretation: b.narrative ?? "",
+    agreement: `${votes.filter((v) => v.vote !== "neutral").length}/${votes.length} models directional`,
+    p_change: b.low_confidence ? 0.6 : 0.3, expected_dwell: 0,
+    expected_move_pct: numOr(bias?.gex?.expected_move_pct), rv30: 0, atm_iv: numOr(bias?.gex?.atm_iv), votes,
+  };
+}
+function toEntropy(bias) {
+  const e = bias?.entropy;
+  if (!e || e.entropy == null) return undefined;
+  return { current_entropy: numOr(e.entropy), threshold: numOr(e.threshold), status: e.status ?? "UNKNOWN" };
+}
+function toHurst(bias) {
+  const t = bias?.topology;
+  if (!t || t.h64 == null) return undefined;
+  return { hurst: numOr(t.h64), label: t.hurst_regime ?? "", rolling_50: numOr(t.h32, 0), rolling_100: numOr(t.h64, 0) };
+}
+function toLevelAssessment(lv) {
+  if (!lv || (!lv.hod?.length && !lv.lod?.length)) return undefined;
+  const grade = (c) => (c >= 0.7 ? "A" : c >= 0.4 ? "B" : "C");
+  const mk = (e, zone) => ({
+    strike: e.price, zone, grade: grade(e.confidence),
+    archetype: e.confluence >= 4 ? "The Bedrock" : e.confluence <= 1 ? "The Trapdoor" : "Standard",
+    level_type: e.confidence >= 0.5 ? "SAFE" : "NEUTRAL",
+    hedge_score: e.confidence, rank_pct: e.confidence, oi: 0,
+    hedge_desc: `${e.confluence}-method confluence`, drivers_desc: (e.methods ?? []).join(", "),
+  });
+  const levels = [...(lv.hod ?? []).map((e) => mk(e, "R")), ...(lv.lod ?? []).map((e) => mk(e, "S"))];
+  const dom = levels.slice().sort((a, b) => b.rank_pct - a.rank_pct)[0] ?? null;
+  return {
+    gamma_flip: null, zone_label: lv.regime ? `Regime: ${lv.regime}` : "",
+    dominant: dom ? { strike: dom.strike, zone: dom.zone, grade: dom.grade, archetype: dom.archetype } : null,
     levels,
   };
 }
-/** Mirror compactOpexGravity. */
-function compactOpexGravity(raw, spot) {
-  const band = 2 * NEAR_BAND_PCT * spot;
-  const rows = Array.isArray(raw.gravity_strikes) ? raw.gravity_strikes : [];
-  const gravity_strikes = rows
-    .filter((g) => Math.abs(num2(g.strike) - spot) <= band)
-    .sort((a, b) => num2(b.pull_strength) - num2(a.pull_strength))
-    .slice(0, 8)
-    .map((g) => ({ strike: num2(g.strike), call_oi: Math.round(num2(g.call_oi)), put_oi: Math.round(num2(g.put_oi)), pull_strength: Math.round(num2(g.pull_strength)) }));
+function toHiro(da) {
+  if (!da) return undefined;
+  const z = numOr(da.current_z);
+  const recent = (da.bar_deltas ?? []).slice(-6);
   return {
-    expiry_label: str2(raw.expiry_label), dte: num2(raw.dte), hours_to_expiry: r2(num2(raw.hours_to_expiry)),
-    max_pain: num2(raw.max_pain), pin_score: r2(num2(raw.pin_score)), total_oi: Math.round(num2(raw.total_oi)),
-    gravity_strikes,
+    direction: z > 1 ? "BUY PRESSURE" : z < -1 ? "SELL PRESSURE" : "BALANCED",
+    current_hiro_m: z, total_gex_m: 0, call_gex_m: 0, put_gex_m: 0,
+    last_30m_hiro: recent.length ? recent.reduce((s, d) => s + numOr(d), 0) : null,
   };
 }
-/** Mirror compactOiAnalytics. */
-function compactOiAnalytics(raw) {
-  const zone = (v) => (Array.isArray(v) && v.length === 2 && v.every((x) => typeof x === "number") ? v : null);
+function toAnomalies(da, etDate) {
+  if (!da?.anomalies) return undefined;
+  const today = da.anomalies.filter((a) => (a.time ?? "").startsWith(etDate));
+  const last = da.anomalies[da.anomalies.length - 1] ?? null;
   return {
-    pc_ratio_oi: r2(num2(raw.pc_ratio)), concentration_top5_pct: r2(num2(raw.concentration_top5_pct)),
-    oi_center_of_gravity: r2(num2(raw.oi_center_of_gravity)), max_pain_all: num2(raw.max_pain),
-    put_heavy_zone: zone(raw.put_heavy_zone), call_heavy_zone: zone(raw.call_heavy_zone),
+    threshold: numOr(da.z_threshold, 2),
+    today_up: today.filter((a) => a.direction === "BUY" || a.bar_delta > 0).length,
+    today_down: today.filter((a) => a.direction === "SELL" || a.bar_delta < 0).length,
+    last: last ? { time: last.time, dir: last.bar_delta >= 0 ? "up" : "down", ret_pct: numOr(last.z) } : null,
   };
 }
-/** Mirror compactLiquidityMap. */
-function compactLiquidityMap(raw, spot) {
-  const band = NEAR_BAND_PCT * spot;
-  const rows = Array.isArray(raw.strikes) ? raw.strikes : [];
-  const top = rows
-    .filter((s) => Math.abs(num2(s.strike) - spot) <= band)
-    .sort((a, b) => num2(b.total_oi) - num2(a.total_oi))
-    .slice(0, 10)
-    .map((s) => ({ strike: num2(s.strike), call_oi: Math.round(num2(s.call_oi)), put_oi: Math.round(num2(s.put_oi)), call_vol: Math.round(num2(s.call_vol)), put_vol: Math.round(num2(s.put_vol)) }));
-  return { expiry_label: str2(raw.expiry_label), dte: num2(raw.dte), top };
+function toPcSkew(flow) {
+  if (!flow || (flow.put_25d_skew == null && flow.call_25d_skew == null)) return undefined;
+  return { current_rr: numOr(flow.put_25d_skew) - numOr(flow.call_25d_skew), bias: flow.skew_regime ?? flow.skew_note ?? "", term: [] };
 }
-/** Mirror compactHiro. */
-function compactHiro(raw) {
-  const series = Array.isArray(raw.series) ? raw.series : [];
-  const recent = series.slice(-6).map((p) => num2(p.hiro));
+function toIv(em, vf) {
+  const cur = numOr(em?.atm_iv);
+  if (!cur) return undefined;
+  const dir = (vf?.vol_trend || "").toUpperCase();
   return {
-    direction: str2(raw.direction), current_hiro_m: r2(num2(raw.current_hiro_m)),
-    total_gex_m: r2(num2(raw.total_gex_m)), call_gex_m: r2(num2(raw.call_gex_m)), put_gex_m: r2(num2(raw.put_gex_m)),
-    last_30m_hiro: recent.length ? r2(recent.reduce((a, b) => a + b, 0)) : null,
-  };
-}
-/** Mirror compactRegimeV2. */
-function compactRegimeV2(raw) {
-  const votes = (Array.isArray(raw.model_votes) ? raw.model_votes : [])
-    .map((v) => ({ model: str2(v.model), vote: str2(v.vote), confidence: r2(num2(v.confidence)) }));
-  return {
-    consensus: str2(raw.consensus_regime), interpretation: str2(raw.interpretation),
-    agreement: `${Math.round(num2(raw.agreement_count))}/${Math.round(num2(raw.total_models))} models agree`,
-    p_change: r2(num2(raw.p_change)), expected_dwell: r2(num2(raw.expected_dwell)),
-    expected_move_pct: r2(num2(raw.expected_move)), rv30: r2(num2(raw.rv30)), atm_iv: r2(num2(raw.atm_iv)),
-    votes,
-  };
-}
-/** Mirror compactVolStats. */
-function compactVolStats(raw) {
-  return {
-    hv10: r2(num2(raw.hv10)), hv20: r2(num2(raw.hv20)), hv30: r2(num2(raw.hv30)),
-    atm_iv: r2(num2(raw.atm_iv)), ivr: r2(num2(raw.ivr)), vol_premium: r2(num2(raw.vol_premium)),
-    regime: str2(raw.regime), vix9d: r2(num2(raw.vix9d)), vix: r2(num2(raw.vix)), vix3m: r2(num2(raw.vix3m)),
-    ts_shape: str2(raw.ts_shape),
+    current_iv: cur, session_start_iv: cur, iv_change: 0,
+    direction: dir.includes("RIS") || dir.includes("HEAT") ? "RISING" : dir.includes("FALL") || dir.includes("COOL") ? "FALLING" : "STABLE",
+    vanna_note: "",
   };
 }
 
-/** Compact entropy/hurst/garch — mirror compactEntropy/compactHurst/compactGarch in src/altaris.ts. */
-function compactEntropy(raw) {
-  return { current_entropy: raw.current_entropy, threshold: raw.threshold, status: raw.status };
-}
-function compactHurst(raw) {
-  const last = (w) => { const r = raw.rolling?.[w]; return r?.values?.[r.values.length - 1] ?? null; };
-  return { hurst: raw.hurst, label: raw.label, rolling_50: last("50"), rolling_100: last("100") };
-}
-function compactGarch(raw) {
-  // Sigma-band price levels + vol forecast — mirrors compactGarch in src/altaris.ts.
-  const ranges = {};
-  for (const k of ["0", "1"]) {
-    const r = raw.ranges?.[k];
-    if (r && [r.low_1s, r.high_1s, r.low_2s, r.high_2s].every((x) => typeof x === "number" && Number.isFinite(x))) {
-      ranges[k] = { vol_pct: r.vol_pct, low_1s: r.low_1s, high_1s: r.high_1s, low_2s: r.low_2s, high_2s: r.high_2s };
-    }
+/** Assemble the YYY CaptureRecord + synthesized greek tape. Mirrors buildYyyRecord() in src/yyy.ts. */
+function buildRecord(surfaces, iso, etDate) {
+  const { gexSurf, heatmap, charmSurf, vannaSurf, dexLadder, flow, netIv, expMove, levels, prob, volFc, bias, dealer } = surfaces;
+  const spot = gexSurf.spot;
+
+  // Canonical per-strike greeks: the /heatmap grids (all six greeks, 8 expiries deep).
+  // Surfaces (0-3 DTE) are the per-greek fallback; vanna has no grid so it is always surface-fed.
+  const hmExp = heatmap?.expiries ?? [];
+  const hmGex = gridBars(heatmap?.grids?.gex, hmExp);
+  const hmDex = gridBars(heatmap?.grids?.dex, hmExp);
+  const hmVex = gridBars(heatmap?.grids?.vex, hmExp);
+  const hmTex = gridBars(heatmap?.grids?.tex, hmExp);
+  const hmCharm = gridBars(heatmap?.grids?.cex, hmExp);
+
+  const gexBar = hmGex?.bar ?? netBar(gexSurf.points, "gex");
+  const charmBar = hmCharm?.bar ?? (charmSurf ? netBar(charmSurf.points, "charm") : {});
+  const vannaBar = vannaSurf ? netBar(vannaSurf.points, "vanna", VANNA_SCALE) : {};
+  let dexBar;
+  if (hmDex) {
+    dexBar = hmDex.bar;
+  } else {
+    dexBar = {};
+    for (const l of dexLadder?.ladder ?? []) dexBar[key(l.strike)] = numOr(l.net_dex) * M_TO_RAW;
   }
-  const f = raw.forecast_10d;
-  const d1 = f?.[0]?.vol_pct, d10 = f?.[f.length - 1]?.vol_pct;
-  const forecast = (typeof d1 === "number" && typeof d10 === "number")
-    ? { d1_vol_pct: d1, d10_vol_pct: d10, dir: d10 < d1 - 0.5 ? "cooling" : d10 > d1 + 0.5 ? "heating" : "steady" }
-    : undefined;
-  return {
-    daily_vol_pct: raw.daily_vol_pct, annual_vol_pct: raw.annual_vol_pct, alpha: raw.alpha, beta: raw.beta,
-    persistence: raw.persistence, half_life: raw.half_life, z_score: raw.z_score, current_regime: raw.current_regime,
-    ranges: Object.keys(ranges).length ? ranges : undefined,
-    forecast,
+
+  const gex0dte = hmGex?.d0 ?? zeroDteBar(gexSurf.points, "gex");
+  const { oi, vol } = oiVolBars(flow);
+  const { iv_skew, iv_skew_dte } = ivSkewFromNetIv(netIv);
+
+  const flip = netGexFlip(gexBar, spot);
+  const majorWall = Object.entries(gexBar).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))[0]?.[0];
+  const gex0dteSlice = Object.entries(gex0dte);
+  const cw0 = gex0dteSlice.filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1])[0]?.[0];
+  const pw0 = gex0dteSlice.filter(([, v]) => v < 0).sort((a, b) => a[1] - b[1])[0]?.[0];
+  const mw0 = gex0dteSlice.slice().sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))[0]?.[0];
+
+  let totC = 0, totP = 0;
+  for (const v of Object.values(vol)) { totC += v.calls; totP += v.puts; }
+  const pc_ratio = totC > 0 ? Math.round((totP / totC) * 100) / 100 : (flow?.pcr != null ? Math.round(flow.pcr * 100) / 100 : undefined);
+
+  let totalGexAbs = 0, total0dteAbs = 0;
+  for (const v of Object.values(gexBar)) totalGexAbs += Math.abs(v);
+  for (const v of Object.values(gex0dte)) total0dteAbs += Math.abs(v);
+  const gex_0dte_ratio = totalGexAbs > 0 ? Math.round((total0dteAbs / totalGexAbs) * 100) / 100 : undefined;
+
+  const netVanna = Object.values(vannaBar).reduce((s, v) => s + v, 0);
+  const atmIv = numOr(expMove?.atm_iv, numOr(levels?.atm_iv));
+  const expectedMove = numOr(expMove?.moves?.["1d"]?.move_pts, numOr(levels?.daily_move_est));
+
+  const data = {
+    ticker: SYMBOL, spot, timestamp: iso,
+    call_wall: numOr(gexSurf.call_wall), put_wall: numOr(gexSurf.put_wall),
+    major_wall: majorWall ? Number(majorWall) : spot, max_pain: majorWall ? Number(majorWall) : spot,
+    zero_gamma: flip, vol_trigger: flip, total_vol_trigger: flip,
+    call_wall_0dte: cw0 ? Number(cw0) : numOr(gexSurf.call_wall),
+    put_wall_0dte: pw0 ? Number(pw0) : numOr(gexSurf.put_wall),
+    major_wall_0dte: mw0 ? Number(mw0) : (majorWall ? Number(majorWall) : spot),
+    call_walls: wallStrikes(gexBar, "call"), put_walls: wallStrikes(gexBar, "put"),
+    oi_bar: oi, vol_bar: vol,
+    gex_bar: gexBar, dex_bar: dexBar, vex_bar: hmVex?.bar ?? {}, rex_bar: {},
+    charm_bar: charmBar, tex_bar: hmTex?.bar ?? {}, vanna_bar: vannaBar,
+    gex_0dte_bar: gex0dte,
+    charm_0dte_bar: hmCharm?.d0 ?? (charmSurf ? zeroDteBar(charmSurf.points, "charm") : {}),
+    vanna_0dte_bar: vannaSurf ? zeroDteBar(vannaSurf.points, "vanna", VANNA_SCALE) : {},
+    tex_0dte_bar: hmTex?.d0 ?? {},
+    dex_0dte_bar: hmDex?.d0 ?? {},
+    vex_0dte_bar: hmVex?.d0 ?? {},
+    gex_term: hmGex?.term ?? termBar(gexSurf.points, "gex"),
+    charm_term: hmCharm?.term ?? (charmSurf ? termBar(charmSurf.points, "charm") : {}),
+    vanna_term: vannaSurf ? termBar(vannaSurf.points, "vanna", VANNA_SCALE) : {},
+    dex_term: hmDex?.term ?? {},
+    vex_term: hmVex?.term ?? {},
+    tex_term: hmTex?.term ?? {},
+    atm_iv: atmIv, expected_move: expectedMove,
+    atm_iv_avg: flow ? (numOr(flow.avg_call_iv) + numOr(flow.avg_put_iv)) / 2 : atmIv,
+    gex_regime: (bias?.gex?.gamma_env || "").toLowerCase().includes("neg") ? "negative"
+      : (bias?.gex?.gamma_env || "").toLowerCase().includes("pos") ? "positive" : "",
+    realized_vol: numOr(prob?.sigma_ann_pct, numOr(volFc?.realized_20)), net_vanna: netVanna,
+    iv_skew, iv_skew_dte, pc_ratio, gex_0dte_ratio, net_gex_flip: flip,
   };
-}
-/** Mirror compactAnomalies. */
-function compactAnomalies(raw, etDate) {
-  const ups = Array.isArray(raw.anomalies_up) ? raw.anomalies_up : [];
-  const downs = Array.isArray(raw.anomalies_down) ? raw.anomalies_down : [];
-  const isToday = (p) => (p.time ?? "").startsWith(etDate);
-  const all = [...ups.map((p) => ({ ...p, dir: "up" })), ...downs.map((p) => ({ ...p, dir: "down" }))]
-    .filter((p) => p.time)
-    .sort((a, b) => (a.time < b.time ? -1 : 1));
-  const last = all[all.length - 1];
-  return {
-    threshold: num2(raw.threshold),
-    today_up: ups.filter(isToday).length,
-    today_down: downs.filter(isToday).length,
-    last: last ? { time: last.time, dir: last.dir, ret_pct: r2(num2(last.val) * 100) } : null,
+
+  // Bars are already scaled to raw $ by the reducers.
+  const netGex = Object.values(gexBar).reduce((s, v) => s + v, 0);
+  const netDex = Object.values(dexBar).reduce((s, v) => s + v, 0);
+  const greek = {
+    history: [{
+      ts: iso, spot, net_gex: netGex,
+      call_gex: Object.values(gexBar).filter((v) => v > 0).reduce((s, v) => s + v, 0),
+      put_gex: Object.values(gexBar).filter((v) => v < 0).reduce((s, v) => s + v, 0),
+      net_dex: netDex, net_vanna: netVanna,
+      net_charm: Object.values(charmBar).reduce((s, v) => s + v, 0),
+      call_wall: data.call_wall, put_wall: data.put_wall, major_wall: data.major_wall,
+    }],
+    cumulative_dex: [{ ts: iso, spot, cum_total: netDex, cum_call: 0, cum_put: 0 }],
+    dex_flow: [],
   };
-}
-/** Mirror compactPutCallSkew. */
-function compactPutCallSkew(raw) {
-  const term = (Array.isArray(raw.term_structure) ? raw.term_structure : [])
-    .slice(0, 4)
-    .map((t) => ({ dte: num2(t.dte), rr: r2(num2(t.rr)) }));
-  return { current_rr: r2(num2(raw.current_rr)), bias: str2(raw.bias), term };
-}
-/** Mirror compactSkewIndex. */
-function compactSkewIndex(raw) {
-  const exps = Array.isArray(raw.expirations) ? raw.expirations : [];
-  const front = exps.length ? exps.reduce((a, b) => (num2(b.dte) < num2(a.dte) ? b : a)) : undefined;
-  return {
-    current_skew: r2(num2(raw.current_skew)),
-    risk_level: str2(raw.risk_level),
-    front_put_skew_ratio: front ? r2(num2(front.put_skew_ratio)) : null,
+
+  const record = {
+    capturedAt: iso, data,
+    iv: toIv(expMove, volFc), entropy: toEntropy(bias), hurst: toHurst(bias), garch: toGarch(prob, volFc),
+    greek, // the as-of greek tape, so backfill scores each tick faithfully
+    level_assessment: toLevelAssessment(levels), hiro: toHiro(dealer), anomalies: toAnomalies(dealer, etDate),
+    pc_skew: toPcSkew(flow), regime_v2: toRegimeV2(bias),
   };
-}
-/** Mirror compactVolRegimeScore. */
-function compactVolRegimeScore(raw) {
-  const hist = raw.history_status;
-  return {
-    label: str2(raw.label), mr_score: r2(num2(raw.mr_score)), bo_score: r2(num2(raw.bo_score)),
-    nt_score: r2(num2(raw.nt_score)), confidence: r2(num2(raw.confidence)), reasoning: str2(raw.reasoning),
-    history_pct_complete: r2(num2(hist?.pct_complete)),
-  };
-}
-/** Mirror compactOi365. */
-function compactOi365(raw) {
-  const exps = (Array.isArray(raw.expirations) ? raw.expirations : [])
-    .slice(0, 6)
-    .map((e) => ({ label: str2(e.label), dte: num2(e.dte), total_oi: Math.round(num2(e.total_oi)), pc: r2(num2(e.pc)) }));
-  return { expirations: exps };
+  return record;
 }
 
 export const handler = async (event) => {
   connectLambda(event); // wire Blobs context (classic Lambda-signature function)
   const t = etParts();
   if (!inCaptureWindow(t)) return { statusCode: 200, body: `outside capture window (${t.iso})` };
-  if (!USER || !PASS) return { statusCode: 200, body: "ALTARIS_USER/ALTARIS_PASS not set — nothing to capture" };
 
   try {
-    const cookie = await login();
-    // STAGED like src/capture.ts: the fatal endpoints first, alone — the optional storm can
-    // starve /api/data past its timeout on the server's small worker pool.
-    const [data, greek] = await Promise.all([
-      getJson("data", cookie),
-      getJson("greek_timeseries", cookie),
-    ]);
-    const [ivRaw, skewRaw, oiChangeRaw, ladderRaw, hedgeRaw, entropyRaw, hurstRaw, garchRaw,
-      assessRaw, opexRaw, oiAnalyticsRaw, liqRaw, hiroRaw, regimeV2Raw, volStatsRaw,
-      anomaliesRaw, pcSkewRaw, skewIdxRaw, volRegimeRaw, oi365Raw] = await Promise.all([
-      getJson("iv_tracker", cookie).catch(() => null), // IV is enrichment; don't fail the tick on it
-      getJson("vol_skew_multi", cookie).catch(() => null), // per-strike IV skew is enrichment too
-      getJson("oi_change", cookie).catch(() => null), // day-over-day OI change is enrichment too
-      getJson("ladder", cookie).catch(() => null), // net_gex_flip + premium per strike
-      getJson("hedge_pressure", cookie).catch(() => null), // dealer hedge flow: sensitivity, score, momentum
-      getJson("entropy", cookie).catch(() => null), // flow entropy — backfilled ticks score with it
-      getJson("hurst", cookie).catch(() => null), // Hurst persistence
-      getJson("garch", cookie).catch(() => null), // GARCH conditional vol
-      getJson("level_assessment", cookie).catch(() => null), // Altaris's own per-strike level grading
-      getJson("opex_gravity", cookie).catch(() => null), // front-expiry pin mechanics
-      getJson("oi_analytics", cookie).catch(() => null), // OI P/C, concentration, heavy zones
-      getJson("liquidity_map", cookie).catch(() => null), // front-expiry per-strike liquidity
-      getJson("hiro", cookie).catch(() => null), // live dealer-hedging impact tape
-      getJson("regime_v2", cookie).catch(() => null), // multi-model regime consensus
-      getJson("vol_stats", cookie).catch(() => null), // vol dashboard (IVR, VRP, VIX term)
-      getJson("anomalies", cookie).catch(() => null), // z-scored return anomalies
-      getJson("put_call_skew", cookie).catch(() => null), // risk-reversal term structure
-      getJson("skew_index", cookie).catch(() => null), // tail-risk skew index
-      getJson("vol_regime_score", cookie).catch(() => null), // MR/BO/NT vote
-      getJson("oi365", cookie).catch(() => null), // OI by expiration
-      // heston_surface + unusual_activity + regime_intraday deliberately skipped (too slow for the cloud tick).
-    ]);
-    const compact = compactSnapshot(data);
-    // Reject a degraded/empty /api/data payload (200 returning {} or an HTML interstitial)
-    // BEFORE it lands in Blobs — otherwise backfill and board.mts score garbage. Mirrors capture.ts.
-    if (typeof compact.spot !== "number" || !Number.isFinite(compact.spot) || !compact.gex_bar || Object.keys(compact.gex_bar).length === 0) {
-      throw new Error(`/api/data returned a degraded snapshot (spot=${compact.spot}, gex strikes=${Object.keys(compact.gex_bar ?? {}).length}) — not storing`);
+    // Wave 1: the critical GEX surface — everything else is enrichment.
+    const gexSurf = await getJson("gex_surface");
+    if (typeof gexSurf?.spot !== "number" || !Array.isArray(gexSurf.points) || !gexSurf.points.length) {
+      throw new Error(`/gex_surface degraded (spot=${gexSurf?.spot}, points=${gexSurf?.points?.length ?? 0}) — not storing`);
     }
-    compact.iv_skew = skewToStrikeMap(skewRaw);
-    compact.iv_skew_dte = frontSkewDte(skewRaw);
-    compact.oi_day_bar = oiChangeToBar(oiChangeRaw);
-    if (ladderRaw) {
-      const ladder = compactLadder(ladderRaw);
-      if (ladder.net_gex_flip != null) compact.net_gex_flip = ladder.net_gex_flip;
-      if (Object.keys(ladder.premium_bar).length) compact.premium_bar = ladder.premium_bar;
+    // Wave 2: the rest, all best-effort (a dark optional feed must not fail the tick).
+    const [heatmap, charmSurf, vannaSurf, dexLadder, flow, netIv, expMove, levels, prob, volFc, bias, dealer] = await Promise.all([
+      getJson("heatmap").catch(() => null),
+      getJson("charm_surface").catch(() => null),
+      getJson("vanna_surface").catch(() => null),
+      getJson("dex_ladder").catch(() => null),
+      getJson("flow").catch(() => null),
+      getJson("net_iv").catch(() => null),
+      getJson("expected_move").catch(() => null),
+      getJson("levels").catch(() => null),
+      getJson("probability").catch(() => null),
+      getJson("vol_forecast").catch(() => null),
+      getJson("bias").catch(() => null),
+      getJson("dealer_anomalies").catch(() => null),
+    ]);
+
+    const record = buildRecord(
+      { gexSurf, heatmap, charmSurf, vannaSurf, dexLadder, flow, netIv, expMove, levels, prob, volFc, bias, dealer },
+      t.iso, t.date,
+    );
+    // Reject a degraded snapshot BEFORE it lands in Blobs (mirrors the guard in src/yyy.ts).
+    if (!Number.isFinite(record.data.spot) || Object.keys(record.data.gex_bar).length === 0) {
+      throw new Error(`YYY snapshot degraded (spot=${record.data.spot}, gex strikes=${Object.keys(record.data.gex_bar).length}) — not storing`);
     }
-    const record = {
-      capturedAt: t.iso,
-      data: compact,
-      iv: ivRaw ? summarizeIv(ivRaw) : undefined,
-      greek, // the as-of cumulative greek timeseries, so backfill scores each tick faithfully
-      hedge_pressure: hedgeRaw ? compactHedgePressure(hedgeRaw) : undefined,
-      entropy: entropyRaw ? compactEntropy(entropyRaw) : undefined,
-      hurst: hurstRaw ? compactHurst(hurstRaw) : undefined,
-      garch: garchRaw ? compactGarch(garchRaw) : undefined,
-      level_assessment: assessRaw ? compactLevelAssessment(assessRaw, compact.spot) : undefined,
-      opex_gravity: opexRaw ? compactOpexGravity(opexRaw, compact.spot) : undefined,
-      oi_analytics: oiAnalyticsRaw ? compactOiAnalytics(oiAnalyticsRaw) : undefined,
-      liquidity: liqRaw ? compactLiquidityMap(liqRaw, compact.spot) : undefined,
-      hiro: hiroRaw ? compactHiro(hiroRaw) : undefined,
-      regime_v2: regimeV2Raw ? compactRegimeV2(regimeV2Raw) : undefined,
-      vol_stats: volStatsRaw ? compactVolStats(volStatsRaw) : undefined,
-      anomalies: anomaliesRaw ? compactAnomalies(anomaliesRaw, t.date) : undefined,
-      pc_skew: pcSkewRaw ? compactPutCallSkew(pcSkewRaw) : undefined,
-      skew_index: skewIdxRaw ? compactSkewIndex(skewIdxRaw) : undefined,
-      vol_regime_score: volRegimeRaw ? compactVolRegimeScore(volRegimeRaw) : undefined,
-      oi365: oi365Raw ? compactOi365(oi365Raw) : undefined,
-    };
+
     // Key by ET date/time so backfill can list a day's ticks in order via prefix.
     await getStore("captures").setJSON(`${t.date}/${t.hh}-${t.mm}`, record);
     return { statusCode: 200, body: `captured ${t.iso}` };

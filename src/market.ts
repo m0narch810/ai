@@ -1,5 +1,4 @@
 import YahooFinance from "yahoo-finance2";
-import { fetchCandles } from "./altaris.js";
 import { config, type SessionDef } from "./config.js";
 import type { Bar } from "./types.js";
 
@@ -44,13 +43,57 @@ interface RawBar { date: Date; open: number; high: number; low: number; close: n
 async function fetchRaw(symbol: string, lookbackHours: number): Promise<RawBar[]> {
   const now = new Date();
   const start = new Date(now.getTime() - lookbackHours * 3600 * 1000);
-  const res = await withTimeout(
-    yf.chart(symbol, { period1: start, period2: now, interval: config.marketInterval as "1m" }),
-    config.fetchTimeoutMs, `Yahoo chart ${symbol}`,
+  // Yahoo's edge intermittently serves a transient HTTP 400 error page (seen live 2026-07-10:
+  // one 400 killed the candle-freeze fallback, and reversal detection with it). Retry the
+  // library call, then fall back to a direct query1 fetch — the host the Netlify functions
+  // use, which kept working through the same episode.
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt) await new Promise((r) => setTimeout(r, 1500 * attempt));
+    try {
+      const res = await withTimeout(
+        yf.chart(symbol, { period1: start, period2: now, interval: config.marketInterval as "1m" }),
+        config.fetchTimeoutMs, `Yahoo chart ${symbol}`,
+      );
+      return res.quotes
+        .filter((r) => r.high != null && r.low != null && r.open != null && r.close != null)
+        .map((r) => ({ date: r.date, open: r.open!, high: r.high!, low: r.low!, close: r.close!, volume: r.volume ?? 0 }));
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  try {
+    return await fetchRawDirect(symbol, start, now);
+  } catch {
+    throw lastErr; // the library error names the real failure; the direct call is best-effort
+  }
+}
+
+/** Bare v8 chart fetch against query1 (no library, no query2) — last-resort path for fetchRaw. */
+async function fetchRawDirect(symbol: string, start: Date, end: Date): Promise<RawBar[]> {
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}` +
+    `?interval=${config.marketInterval}&period1=${Math.floor(start.getTime() / 1000)}` +
+    `&period2=${Math.floor(end.getTime() / 1000)}&includePrePost=true`;
+  const resp = await withTimeout(
+    fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } }),
+    config.fetchTimeoutMs, `Yahoo direct ${symbol}`,
   );
-  return res.quotes
-    .filter((r) => r.high != null && r.low != null && r.open != null && r.close != null)
-    .map((r) => ({ date: r.date, open: r.open!, high: r.high!, low: r.low!, close: r.close!, volume: r.volume ?? 0 }));
+  if (!resp.ok) throw new Error(`Yahoo direct ${symbol}: HTTP ${resp.status}`);
+  const json = (await resp.json()) as {
+    chart?: { result?: Array<{ timestamp?: number[]; indicators?: { quote?: Array<Record<string, Array<number | null>>> } }> };
+  };
+  const result = json.chart?.result?.[0];
+  const ts = result?.timestamp ?? [];
+  const q = result?.indicators?.quote?.[0] ?? {};
+  const bars: RawBar[] = [];
+  for (let i = 0; i < ts.length; i++) {
+    const [o, h, l, c] = [q.open?.[i], q.high?.[i], q.low?.[i], q.close?.[i]];
+    if (o == null || h == null || l == null || c == null) continue;
+    bars.push({ date: new Date(ts[i]! * 1000), open: o, high: h, low: l, close: c, volume: q.volume?.[i] ?? 0 });
+  }
+  if (!bars.length) throw new Error(`Yahoo direct ${symbol}: no bars in response`);
+  console.warn(`Yahoo library chart failed for ${symbol} — served by direct query1 fallback (${bars.length} bars)`);
+  return bars;
 }
 
 /**
@@ -74,7 +117,7 @@ export async function nqToQqqRatio(): Promise<number> {
   return recent.reduce((a, b) => a + b, 0) / recent.length;
 }
 
-/** Latest live QQQ print from Yahoo (US-session sanity reference vs the Altaris chain spot). */
+/** Latest live QQQ print from Yahoo (US-session sanity reference vs the YYY chain spot). */
 export async function liveQqqSpot(): Promise<number> {
   const qqq = await fetchRaw("QQQ", 6);
   const last = qqq[qqq.length - 1];
@@ -92,35 +135,21 @@ export async function liveQqqEquivSpot(): Promise<number> {
 
 /**
  * Detection bars for a session, in QQQ price terms.
- *  US   — Altaris /api/candles (15-min, same source as the chart the user watches; includes delta per bar).
- *  Asia — NQ=F OHLC from Yahoo converted to QQQ-equiv via smoothed ratio (Altaris doesn't serve futures).
+ *  US   — QQQ 1-min OHLC from Yahoo.
+ *  Asia — NQ=F OHLC from Yahoo converted to QQQ-equiv via smoothed ratio.
  */
 export async function fetchSessionBars(session: SessionDef, date?: string): Promise<Bar[]> {
   if (session.source === "QQQ") {
-    const resp = await fetchCandles(1).catch(() => null);
-    const bars = (resp?.candles ?? [])
-      .filter((c) => {
-        // Guard against Altaris returning a rolling 24h window that bleeds yesterday's bars.
-        if (date && !c.t.startsWith(date)) return false;
-        const m = /T(\d{2}):(\d{2})/.exec(c.t);
-        if (!m) return false;
-        return inWindow(Number(m[1]) * 60 + Number(m[2]), session.startMin, session.endMin);
-      })
-      .map((c) => ({ ts: c.t, open: c.o, high: c.h, low: c.l, close: c.c, volume: c.v, delta: c.d }));
-    if (bars.length) return bars;
-
-    // The Altaris candle feed can FREEZE on a prior day (seen live 2026-07-02: days=1..3 all ended
-    // at the July 1 close) — with zero bars for the session date, every level grades "untouched"
-    // and the day's calibration silently records nothing. Fall back to Yahoo QQQ 1-min bars so
-    // detection/calibration keep working (no per-bar delta, which detection doesn't need).
-    console.warn(`Altaris candles have no ${date ?? "today"} bars (feed last=${resp?.candles.at(-1)?.t ?? "unavailable"}) — falling back to Yahoo QQQ bars for detection`);
+    // Yahoo QQQ 1-min bars. This was the fallback under Altaris (whose candle feed intermittently
+    // froze on a prior day) and is now the only US bar source — Altaris was retired 2026-09-01.
+    // No per-bar order-flow delta, which detection doesn't use.
     const raw = await fetchRaw("QQQ", 14);
     return raw
       .filter((r) => (!date || etDate(r.date) === date) && inWindow(etMinutes(r.date), session.startMin, session.endMin))
       .map((r) => ({ ts: etIso(r.date), open: r.open, high: r.high, low: r.low, close: r.close, volume: r.volume }));
   }
 
-  // Asia: NQ→QQQ via Yahoo (Altaris doesn't serve futures bars).
+  // Asia: NQ→QQQ via Yahoo.
   const raw = await fetchRaw("NQ=F", 14);
   const inSession = raw.filter((r) => inWindow(etMinutes(r.date), session.startMin, session.endMin));
   const ratio = await nqToQqqRatio();

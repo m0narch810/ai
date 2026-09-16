@@ -62,6 +62,8 @@ export interface DashboardData {
   entropy_ratio?: number;
   /** Advisory day-quality verdict (calendar × flow × regime) — see src/dayGate.ts. */
   day_gate?: DayGate;
+  /** The day's frozen IV wall brackets (19Δ wings of the front expiry) — see src/ivWalls.ts. */
+  iv_walls?: Board["iv_walls"];
   levels: DashboardLevel[];
 }
 
@@ -79,7 +81,15 @@ type LevelOutcome = Pick<DashboardLevel, "outcome" | "touched" | "touchedAt" | "
 function outcomeFor(strike: number, side: Side, detected: DetectedLevel[]): LevelOutcome {
   const near = detected.filter((d) => d.side === side && Math.abs(d.strike - strike) <= MATCH_TOL_PTS);
   if (near.length === 0) return { outcome: "none", touched: false };
-  const best = near.reduce((a, b) => (OUTCOME_RANK[b.outcome] > OUTCOME_RANK[a.outcome] ? b : a));
+  // Closest strike wins; rank only breaks distance ties. The tolerance absorbs float/rounding
+  // drift — it must NOT let a neighbor's more-resolved outcome override the exact strike's own
+  // grade (2026-07-10: 724 held clean but wore a ~723.4 candidate's "broke"/0.64 overshoot).
+  const best = near.reduce((a, b) => {
+    const da = Math.abs(a.strike - strike), db = Math.abs(b.strike - strike);
+    if (db < da) return b;
+    if (db === da && OUTCOME_RANK[b.outcome] > OUTCOME_RANK[a.outcome]) return b;
+    return a;
+  });
   return { outcome: best.outcome, touched: best.touched, touchedAt: best.touchedAt, retestAt: best.retestAt, overshoot: best.overshoot, clean: best.clean };
 }
 
@@ -109,6 +119,7 @@ export function buildDashboard(board: Board, detected: DetectedLevel[], session?
     entropy_state: board.entropy_state,
     entropy_ratio: board.entropy_ratio,
     day_gate: board.day_gate,
+    iv_walls: board.iv_walls,
     levels: board.levels.map((l) => ({ ...l, ...outcomeFor(l.strike, l.side, detected) })),
   };
 }

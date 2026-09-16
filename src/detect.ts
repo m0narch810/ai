@@ -25,25 +25,34 @@ function maxRunFrom(bars: Bar[], from: number, strike: number, side: Side, hardS
 
 /** Graded outcome of ONE committed tape trade-call ("limit at entry, runs to target"). */
 export interface CallGrade {
-  /** no_fill = price never reached the entry (limit never filled — neutral, not a loss). */
-  status: "no_fill" | "win" | "stopped" | "open";
+  /** no_fill = price never traded through the entry (limit never filled — neutral, not a loss). */
+  status: "no_fill" | "win" | "stopped" | "flat_close" | "open";
   filledAt?: string;
   resolvedAt?: string;
   /** Max favorable excursion after the fill, % of entry — how far toward/through target it got. */
   mfe_pct?: number;
+  /** Realized P&L in QQQ points: +callTpPts win, -hardStopPts stopped, mark-at-close on flat_close. */
+  pnl_pts?: number;
 }
 
 /**
  * Grade the tape's committed trade-call exactly like a resting limit order, strictly sequential
  * (trading rule: within a bar the ADVERSE side resolves first — a bar that hits both stop and
- * target grades as a stop, never a retroactive win). Stop = hard_stop_pts beyond the entry.
+ * target grades as a stop, never a retroactive win).
+ * Execution spec is FIXED, independent of the AI's narrative target: TP = callTpPts beyond
+ * entry, stop = hardStopPts beyond entry. A fill requires price to trade THROUGH the limit
+ * (strictly beyond it) — with no queue data, a bare touch is assumed to not fill.
+ * `sessionOver` = the day's tradeable window is done: a filled-but-unresolved trade is marked
+ * flat at the last bar's close — the thesis (0DTE greeks) dies at the cash close, so the
+ * position does too; it is never carried into the overnight session.
  */
-export function gradeTradeCall(bars: Bar[], side: "long" | "short", entry: number, target: number): CallGrade {
-  const hardStop = config.hardStopPts;
+export function gradeTradeCall(bars: Bar[], side: "long" | "short", entry: number, sessionOver = false): CallGrade {
+  const stop = config.hardStopPts;
+  const tp = config.callTpPts;
   let fi = -1;
   for (let i = 0; i < bars.length; i++) {
     const b = bars[i]!;
-    if (side === "long" ? b.low <= entry : b.high >= entry) { fi = i; break; }
+    if (side === "long" ? b.low < entry : b.high > entry) { fi = i; break; }
   }
   if (fi === -1) return { status: "no_fill" };
   const filledAt = bars[fi]!.ts;
@@ -51,12 +60,15 @@ export function gradeTradeCall(bars: Bar[], side: "long" | "short", entry: numbe
   for (let i = fi; i < bars.length; i++) {
     const b = bars[i]!;
     const adverse = side === "long" ? entry - b.low : b.high - entry;
-    if (adverse >= hardStop) return { status: "stopped", filledAt, resolvedAt: b.ts, mfe_pct: pct4(mfe / entry) };
+    if (adverse >= stop) return { status: "stopped", filledAt, resolvedAt: b.ts, mfe_pct: pct4(mfe / entry), pnl_pts: -stop };
     const fav = side === "long" ? b.high - entry : entry - b.low;
     if (fav > mfe) mfe = fav;
-    if (side === "long" ? b.high >= target : b.low <= target) {
-      return { status: "win", filledAt, resolvedAt: b.ts, mfe_pct: pct4(mfe / entry) };
-    }
+    if (fav >= tp) return { status: "win", filledAt, resolvedAt: b.ts, mfe_pct: pct4(mfe / entry), pnl_pts: tp };
+  }
+  if (sessionOver) {
+    const last = bars[bars.length - 1]!;
+    const pnl = side === "long" ? last.close - entry : entry - last.close;
+    return { status: "flat_close", filledAt, resolvedAt: last.ts, mfe_pct: pct4(mfe / entry), pnl_pts: r2(pnl) };
   }
   return { status: "open", filledAt, mfe_pct: pct4(mfe / entry) };
 }
@@ -70,7 +82,10 @@ export function gradeTradeCall(bars: Bar[], side: "long" | "short", entry: numbe
  *  broke     : price overshot the level by HARD_STOP_PTS and never came back for a confirmed retest.
  *  retested  : price broke through (HARD_STOP_PTS), recovered, then touched the level again and
  *              reversed with the required swing — the level has reasserted itself. Not crossed out.
- *  reversed  : price rejected >= REVERSAL_SWING_PCT off the level before any hard stop.
+ *  reversed  : price rejected >= the booked bracket (CALL_TP_PTS) off the level before any
+ *              hard stop — the same bar the calls ledger banks, so "reversed" here means
+ *              "the resting trade would have paid". A sub-bracket reflex wick does NOT grade
+ *              as reversed (2026-07-19: hold quality replaced expansion size as the bar).
  *              `clean` = the overshoot beyond the level stayed within CLEAN_REVERSAL_PTS
  *              (a tight turn). A non-clean reversed held only after grinding past it.
  *  pending   : reached the level, still live — neither hard-stopped nor rejected yet (also set
@@ -84,7 +99,9 @@ export function gradeTradeCall(bars: Bar[], side: "long" | "short", entry: numbe
 export function detectLevel(bars: Bar[], strike: number): DetectedLevel {
   if (bars.length === 0) return { strike, side: "resistance", touched: false, outcome: "untouched" };
 
-  const swing = config.reversalSwingPct * strike;
+  // The reversal-confirmation swing IS the booked bracket — detector outcomes and the calls
+  // ledger agree on what "a reversal of some kind" means (fills callTpPts before the stop).
+  const swing = config.callTpPts;
   const hardStop = config.hardStopPts;      // points beyond the level = a break
   const cleanTol = config.cleanReversalPts; // points beyond the level still counted as clean
   const fillTol = config.fillTolPts;        // price must REACH the strike to be tested

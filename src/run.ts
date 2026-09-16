@@ -6,6 +6,7 @@ import { activeSession, config, isAiScoreTime, nowInSessionTz, RTH_MIN, type Ses
 import { captureTick, compactSnapshot, loadDayGreek, loadDaySnapshots } from "./capture.js";
 import { computeDayGate } from "./dayGate.js";
 import { detectMany, gradeTradeCall } from "./detect.js";
+import { ivWallsForDate } from "./ivWalls.js";
 import { fetchSessionBars, liveQqqEquivSpot, liveQqqSpot } from "./market.js";
 import { buildNarrative, narrativeJsonPath, writeNarrative } from "./narrative.js";
 import { deploySite, publish } from "./publish.js";
@@ -21,7 +22,13 @@ const LOOKBACK = 6;
 const LOCK_FILE = path.join(path.resolve("data", "scored"), ".scoring.lock");
 
 function isPidAlive(pid: number): boolean {
-  try { process.kill(pid, 0); return true; } catch { return false; }
+  try { process.kill(pid, 0); return true; }
+  catch (err) {
+    // EPERM = the process EXISTS but we can't signal it (e.g. the scheduled-task loop
+    // runs in an S4U session a manual npm run narrative/backfill can't open a handle to).
+    // Treating it as dead let a 5-min-old live lock be stolen mid-tick (seen 2026-07-10).
+    return (err as NodeJS.ErrnoException).code === "EPERM";
+  }
 }
 
 async function acquireLock(): Promise<boolean> {
@@ -54,6 +61,14 @@ async function acquireLock(): Promise<boolean> {
 }
 
 async function releaseLock() {
+  // Only delete a lock we still own — if another process reclaimed it (stale takeover),
+  // unlinking here would silently release THEIR lock and let a third scorer in.
+  try {
+    const existing = JSON.parse(await fs.readFile(LOCK_FILE, "utf8")) as { pid: number };
+    if (existing.pid !== process.pid) return;
+  } catch {
+    // unreadable/missing — fall through and best-effort unlink
+  }
   await fs.unlink(LOCK_FILE).catch(() => {});
 }
 
@@ -138,9 +153,20 @@ async function persist(date: string, board: Board, detected: unknown, bars?: Bar
   await fs.mkdir(config.paths.scored, { recursive: true });
   // Atomic write: `npm run publish` (and anything else) reads latest.json concurrently —
   // a plain writeFile can be read half-written and blow up its JSON.parse.
+  // Chronology guard: backfill re-scores MORNING ticks while the live loop runs — an older
+  // as_of must never clobber latest.json (it feeds the fast-tick baseline, off-RTH holds, and
+  // the next tick's prior-chain; seen live 2026-07-10 when a recovered 09:31 board overwrote
+  // the 10:23 live board mid-session). Day logs still get every board appended below.
   const latest = path.join(config.paths.scored, "latest.json");
-  await fs.writeFile(latest + ".tmp", JSON.stringify(board, null, 2), "utf8");
-  await fs.rename(latest + ".tmp", latest);
+  let isNewest = true;
+  try {
+    const cur = JSON.parse(await fs.readFile(latest, "utf8")) as { as_of?: string };
+    if (cur.as_of && String(cur.as_of) > String(board.as_of)) isNewest = false;
+  } catch { /* no latest.json yet */ }
+  if (isNewest) {
+    await fs.writeFile(latest + ".tmp", JSON.stringify(board, null, 2), "utf8");
+    await fs.rename(latest + ".tmp", latest);
+  }
   await fs.appendFile(path.join(config.paths.scored, `${date}.boards.jsonl`), JSON.stringify(board) + "\n", "utf8");
   await fs.appendFile(
     path.join(config.paths.scored, `${date}.calibration.jsonl`),
@@ -159,24 +185,45 @@ async function persist(date: string, board: Board, detected: unknown, bars?: Bar
 async function persistCalls(date: string, board: Board, bars?: Bar[]) {
   const callsFile = path.join(config.paths.scored, `${date}.calls.jsonl`);
   const t = board.tape?.trade;
-  if (t && board.scoring_method === "ai" && Number.isFinite(t.entry) && Number.isFinite(t.target)) {
-    // Append only DISTINCT calls (same side/entry/target repeated across ticks is one standing call).
-    let isNew = true;
-    try {
-      const lines = (await fs.readFile(callsFile, "utf8")).trim().split("\n").filter(Boolean);
-      const prev = lines.length ? (JSON.parse(lines[lines.length - 1]!) as { side: string; entry: number; target: number }) : null;
-      if (prev && prev.side === t.side && prev.entry === t.entry && prev.target === t.target) isNew = false;
-    } catch { /* first call of the day */ }
-    if (isNew) {
-      await fs.appendFile(callsFile, JSON.stringify({ as_of: board.as_of, side: t.side, entry: t.entry, target: t.target, why: t.why, spot: board.spot }) + "\n", "utf8");
+  if (t && board.scoring_method === "ai" && Number.isFinite(t.entry)) {
+    // ORDER-TICKET VALIDATION — a call enters the ledger only if it is a placeable resting limit.
+    // The old side/target coherence test is gone with the target itself (the bracket is derived
+    // from side + entry now, so it cannot be incoherent). What remains is the PASSIVE check: a
+    // long above the market is a marketable order = instant adverse fill, the opposite of "I'll
+    // be waiting there" (seen 2026-07-13 09:52). Live price = last bar close when available,
+    // because board.spot can be stale (frozen at prior close through 09:44 on 2026-07-13).
+    const ref = bars?.length ? bars[bars.length - 1]!.close : board.spot;
+    const passive = t.side === "long" ? t.entry <= ref - config.fillTolPts : t.entry >= ref + config.fillTolPts;
+    if (!passive) {
+      console.warn(`  calls ledger: REJECTED ${t.side} ${t.entry} (ref ${ref.toFixed(2)}): entry not passive vs market`);
+    } else {
+      // Append only DISTINCT calls (same side/entry repeated across ticks is one standing order).
+      let isNew = true;
+      try {
+        const lines = (await fs.readFile(callsFile, "utf8")).trim().split("\n").filter(Boolean);
+        const prev = lines.length ? (JSON.parse(lines[lines.length - 1]!) as { side: string; entry: number }) : null;
+        if (prev && prev.side === t.side && prev.entry === t.entry) isNew = false;
+      } catch { /* first call of the day */ }
+      if (isNew) {
+        const tp = t.side === "long" ? t.entry + config.callTpPts : t.entry - config.callTpPts;
+        const stop = t.side === "long" ? t.entry - config.hardStopPts : t.entry + config.hardStopPts;
+        await fs.appendFile(callsFile, JSON.stringify({ as_of: board.as_of, side: t.side, entry: t.entry, tp, stop, why: t.why, spot: board.spot }) + "\n", "utf8");
+      }
     }
   }
-  // Re-grade every call made today against the bars SINCE each call (no look-back fills).
+  // Re-grade every call made today against the RTH bars SINCE each call (no look-back fills).
+  // RTH ONLY: the calls are 0DTE-thesis trades — the order dies at the cash close, it is NOT a
+  // GTC order the overnight session can fill hours after the greeks expired (6 of the first 10
+  // graded losses were 20:00 ET Asia-bar fills). An off-RTH tick (Asia bars only) leaves the
+  // day's final grades untouched.
   if (!bars?.length) return;
+  const rthBars = bars.filter((b) => b.ts >= `${date}T09:30:00` && b.ts <= `${date}T16:00:00`);
+  if (!rthBars.length) return;
+  const sessionOver = rthBars[rthBars.length - 1]!.ts >= `${date}T15:55:00`;
   try {
     const calls = (await fs.readFile(callsFile, "utf8")).trim().split("\n").filter(Boolean)
-      .map((l) => JSON.parse(l) as { as_of: string; side: "long" | "short"; entry: number; target: number; why: string; spot: number });
-    const graded = calls.map((c) => ({ ...c, grade: gradeTradeCall(bars.filter((b) => b.ts >= c.as_of), c.side, c.entry, c.target) }));
+      .map((l) => JSON.parse(l) as { as_of: string; side: "long" | "short"; entry: number; why: string; spot: number });
+    const graded = calls.map((c) => ({ ...c, grade: gradeTradeCall(rthBars.filter((b) => b.ts >= c.as_of), c.side, c.entry, sessionOver) }));
     const gradedFile = path.join(config.paths.scored, `${date}.calls.graded.json`);
     await fs.writeFile(gradedFile + ".tmp", JSON.stringify(graded, null, 1), "utf8");
     await fs.rename(gradedFile + ".tmp", gradedFile);
@@ -241,6 +288,13 @@ async function scoreFromHistory(date: string, history: CaptureRecord[], session:
   ]);
   const dayContext = dayContextFromNarrative(narrative); // tilt scoring toward the pre-open call
 
+  // The day's frozen IV walls (19Δ wings of today's chain): computed once from the first usable
+  // US-session capture, then held for the session. Display layer + a nomination prior for the
+  // scorer — best-effort, never blocks a tick. Asia/off-US ticks only reuse an existing file
+  // (their chain is stale prior-close data, not a fresh next-session snapshot).
+  const ivWalls = await ivWallsForDate(date, cur, spot, session.name === "US", opts.persist !== false, history[history.length - 1]!.capturedAt)
+    .catch((err) => { console.warn("iv walls unavailable:", err instanceof Error ? err.message : err); return null; });
+
   // Stale-feed guard (US only — in Asia the Altaris chain is intentionally prior-close and we
   // already source spot from NQ). If the chain's spot has drifted far from the live market, the
   // whole greek layer (walls/GEX/charm/vanna) is frozen/corrupt; scoring it just publishes
@@ -264,7 +318,7 @@ async function scoreFromHistory(date: string, history: CaptureRecord[], session:
   let board: Board;
   if (isAiScoreTime()) {
     try {
-      board = await scoreBoard(history.slice(-LOOKBACK), prior, detected, session, spot, greek ?? undefined, dayContext, regime ?? undefined);
+      board = await scoreBoard(history.slice(-LOOKBACK), prior, detected, session, spot, greek ?? undefined, dayContext, regime ?? undefined, ivWalls);
     } catch (err) {
       console.warn("AI scoring failed, falling back to rule-based scorer:", err instanceof Error ? err.message : err);
       // Persist the full error so recurring fallbacks are diagnosable after the fact,
@@ -276,12 +330,22 @@ async function scoreFromHistory(date: string, history: CaptureRecord[], session:
   } else {
     board = await scoreBoardDeterministic(history.slice(-LOOKBACK), prior, detected, session, spot);
   }
+  if (ivWalls) board.iv_walls = ivWalls; // both paths (AI + rule) carry the day's frozen brackets
   // Advisory day gate (calendar × flow × regime): "should I rest limits at all today?"
   // Computed on every board (AI or rule) so the dashboard always carries a verdict.
   try {
     board.day_gate = computeDayGate(history[history.length - 1]!, spot, dayContext);
   } catch (err) {
     console.warn("day gate computation failed (board publishes without it):", err instanceof Error ? err.message : err);
+  }
+  // Grade the board's ACTUAL strikes, not just the pre-score candidates: a freshly-called
+  // level (HVN/sweep strike, not a named wall) was never in `detected` and inherited the
+  // outcome of whatever candidate sat within MATCH_TOL — seen live 2026-07-10: a fresh 724
+  // call was stamped "broke"/overshoot 0.64 by a ~723.4 candidate while 724 itself held.
+  if (bars.length) {
+    const graded = new Set(detected.map((d) => d.strike));
+    const fresh = board.levels.map((l) => l.strike).filter((s) => !graded.has(Math.round(s * 100) / 100));
+    if (fresh.length) detected.push(...detectMany(bars, fresh));
   }
   if (opts.persist !== false) await persist(date, board, detected, bars);
   printBoard(board, session, spot);
@@ -593,7 +657,7 @@ async function main() {
   const expr = `*/${config.scoreIntervalMin} * * * *`;
   console.log(`Scheduler armed: every ${config.scoreIntervalMin}m. AI score ${config.aiScoreStart}-${config.aiScoreEnd} (RTH); off-RTH = spot+reversal refresh. Pre-open narrative ${config.narrativeTime} ET (Mon-Fri). Windows US ${config.sessionStart}-${config.sessionEnd}, Asia ${config.asiaStart}-${config.asiaEnd} ${config.sessionTz}.`);
   let tickRunning = false;
-  cron.schedule(expr, async () => {
+  const runTick = async () => {
     if (!await stillOwner()) {
       console.warn(`[${new Date().toISOString()}] newer loop instance took over — this one (pid ${process.pid}) exits.`);
       process.exit(0);
@@ -612,7 +676,50 @@ async function main() {
     } finally {
       tickRunning = false;
     }
-  }, { timezone: config.sessionTz });
+  };
+  cron.schedule(expr, runTick, { timezone: config.sessionTz });
+
+  // Fire once immediately on startup instead of waiting for the next cron grid boundary
+  // (":00/:15/:30/:45") — a restart at e.g. 9:31 would otherwise sit on stale rule-based
+  // levels until 9:45. The cron above then takes over the interval from here.
+  await runTick();
+
+  // Fast-move override: the 15-min grid can leave a converging level with only one tick of
+  // lead time. This cheap spot-only poll (no capture, no AI) checks live spot against the
+  // last scored board every fastPollSec; a move past fastTickMovePct fires a full tick early
+  // instead of waiting for the next grid boundary. fastTickCooldownSec stops it from firing
+  // on every poll while price keeps trending through the threshold.
+  let lastFastTickAt = 0;
+  setInterval(async () => {
+    try {
+      if (!await stillOwner()) return; // main cron will exit this process on its next fire
+      if (tickRunning) return;
+      if (!isAiScoreTime()) return; // only matters while the AI pass is actually live
+      if (Date.now() - lastFastTickAt < config.fastTickCooldownSec * 1000) return;
+      const [lastBoard, live] = await Promise.all([loadLatestBoardAny(), liveQqqSpot()]);
+      if (!lastBoard || !Number.isFinite(lastBoard.spot)) return;
+      const drift = Math.abs(live - lastBoard.spot) / lastBoard.spot;
+      const moved = drift >= config.fastTickMovePct;
+      // Approach trigger: price converging on a called level (outside the window at score
+      // time, inside it now) re-scores immediately even under the gross-move threshold —
+      // 2026-07-10: 722.44 -> 724.04 was 0.22%, under the 0.25% gate, and the tick printed
+      // at a level the 15-min grid never got to re-look at. Convergence (not just proximity)
+      // keeps it from re-firing every poll while price sits at the strike: once re-scored,
+      // the new board's spot is inside the window and the trigger disarms itself.
+      const approached = (lastBoard.levels ?? []).find((l) =>
+        Math.abs(live - l.strike) <= config.fastTickApproachPts &&
+        Math.abs(lastBoard.spot - l.strike) > config.fastTickApproachPts);
+      if (!moved && !approached) return;
+      const reason = moved
+        ? `spot moved ${(drift * 100).toFixed(2)}% since last score (${lastBoard.spot} -> ${live.toFixed(2)})`
+        : `spot ${live.toFixed(2)} converging on called level ${approached!.strike} (within ${config.fastTickApproachPts} pts)`;
+      console.log(`[${new Date().toISOString()}] fast-tick: ${reason} — scoring early`);
+      lastFastTickAt = Date.now();
+      await runTick();
+    } catch (err) {
+      console.warn("fast-tick poll failed:", err instanceof Error ? err.message : err);
+    }
+  }, config.fastPollSec * 1000);
 
   // Pre-open narrative: once per weekday at config.narrativeTime ET (default 09:00), before RTH scoring.
   const [nh, nm] = config.narrativeTime.split(":").map(Number);
