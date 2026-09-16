@@ -25,7 +25,7 @@ function elevation(x, y, t) {
   return (n + 3.5) / 7;
 }
 
-export function initBackground(canvas, { cell = 14, levels = 9, lineWidth = 0.09, maxAlpha = 0.5 } = {}) {
+export function initBackground(canvas, { cell = 12, levels = 8, lineWidth = 0.085, maxAlpha = 0.26, spread = 0.72, speed = 0.7 } = {}) {
   if (!canvas) return null;
   const ctx = canvas.getContext("2d");
   if (!ctx) return null;
@@ -41,12 +41,27 @@ export function initBackground(canvas, { cell = 14, levels = 9, lineWidth = 0.09
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
 
-  function ink() {
-    return isDark() ? "236,237,243" : "15,16,22";
+  // Two tones, mixed by contour level: graphite in the valleys rising to the ice accent on the
+  // peaks — the same LIT / GRAPHITE language the data uses, so the field reads as part of the
+  // instrument instead of a white texture behind it.
+  function tones() {
+    return isDark()
+      ? { lo: [126, 128, 148], hi: [169, 205, 255] }
+      : { lo: [124, 126, 140], hi: [43, 102, 204] };
+  }
+  const mixed = [];
+  function buildTones() {
+    const { lo, hi } = tones();
+    mixed.length = 0;
+    for (let i = 0; i < levels; i++) {
+      const t = Math.pow(i / Math.max(1, levels - 1), 1.4);
+      mixed.push(lo.map((c, k) => Math.round(c + (hi[k] - c) * t)).join(","));
+    }
   }
 
-  function draw(t) {
-    const rgb = ink();
+  function draw(t0) {
+    const t = t0 * speed;
+    if (!mixed.length) buildTones();
     ctx.clearRect(0, 0, W, H);
     ctx.font = `${Math.round(cell * 0.78)}px "Geist Mono", ui-monospace, monospace`;
     ctx.textBaseline = "middle";
@@ -54,22 +69,24 @@ export function initBackground(canvas, { cell = 14, levels = 9, lineWidth = 0.09
     const rows = Math.ceil(H / cell);
     for (let gy = 0; gy <= rows; gy++) {
       for (let gx = 0; gx <= cols; gx++) {
-        const e = elevation(gx, gy, t);
+        const e = elevation(gx * spread, gy * spread, t);
         const band = e * levels;
         const f = band - Math.floor(band);
         const distToLine = Math.min(f, 1 - f);
         // Normalise by the local gradient so contour lines stay ~1 cell wide even where the
         // terrain is nearly flat — flat regions render as crisp lines instead of wide blobs.
-        const gxe = elevation(gx + 1, gy, t) - e;
-        const gye = elevation(gx, gy + 1, t) - e;
+        const gxe = elevation((gx + 1) * spread, gy * spread, t) - e;
+        const gye = elevation(gx * spread, (gy + 1) * spread, t) - e;
         const grad = Math.hypot(gxe, gye) * levels;
         const cells = distToLine / Math.max(grad, 0.02);
         if (cells > lineWidth * 10) continue;
         const level = Math.max(0, Math.min(LEVEL_GLYPHS.length - 1, Math.floor(band) % LEVEL_GLYPHS.length));
         const edge = 1 - cells / (lineWidth * 10);        // 1 at line centre, 0 at edge
-        const a = (0.3 + 0.7 * e) * edge * maxAlpha;
-        if (a < 0.015) continue;
-        ctx.fillStyle = `rgba(${rgb}, ${a.toFixed(3)})`;
+        // quieter toward the bottom of the viewport, where the ladders are
+        const vfade = 1 - (gy / rows) * 0.45;
+        const a = (0.3 + 0.7 * e) * edge * maxAlpha * vfade;
+        if (a < 0.012) continue;
+        ctx.fillStyle = `rgba(${mixed[level]}, ${a.toFixed(3)})`;
         ctx.fillText(LEVEL_GLYPHS[level], gx * cell, gy * cell);
       }
     }
@@ -94,5 +111,5 @@ export function initBackground(canvas, { cell = 14, levels = 9, lineWidth = 0.09
   window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => { resize(); if (reduced()) still(); }, 120); });
   document.addEventListener("visibilitychange", () => (document.hidden ? stop() : (reduced() ? still() : start())));
 
-  return { repaint: () => { if (reduced() || document.hidden) still(); } };
+  return { repaint: () => { buildTones(); if (reduced() || document.hidden) still(); } };
 }
