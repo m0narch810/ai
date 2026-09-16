@@ -1,20 +1,14 @@
-// The field behind the terminal: a subtle ASCII topographic map that drifts.
+// The field behind the terminal: a 3D topographic surface, drawn as ridge lines.
 //
-// A 2D fbm noise field, sampled once per character cell. Only the contour LINES are drawn —
-// no fill, no shading — and each contour cell is rendered with the box glyph that follows the
-// line's direction (─ │ ╱ ╲, chosen from the field gradient), so the lines read as continuous
-// curves rather than scattered marks. Every fourth contour is an index contour, a shade
-// heavier, the way a printed map does it. The result is a topo sheet in the same alphabet as
-// the data, quiet enough to sit under the panels.
+// A heightfield of fbm noise projected in perspective — far rows compress toward a horizon a
+// third of the way down the viewport, near rows spread across the bottom. Each depth row is a
+// ridge line drawn back-to-front and filled with the page colour, so nearer terrain hides
+// what is behind it (classic hidden-line wireframe). Every fifth ridge is an index ridge in the
+// accent, a shade heavier, dotted at its vertices with `·` so the surface keeps the alphabet
+// of the data. The terrain scrolls slowly toward the viewer.
 //
-// Cost: glyphs are pre-rendered once per (glyph, tone) to sprite canvases and blitted with
-// drawImage; ~6k cells at 12fps with ~35% drawn is a few thousand blits per frame, fine on a
-// laptop, and the cell size steps up on small screens. Reduced motion → one still frame;
-// hidden tab → paused.
-
-// contour glyphs by tangent direction: 0 = horizontal, then rising 45°, vertical, falling 45°
-const LINE = ["─", "╱", "│", "╲"];   // ─ ╱ │ ╲
-const GLYPHS = LINE;
+// Cost: ~40 rows × ~90 columns = a few thousand noise samples and forty paths per frame at
+// 12fps. Reduced motion → one still frame; hidden tab → paused.
 
 const reduced = () => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 const isDark = () => document.documentElement.dataset.theme !== "light";
@@ -56,54 +50,32 @@ function fbm(x, y) {
   return 0.55 * snoise(x, y) + 0.3 * snoise(x * 2.1 + 3.7, y * 2.1 - 1.3) + 0.15 * snoise(x * 4.3 - 2.2, y * 4.3 + 5.1);
 }
 
-/* ── field ───────────────────────────────────────────────────────────────── */
+/* ── surface ─────────────────────────────────────────────────────────────── */
 
 export function initBackground(canvas) {
   if (!canvas) return null;
   const ctx = canvas.getContext("2d", { alpha: true });
   if (!ctx) return null;
 
-  let CW = 11, CH = 15, FONT = 11;
-  let cols = 0, rows = 0, dpr = 1;
-  let sprites = {};          // `${glyph}|${tone}` → canvas
+  let dpr = 1, W = 0, H = 0;
+  let ROWS = 40, COLS = 90;
   let raf = 0, last = 0, t = 0;
-  let scan = -0.2;
 
-  function tones() {
+  function palette() {
     return isDark()
-      ? { ink: "rgba(236,237,243,", acc: "rgba(169,205,255," }
-      : { ink: "rgba(15,16,22,",    acc: "rgba(43,102,204," };
-  }
-
-  /** One sprite per glyph × tone at full alpha; alpha is applied at blit time. */
-  function buildSprites() {
-    sprites = {};
-    const tn = tones();
-    for (const [tone, rgb] of Object.entries(tn)) {
-      for (const g of GLYPHS) {
-        const c = document.createElement("canvas");
-        c.width = Math.ceil(CW * dpr); c.height = Math.ceil(CH * dpr);
-        const cx = c.getContext("2d");
-        cx.scale(dpr, dpr);
-        cx.font = `${FONT}px "Geist Mono", ui-monospace, monospace`;
-        cx.textBaseline = "middle"; cx.textAlign = "center";
-        cx.fillStyle = rgb + "1)";
-        cx.fillText(g, CW / 2, CH / 2);
-        sprites[`${g}|${tone}`] = c;
-      }
-    }
+      ? { bg: "#06060a", ink: "236,237,243", acc: "169,205,255" }
+      : { bg: "#f4f4f7", ink: "15,16,22",    acc: "43,102,204" };
   }
 
   function resize() {
     dpr = Math.min(2, window.devicePixelRatio || 1);
-    const w = window.innerWidth, h = window.innerHeight;
-    const small = w < 700;
-    CW = small ? 13 : 11; CH = small ? 18 : 15; FONT = small ? 12 : 11;
-    canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
-    canvas.style.width = `${w}px`; canvas.style.height = `${h}px`;
+    W = window.innerWidth; H = window.innerHeight;
+    canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
+    canvas.style.width = `${W}px`; canvas.style.height = `${H}px`;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    cols = Math.ceil(w / CW) + 1; rows = Math.ceil(h / CH) + 1;
-    buildSprites();
+    const small = W < 700;
+    ROWS = small ? 30 : 42;
+    COLS = small ? 56 : Math.min(120, Math.round(W / 12));
   }
 
   function frame(now) {
@@ -112,54 +84,72 @@ export function initBackground(canvas) {
     if (dt < 1 / 12) return;
     last = now;
     t += dt;
-    scan += dt * 0.045; if (scan > 1.25) scan = -0.25;
     draw();
   }
 
   function draw() {
-    const w = canvas.width / dpr, h = canvas.height / dpr;
-    ctx.clearRect(0, 0, w, h);
+    ctx.clearRect(0, 0, W, H);
+    const pal = palette();
     const dark = isDark();
-    const aMinor = dark ? 0.11 : 0.12, aIndex = dark ? 0.24 : 0.24;
-    const sx = 0.05, sy = 0.068;           // field scale in cells (lines ~8-14 cells apart)
-    const drift = t * 0.05;
-    const scanRow = scan * rows;
-    const BANDS = 10, HALF = 0.055;        // contour spacing and line thickness in field units
 
-    // Sample the field on a (cols+1)×(rows+1) lattice once, then read neighbours for the
-    // gradient — three samples per cell would be the same noise evaluated three times.
-    const W = cols + 2, H = rows + 2;
-    const f = new Float32Array(W * H);
-    for (let r = 0; r < H; r++) for (let c = 0; c < W; c++) {
-      f[r * W + c] = (fbm(c * sx + drift, r * sy - drift * 0.4) + 1) * 0.5;
-    }
+    const horizon = H * 0.30;                 // vanishing line
+    const amp = H * 0.16;                     // peak height at the front
+    const spread = 1.55;                      // how far the front row overhangs the viewport
+    const scroll = t * 0.22;                  // world units per second toward the viewer
+    const cx = W / 2;
 
-    for (let r = 0; r < rows; r++) {
-      const vfade = 1 - (r / rows) * 0.35;
-      const dScan = Math.abs(r - scanRow);
-      const lift = dScan < 4 ? ((4 - dScan) / 4) * 0.08 : 0;
-      const y = r * CH;
-      for (let c = 0; c < cols; c++) {
-        const i = (r + 1) * W + (c + 1);
-        const v = f[i];
-        const band = v * BANDS;
-        const k = Math.round(band);
-        if (Math.abs(band - k) > HALF) continue;            // not on a contour
-        // gradient → contour tangent (perpendicular) → one of four line glyphs
-        const gx = (f[i + 1] - f[i - 1]) * CH;               // scale by cell aspect so angles are in pixels
-        const gy = (f[i + W] - f[i - W]) * CW;
-        if (gx === 0 && gy === 0) continue;
-        let ang = Math.atan2(gy, gx) + Math.PI / 2;          // tangent
-        ang = ((ang % Math.PI) + Math.PI) % Math.PI;          // fold to [0, π)
-        const q = Math.round(ang / (Math.PI / 4)) % 4;        // 0 ─, 1 ╱ (rising), 2 │, 3 ╲
-        const g = LINE[q === 1 ? 3 : q === 3 ? 1 : q];        // screen y is down: swap the diagonals
-        const index = k % 4 === 0;
-        const a = Math.min(0.45, ((index ? aIndex : aMinor) + lift) * vfade);
-        ctx.globalAlpha = a;
-        ctx.drawImage(sprites[`${g}|${index ? "acc" : "ink"}`], c * CW, y, CW, CH);
+    ctx.lineJoin = "round";
+    ctx.lineWidth = 1;
+
+    for (let i = 0; i < ROWS; i++) {
+      const z = i / (ROWS - 1);                            // 0 far → 1 near
+      const p = Math.pow(z, 1.55);                         // perspective compression
+      const yBase = horizon + (H * 1.08 - horizon) * p;
+      const scale = 0.14 + 0.86 * p;                       // lateral scale with depth
+      const worldZ = (ROWS - 1 - i) * 0.16 + scroll;       // scroll: far → near
+      const index = ((ROWS - 1 - i) % 5) === 0;
+
+      // depth-faded alpha: near ridges are legible, far ones a whisper
+      const aLine = (dark ? 0.05 : 0.06) + (dark ? 0.20 : 0.18) * p;
+      const aIdx  = (dark ? 0.09 : 0.09) + (dark ? 0.30 : 0.26) * p;
+
+      ctx.beginPath();
+      let firstX = 0, lastX = 0;
+      const verts = [];
+      for (let j = 0; j <= COLS; j++) {
+        const u = j / COLS;
+        const x = cx + (u - 0.5) * W * spread * scale;
+        const e = fbm(u * 3.4 + 0.7, worldZ * 0.55);       // ≈ [-1, 1]
+        const y = yBase - (e * 0.5 + 0.5) * amp * scale - amp * 0.15 * scale;
+        if (j === 0) { ctx.moveTo(x, y); firstX = x; } else ctx.lineTo(x, y);
+        lastX = x;
+        verts.push(x, y);
+      }
+      // close down to the bottom so this ridge hides everything behind it
+      ctx.lineTo(lastX, H + 4);
+      ctx.lineTo(firstX, H + 4);
+      ctx.closePath();
+      ctx.fillStyle = pal.bg;
+      ctx.fill();
+
+      ctx.strokeStyle = index ? `rgba(${pal.acc},${aIdx.toFixed(3)})` : `rgba(${pal.ink},${aLine.toFixed(3)})`;
+      ctx.stroke();
+
+      // ASCII grain: a dot at every third vertex of an index ridge
+      if (index && p > 0.08) {
+        ctx.fillStyle = `rgba(${pal.acc},${Math.min(0.5, aIdx * 1.4).toFixed(3)})`;
+        for (let j = 0; j < verts.length; j += 6) {
+          ctx.fillRect(verts[j] - 0.5, verts[j + 1] - 0.5, 1.2, 1.2);
+        }
       }
     }
-    ctx.globalAlpha = 1;
+
+    // fade the top of the surface into the field so the horizon has no hard edge
+    const g = ctx.createLinearGradient(0, horizon - 40, 0, horizon + H * 0.22);
+    g.addColorStop(0, pal.bg);
+    g.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, horizon + H * 0.22);
   }
 
   function start() { if (!raf && !reduced()) { last = performance.now(); raf = requestAnimationFrame(frame); } }
@@ -173,5 +163,5 @@ export function initBackground(canvas) {
   window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => { resize(); if (reduced()) still(); }, 140); });
   document.addEventListener("visibilitychange", () => (document.hidden ? stop() : (reduced() ? still() : start())));
 
-  return { repaint: () => { buildSprites(); if (reduced() || document.hidden) still(); } };
+  return { repaint: () => { if (reduced() || document.hidden) still(); } };
 }
