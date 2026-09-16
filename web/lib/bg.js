@@ -118,14 +118,14 @@ export function initBackground(canvas) {
     const w = canvas.width / dpr, h = canvas.height / dpr;
     ctx.clearRect(0, 0, w, h);
     const dark = isDark();
-    const baseInk = dark ? 0.07 : 0.09, baseAcc = dark ? 0.14 : 0.16;
+    const baseInk = dark ? 0.18 : 0.16, baseAcc = dark ? 0.34 : 0.30;
     const sx = 0.055, sy = 0.075;          // field scale in cells
     const drift = t * 0.06;
     const scanRow = scan * rows;
 
     for (let r = 0; r < rows; r++) {
       // calmer toward the bottom of the viewport where the ladders live
-      const vfade = 1 - (r / rows) * 0.55;
+      const vfade = 1 - (r / rows) * 0.3;
       const dScan = Math.abs(r - scanRow);
       const lift = dScan < 3 ? (3 - dScan) / 3 : 0;
       const y = r * CH;
@@ -135,7 +135,7 @@ export function initBackground(canvas) {
         const band = v * 7;
         const f = band - Math.floor(band);
         let g = null, tone = "ink", a = 0;
-        if (f < 0.07 || f > 0.93) {                                     // contour line
+        if (f < 0.08 || f > 0.92) {                                     // contour line
           g = CONTOUR; tone = "acc"; a = baseAcc * (0.7 + 0.3 * v);
         } else if (v > 0.6) {                                           // high ground
           const k = Math.min(RAMP.length - 1, Math.floor(((v - 0.6) / 0.4) * RAMP.length));
@@ -144,7 +144,7 @@ export function initBackground(canvas) {
           g = RAMP[0]; tone = "ink"; a = baseInk * 0.5;
         }
         if (!g) continue;
-        a = Math.min(0.42, (a + lift * 0.12) * vfade);
+        a = Math.min(0.7, (a + lift * 0.2) * vfade);
         ctx.globalAlpha = a;
         ctx.drawImage(sprites[`${g}|${tone}`], c * CW, y, CW, CH);
       }

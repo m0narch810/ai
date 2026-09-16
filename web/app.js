@@ -365,7 +365,7 @@ function bootLog(text, done = false) {
   });
   log.classList.add("on");
 }
-function bootLogClose(delay = 1800) {
+function bootLogClose(delay = 4200) {
   setTimeout(() => $("#bootlog")?.classList.remove("on"), delay);
 }
 
