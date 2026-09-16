@@ -1,149 +1,167 @@
-// The field behind the terminal: a slow, monochrome flow of noise on a WebGL canvas.
+// The field behind the terminal: an ASCII contour map that drifts.
 //
-// One fragment shader, rendered at quarter resolution and scaled up (it is soft by design,
-// so the upscale is invisible and the GPU cost is trivial). A tinted band drifts through
-// a near-black field; the ice accent only ever appears as the faintest lift in the brightest
-// fold. Reduced-motion viewers get a single still frame; hidden tabs stop the loop.
+// A 2D fbm noise field, sampled once per character cell, drawn as glyphs: cells that sit on
+// a contour boundary get a `+`, the high ground between contours gets a density ramp of dots
+// and blocks, and everything else stays blank. A slow vertical scan band lifts whatever it
+// passes over. The result reads as a topographic map printed in the same alphabet as the data,
+// and it moves at a pace that never competes with a number changing.
 //
-// Fallback when WebGL is unavailable: a static two-stop gradient, so the page never looks
-// broken on a locked-down browser.
+// Cost: glyphs are pre-rendered once per (glyph, tone) to sprite canvases and blitted with
+// drawImage; ~6k cells at 12fps with ~35% drawn is a few thousand blits per frame, fine on a
+// laptop, and the cell size steps up on small screens. Reduced motion → one still frame;
+// hidden tab → paused.
 
-const VERT = `attribute vec2 p; void main(){ gl_Position = vec4(p, 0.0, 1.0); }`;
-
-const FRAG = `
-precision mediump float;
-uniform vec2  uRes;
-uniform float uT;
-uniform float uDark;
-
-// 2D simplex noise (Ashima / Ian McEwan), compact form.
-vec3 mod289(vec3 x){ return x - floor(x * (1.0/289.0)) * 289.0; }
-vec2 mod289(vec2 x){ return x - floor(x * (1.0/289.0)) * 289.0; }
-vec3 permute(vec3 x){ return mod289(((x*34.0)+1.0)*x); }
-float snoise(vec2 v){
-  const vec4 C = vec4(0.211324865405187, 0.366025403784439, -0.577350269189626, 0.024390243902439);
-  vec2 i = floor(v + dot(v, C.yy));
-  vec2 x0 = v - i + dot(i, C.xx);
-  vec2 i1 = (x0.x > x0.y) ? vec2(1.0, 0.0) : vec2(0.0, 1.0);
-  vec4 x12 = x0.xyxy + C.xxzz; x12.xy -= i1;
-  i = mod289(i);
-  vec3 p = permute(permute(i.y + vec3(0.0, i1.y, 1.0)) + i.x + vec3(0.0, i1.x, 1.0));
-  vec3 m = max(0.5 - vec3(dot(x0,x0), dot(x12.xy,x12.xy), dot(x12.zw,x12.zw)), 0.0);
-  m = m*m; m = m*m;
-  vec3 x = 2.0 * fract(p * C.www) - 1.0;
-  vec3 h = abs(x) - 0.5;
-  vec3 ox = floor(x + 0.5);
-  vec3 a0 = x - ox;
-  m *= 1.79284291400159 - 0.85373472095314 * (a0*a0 + h*h);
-  vec3 g; g.x = a0.x * x0.x + h.x * x0.y; g.yz = a0.yz * x12.xz + h.yz * x12.yw;
-  return 130.0 * dot(m, g);
-}
-float fbm(vec2 p){
-  float v = 0.0, a = 0.55;
-  for (int i = 0; i < 4; i++) { v += a * snoise(p); p = p * 2.03 + vec2(17.1, 9.7); a *= 0.5; }
-  return v;
-}
-void main(){
-  vec2 uv = gl_FragCoord.xy / uRes;
-  float ar = uRes.x / uRes.y;
-  vec2 q = vec2(uv.x * ar, uv.y);
-  float t = uT * 0.045;
-  // two slow layers moving against each other = the "flow"
-  float n1 = fbm(q * 1.15 + vec2(t * 0.35, -t * 0.22));
-  float n2 = fbm(q * 0.7  - vec2(t * 0.18,  t * 0.27) + n1 * 0.35);
-  float n = n1 * 0.6 + n2 * 0.4;               // ~[-1, 1]
-  float lift = smoothstep(0.05, 0.85, n);      // only the brighter folds lift
-  // vertical bias: brighter toward the top where the hero sits, fading down the page
-  float vb = smoothstep(0.0, 1.0, uv.y) * 0.65 + 0.35;
-
-  vec3 dark0 = vec3(0.019, 0.019, 0.027);
-  vec3 dark1 = vec3(0.075, 0.082, 0.115);      // ice-tinted fold
-  vec3 light0 = vec3(0.960, 0.960, 0.972);
-  vec3 light1 = vec3(0.880, 0.905, 0.955);
-
-  vec3 cD = mix(dark0, dark1, lift * vb);
-  vec3 cL = mix(light0, light1, lift * vb * 0.9);
-  vec3 c = mix(cL, cD, uDark);
-  // very light grain so the gradient never bands
-  float g = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453) - 0.5;
-  c += g * 0.012;
-  gl_FragColor = vec4(c, 1.0);
-}`;
+const RAMP = ["·", "∙", ":", "░", "▒", "▓"];   // · ∙ : ░ ▒ ▓
+const CONTOUR = "+";
 
 const reduced = () => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 const isDark = () => document.documentElement.dataset.theme !== "light";
 
+/* ── noise (2D simplex, Ashima) ──────────────────────────────────────────── */
+const perm = new Uint8Array(512);
+{
+  const p = new Uint8Array(256);
+  for (let i = 0; i < 256; i++) p[i] = i;
+  let seed = 1337;
+  for (let i = 255; i > 0; i--) {
+    seed = (seed * 16807) % 2147483647;
+    const j = seed % (i + 1);
+    [p[i], p[j]] = [p[j], p[i]];
+  }
+  for (let i = 0; i < 512; i++) perm[i] = p[i & 255];
+}
+const G = [[1, 1], [-1, 1], [1, -1], [-1, -1], [1, 0], [-1, 0], [0, 1], [0, -1]];
+function snoise(x, y) {
+  const F2 = 0.3660254037844386, G2 = 0.21132486540518713;
+  const s = (x + y) * F2;
+  const i = Math.floor(x + s), j = Math.floor(y + s);
+  const t = (i + j) * G2;
+  const x0 = x - (i - t), y0 = y - (j - t);
+  const i1 = x0 > y0 ? 1 : 0, j1 = x0 > y0 ? 0 : 1;
+  const x1 = x0 - i1 + G2, y1 = y0 - j1 + G2;
+  const x2 = x0 - 1 + 2 * G2, y2 = y0 - 1 + 2 * G2;
+  const ii = i & 255, jj = j & 255;
+  let n = 0;
+  let t0 = 0.5 - x0 * x0 - y0 * y0;
+  if (t0 > 0) { const g = G[perm[ii + perm[jj]] & 7]; t0 *= t0; n += t0 * t0 * (g[0] * x0 + g[1] * y0); }
+  let t1 = 0.5 - x1 * x1 - y1 * y1;
+  if (t1 > 0) { const g = G[perm[ii + i1 + perm[jj + j1]] & 7]; t1 *= t1; n += t1 * t1 * (g[0] * x1 + g[1] * y1); }
+  let t2 = 0.5 - x2 * x2 - y2 * y2;
+  if (t2 > 0) { const g = G[perm[ii + 1 + perm[jj + 1]] & 7]; t2 *= t2; n += t2 * t2 * (g[0] * x2 + g[1] * y2); }
+  return 70 * n;
+}
+function fbm(x, y) {
+  return 0.55 * snoise(x, y) + 0.3 * snoise(x * 2.1 + 3.7, y * 2.1 - 1.3) + 0.15 * snoise(x * 4.3 - 2.2, y * 4.3 + 5.1);
+}
+
+/* ── field ───────────────────────────────────────────────────────────────── */
+
 export function initBackground(canvas) {
   if (!canvas) return null;
-  const gl = canvas.getContext("webgl", { antialias: false, depth: false, stencil: false, alpha: false, powerPreference: "low-power" });
-  if (!gl) return fallback(canvas);
+  const ctx = canvas.getContext("2d", { alpha: true });
+  if (!ctx) return null;
 
-  const prog = gl.createProgram();
-  for (const [type, src] of [[gl.VERTEX_SHADER, VERT], [gl.FRAGMENT_SHADER, FRAG]]) {
-    const sh = gl.createShader(type);
-    gl.shaderSource(sh, src);
-    gl.compileShader(sh);
-    if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) { console.warn("[bg]", gl.getShaderInfoLog(sh)); return fallback(canvas); }
-    gl.attachShader(prog, sh);
+  let CW = 11, CH = 15, FONT = 11;
+  let cols = 0, rows = 0, dpr = 1;
+  let sprites = {};          // `${glyph}|${tone}` → canvas
+  let raf = 0, last = 0, t = 0;
+  let scan = -0.2;
+
+  function tones() {
+    return isDark()
+      ? { ink: "rgba(236,237,243,", acc: "rgba(169,205,255," }
+      : { ink: "rgba(15,16,22,",    acc: "rgba(43,102,204," };
   }
-  gl.linkProgram(prog);
-  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) return fallback(canvas);
-  gl.useProgram(prog);
 
-  const buf = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
-  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
-  const loc = gl.getAttribLocation(prog, "p");
-  gl.enableVertexAttribArray(loc);
-  gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
-
-  const uRes = gl.getUniformLocation(prog, "uRes");
-  const uT = gl.getUniformLocation(prog, "uT");
-  const uDark = gl.getUniformLocation(prog, "uDark");
-
-  const SCALE = 0.28;                          // render at ~¼ res; it is soft noise
-  let raf = 0, t0 = performance.now();
+  /** One sprite per glyph × tone at full alpha; alpha is applied at blit time. */
+  function buildSprites() {
+    sprites = {};
+    const tn = tones();
+    for (const [tone, rgb] of Object.entries(tn)) {
+      for (const g of [...RAMP, CONTOUR]) {
+        const c = document.createElement("canvas");
+        c.width = Math.ceil(CW * dpr); c.height = Math.ceil(CH * dpr);
+        const cx = c.getContext("2d");
+        cx.scale(dpr, dpr);
+        cx.font = `${FONT}px "Geist Mono", ui-monospace, monospace`;
+        cx.textBaseline = "middle"; cx.textAlign = "center";
+        cx.fillStyle = rgb + "1)";
+        cx.fillText(g, CW / 2, CH / 2);
+        sprites[`${g}|${tone}`] = c;
+      }
+    }
+  }
 
   function resize() {
-    const w = Math.max(2, Math.round(window.innerWidth * SCALE));
-    const h = Math.max(2, Math.round(window.innerHeight * SCALE));
-    if (canvas.width !== w || canvas.height !== h) {
-      canvas.width = w; canvas.height = h;
-      gl.viewport(0, 0, w, h);
+    dpr = Math.min(2, window.devicePixelRatio || 1);
+    const w = window.innerWidth, h = window.innerHeight;
+    const small = w < 700;
+    CW = small ? 13 : 11; CH = small ? 18 : 15; FONT = small ? 12 : 11;
+    canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
+    canvas.style.width = `${w}px`; canvas.style.height = `${h}px`;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    cols = Math.ceil(w / CW) + 1; rows = Math.ceil(h / CH) + 1;
+    buildSprites();
+  }
+
+  function frame(now) {
+    raf = requestAnimationFrame(frame);
+    const dt = Math.min(0.2, (now - last) / 1000);
+    if (dt < 1 / 12) return;
+    last = now;
+    t += dt;
+    scan += dt * 0.045; if (scan > 1.25) scan = -0.25;
+    draw();
+  }
+
+  function draw() {
+    const w = canvas.width / dpr, h = canvas.height / dpr;
+    ctx.clearRect(0, 0, w, h);
+    const dark = isDark();
+    const baseInk = dark ? 0.07 : 0.09, baseAcc = dark ? 0.14 : 0.16;
+    const sx = 0.055, sy = 0.075;          // field scale in cells
+    const drift = t * 0.06;
+    const scanRow = scan * rows;
+
+    for (let r = 0; r < rows; r++) {
+      // calmer toward the bottom of the viewport where the ladders live
+      const vfade = 1 - (r / rows) * 0.55;
+      const dScan = Math.abs(r - scanRow);
+      const lift = dScan < 3 ? (3 - dScan) / 3 : 0;
+      const y = r * CH;
+      for (let c = 0; c < cols; c++) {
+        const n = fbm(c * sx + drift, r * sy - drift * 0.45);          // ≈ [-1, 1]
+        const v = (n + 1) * 0.5;
+        const band = v * 7;
+        const f = band - Math.floor(band);
+        let g = null, tone = "ink", a = 0;
+        if (f < 0.07 || f > 0.93) {                                     // contour line
+          g = CONTOUR; tone = "acc"; a = baseAcc * (0.7 + 0.3 * v);
+        } else if (v > 0.6) {                                           // high ground
+          const k = Math.min(RAMP.length - 1, Math.floor(((v - 0.6) / 0.4) * RAMP.length));
+          g = RAMP[k]; tone = "ink"; a = baseInk * (0.5 + 0.5 * ((v - 0.6) / 0.4));
+        } else if (v < 0.22 && ((c * 7 + r * 13) % 5 === 0)) {          // sparse valley dots
+          g = RAMP[0]; tone = "ink"; a = baseInk * 0.5;
+        }
+        if (!g) continue;
+        a = Math.min(0.42, (a + lift * 0.12) * vfade);
+        ctx.globalAlpha = a;
+        ctx.drawImage(sprites[`${g}|${tone}`], c * CW, y, CW, CH);
+      }
     }
-    canvas.style.width = `${window.innerWidth}px`;
-    canvas.style.height = `${window.innerHeight}px`;
+    ctx.globalAlpha = 1;
   }
-  function draw(now) {
-    gl.uniform2f(uRes, canvas.width, canvas.height);
-    gl.uniform1f(uT, (now - t0) / 1000);
-    gl.uniform1f(uDark, isDark() ? 1 : 0);
-    gl.drawArrays(gl.TRIANGLES, 0, 3);
-  }
-  function loop(now) {
-    raf = requestAnimationFrame(loop);
-    draw(now);
-  }
-  function start() { if (!raf && !reduced()) { raf = requestAnimationFrame(loop); } }
+
+  function start() { if (!raf && !reduced()) { last = performance.now(); raf = requestAnimationFrame(frame); } }
   function stop() { cancelAnimationFrame(raf); raf = 0; }
-  function still() { stop(); draw(performance.now()); }
+  function still() { stop(); draw(); }
 
   resize();
   reduced() ? still() : start();
 
   let rt;
-  window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => { resize(); if (reduced()) still(); }, 120); });
+  window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => { resize(); if (reduced()) still(); }, 140); });
   document.addEventListener("visibilitychange", () => (document.hidden ? stop() : (reduced() ? still() : start())));
 
-  return { repaint: () => { if (reduced() || document.hidden) still(); } };
-}
-
-function fallback(canvas) {
-  const paint = () => {
-    canvas.style.background = isDark()
-      ? "radial-gradient(ellipse 80% 55% at 50% 0%, #111119 0%, #050507 70%)"
-      : "radial-gradient(ellipse 80% 55% at 50% 0%, #e6ebf5 0%, #f5f5f8 70%)";
-  };
-  paint();
-  return { repaint: paint };
+  return { repaint: () => { buildSprites(); if (reduced() || document.hidden) still(); } };
 }

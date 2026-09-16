@@ -841,3 +841,88 @@ body { min-height: 100dvh; overflow-x: hidden; }
   .cur { animation: none; }
 }
 @media print { .bg-canvas, .bg-grid, .tabs, .top-right, .foot { display: none; } .pnl { break-inside: avoid; } .rail { position: static; } }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   MOTION LAYER (v3.1) — the small movements that keep the instrument feeling live.
+   Every one is short, physical, and tied to something real: a value changing, a
+   sync in flight, the pointer landing on a row. Nothing here loops except the
+   scan-march on the spot rail and the breath on the rail's lit edge.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/* boot log under the wordmark — real events, typed, then folded away */
+.bootlog {
+  margin: 6px 0 0; font: inherit; font-size: 9.5px; line-height: 1.5; letter-spacing: .1em;
+  color: var(--ink3); white-space: pre; text-transform: uppercase;
+  max-height: 0; overflow: hidden; opacity: 0;
+  transition: max-height .4s var(--ease), opacity .3s var(--ease), margin .3s var(--ease);
+}
+.bootlog.on { max-height: 80px; opacity: 1; }
+.bootlog b { color: var(--acc); font-weight: 400; }
+.bootlog i { color: var(--ink4); font-style: normal; }
+
+/* braille spinner while any endpoint is in flight */
+.spin { display: inline-block; width: 1ch; color: var(--acc); font-size: 11px; line-height: 1; }
+.spin:empty { display: none; }
+
+/* value flash — a cell whose number just changed */
+@keyframes flash {
+  0%   { color: var(--acc-2); text-shadow: 0 0 14px var(--acc-glow); }
+  100% { color: inherit; text-shadow: none; }
+}
+.flash { animation: flash 1.1s var(--ease) both; }
+@keyframes flashbg { 0% { background: var(--acc-dim); } 100% { background: transparent; } }
+.flash-row { animation: flashbg 1.2s var(--ease) both; }
+
+/* the spot rail marches; the rail's lit edge breathes */
+@keyframes march { to { stroke-dashoffset: -14; } }
+.sp-spot, .cc-spot { animation: march 1.6s linear infinite; }
+@keyframes breathe { 0%, 100% { opacity: .55 } 50% { opacity: 1 } }
+.rail::before { animation: breathe 3.8s ease-in-out infinite; }
+
+/* spark line draws on the first time it appears */
+@keyframes drawOn { from { stroke-dashoffset: 1 } to { stroke-dashoffset: 0 } }
+.rs-line.draw { stroke-dasharray: 1; stroke-dashoffset: 1; animation: drawOn 1.1s var(--ease) forwards; }
+
+/* tab underline slides in rather than snapping */
+.tab { border-bottom-color: transparent !important; }
+.tab::after {
+  content: ""; position: absolute; left: 12px; right: 16px; bottom: -1px; height: 1px;
+  background: var(--acc); box-shadow: 0 0 8px var(--acc-glow);
+  transform: scaleX(0); transform-origin: left; transition: transform .35s var(--snap);
+}
+.tab.on::after { transform: scaleX(1); }
+
+/* grid cells fade in per cell on first reveal */
+@keyframes cellIn { from { opacity: 0 } to { opacity: 1 } }
+.tmx-cell, .hs-cell { animation: cellIn .5s var(--ease) both; animation-delay: calc(var(--i, 0) * 2.5ms); }
+.views.no-reveal .tmx-cell, .views.no-reveal .hs-cell { animation: none; }
+
+/* the ruled paper drifts, slowly */
+@keyframes gridDrift { from { background-position: 0 0, 0 0 } to { background-position: 0 48px, 48px 0 } }
+.bg-grid { animation: gridDrift 90s linear infinite; }
+
+/* rows acknowledge the pointer: a lit left edge and a hair of lift */
+.ladder-row, .gbook-row, .anl-row, .omx-row, .dlevel, .conf-row, .xa-row, .anom-row, .emrow, .drift-row, .nzone, .ndrv-row {
+  transition: background .15s var(--ease), box-shadow .15s var(--ease);
+}
+.ladder-row:hover, .anl-row:hover, .omx-row:hover:not(.is-head), .dlevel:hover, .conf-row:hover, .xa-row:hover, .anom-row:hover, .emrow:hover, .drift-row:hover, .nzone:hover, .ndrv-row:hover {
+  background: var(--zebra); box-shadow: inset 2px 0 0 var(--acc-line);
+}
+
+/* panel corner ticks grow when the panel is hovered */
+.pnl { transition: border-color .25s var(--ease), background-size .25s var(--ease); }
+.pnl:hover { background-size: 14px 1px, 1px 14px, 14px 1px, 1px 14px, 14px 1px, 1px 14px, 14px 1px, 1px 14px; }
+
+/* meters fill from zero on first reveal */
+@keyframes fillIn { from { width: 0 } }
+.meter-fill, .lr-fill, .om-bar-fill, .dl-probbar, .xa-fill { animation: fillIn .9s var(--ease) both; animation-delay: calc(var(--i, 0) * 40ms); }
+.views.no-reveal .meter-fill, .views.no-reveal .lr-fill, .views.no-reveal .om-bar-fill, .views.no-reveal .dl-probbar, .views.no-reveal .xa-fill { animation: none; }
+
+/* stats step in */
+@keyframes stepIn { from { opacity: 0; transform: translateY(4px) } to { opacity: 1; transform: none } }
+.statgrid .stat { animation: stepIn .4s var(--ease) both; animation-delay: calc(var(--i, 0) * 40ms + 120ms); }
+.views.no-reveal .statgrid .stat { animation: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .sp-spot, .cc-spot, .rail::before, .bg-grid, .rs-line.draw { animation: none !important; }
+}

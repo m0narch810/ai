@@ -301,6 +301,25 @@ sleek futuristic Bloomberg terminal, ASCII designs throughout, not the ugly gree
   `IV Rich 3.2` / `IV Cheap 2.7`. `net_iv` and `flow` joined `CORE_EPS` for this.
 - Views still pass `jp:` to `panel()`; it is accepted and ignored.
 
+**v3.1 — "actually getting very very nice… just a bit bland, more animations, a background
+that matches the theme."** The motion layer, all in the `MOTION LAYER` block at the end of
+`styles.css` plus small hooks in `app.js`:
+- **Background** (`lib/bg.js`) is now an ASCII contour map: 2D fbm sampled per character cell,
+  contour boundaries drawn as `+` in the accent, high ground as a `·∙:░▒▓` density ramp, a slow
+  scan band lifting whatever it crosses; glyphs are pre-rendered sprites blitted with drawImage.
+  The WebGL shader is gone. The CSS grid behind it drifts 48px every 90s.
+- **Boot log** under the wordmark (`#bootlog`): real events (auth · snapshot · session · link
+  yyy) typed as they happen; the last line resolves on the `yyy:first` event (first live part
+  merged) and the log folds away. Braille spinner (`#spin`) while any endpoint is pending.
+- **Change flash** (`flashChanged` in app.js): a `.stat-val` / ladder price / greek-book net /
+  meter value / rail chip whose text differs from the previous paint of the same view gets
+  `.flash` (accent + glow, 1.1s). First paint of a view only records. Keyed by view + label.
+- First-reveal-only motions (all disabled under `.views.no-reveal`): spark draw-on (once ever),
+  matrix/heat cells fade in per cell (`--i` on each rect), meters/ladder fills grow from zero,
+  stat cells step in. Idle loops (only these): spot-rail dash march, rail-edge breathe, grid
+  drift, blinking cursor. Hover: rows get a lit left edge, panel corner ticks grow, tab
+  underline slides.
+
 
 **v2 (2026-09-16) — user verdict on v1 was "very very bland… same vibe, things just moved around".**
 Three changes, all in `web/`:

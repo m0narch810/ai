@@ -56,6 +56,8 @@ const S = {
   lastErr: null,
   painted: {},
   shownSpot: NaN,
+  sparkDrawn: false,
+  lastVals: new Map(),       // "view|key" → last rendered text, for the change flash
 };
 
 const currentSpot = () => (isNum(S.spot) ? S.spot : S.yyy.ok?.gex?.spot);
@@ -148,7 +150,10 @@ function paintRail() {
   chgEl.className = `rail-chg ${isNum(chg) ? (chg >= 0 ? "p" : "n") : ""}`;
   $("#railSrc").textContent = S.spotMeta ? `${S.spotMeta.source} · ${S.spotMeta.session}` : (isNum(S.yyy.ok?.gex?.spot) ? "yyy chain" : "");
 
-  if (bars?.length) spark($("#railSpark"), bars.slice(-78).map((b) => b.close));
+  if (bars?.length) {
+    spark($("#railSpark"), bars.slice(-78).map((b) => b.close), { draw: !S.sparkDrawn });
+    S.sparkDrawn = true;
+  }
 
   const gx = S.yyy.ok?.gex, em = S.yyy.ok?.expected_move, atr = S.yyy.ok?.atr, z = S.yyy.ok?.zero_dte;
   const chips = [];
@@ -204,11 +209,44 @@ function paintView() {
   }
   if (first) {
     Array.from(host.children).forEach((c, i) => c.style.setProperty("--i", String(i)));
+    host.querySelectorAll(".statgrid").forEach((g) => Array.from(g.children).forEach((c, i) => c.style.setProperty("--i", String(i))));
+    host.querySelectorAll(".meters, .ladder, .omx, .dlevels, .xa-list").forEach((g) => Array.from(g.children).forEach((c, i) => c.style.setProperty("--i", String(i))));
     decodeAll(host, 60);
     S.painted[S.view] = true;
   }
   paintRail();
+  flashChanged(host, first);   // after the rail, so the fresh chip nodes are the ones that flash
   paintStatus();
+}
+
+/**
+ * Bloomberg's one indispensable animation: a cell whose number just changed lights up. Keyed
+ * by view + the cell's label (or its position when there is none); the first paint of a view
+ * only records, it never flashes.
+ */
+function flashChanged(host, first) {
+  const seen = new Set();
+  const check = (node, key) => {
+    const k = `${S.view}|${key}`;
+    seen.add(k);
+    const now = node.textContent;
+    const was = S.lastVals.get(k);
+    S.lastVals.set(k, now);
+    if (!first && was !== undefined && was !== now) {
+      node.classList.add("flash");
+      node.addEventListener("animationend", () => node.classList.remove("flash"), { once: true });
+    }
+  };
+  host.querySelectorAll(".stat").forEach((s, i) => {
+    const v = s.querySelector(".stat-val");
+    if (v) check(v, `stat:${s.querySelector(".stat-lbl")?.textContent ?? i}`);
+  });
+  host.querySelectorAll(".ladder-row").forEach((r, i) => { const v = r.querySelector(".lr-price"); if (v) check(v, `lr:${r.querySelector(".lr-name")?.textContent ?? i}`); });
+  host.querySelectorAll(".gbook-row:not(.is-head)").forEach((r) => { const v = r.querySelector(".gb-net"); if (v) check(v, `gb:${r.querySelector(".gb-name")?.textContent ?? ""}`); });
+  host.querySelectorAll(".meter").forEach((m, i) => { const v = m.querySelector(".meter-val"); if (v) check(v, `m:${m.querySelector(".meter-lbl")?.textContent ?? i}`); });
+  document.querySelectorAll("#railChips .chip").forEach((c) => { const v = c.querySelector("b"); if (v) check(v, `chip:${c.firstChild?.textContent?.trim() ?? ""}`); });
+  // keys from panels that disappeared would flash spuriously if they came back — forget them
+  for (const k of [...S.lastVals.keys()]) if (k.startsWith(`${S.view}|`) && !seen.has(k)) S.lastVals.delete(k);
 }
 
 /* ── data ────────────────────────────────────────────────────────────────── */
@@ -220,6 +258,7 @@ function mergePart(part) {
   if (got.length) {
     S.yyy = { ok: { ...S.yyy.ok, ...part.ok }, err: { ...S.yyy.err }, at: Date.now() };
     for (const k of got) delete S.yyy.err[k];
+    if (!S.lastLive) document.dispatchEvent(new CustomEvent("yyy:first"));
     S.lastLive = Date.now();
     S.lastErr = null;
     clearTimeout(saveTimer);
@@ -287,11 +326,47 @@ async function copyLevels() {
   toast(`*${levels.length} levels* copied · paste into Batch Strikes`);
 }
 
-/* ── clock ───────────────────────────────────────────────────────────────── */
+/* ── clock + spinner ─────────────────────────────────────────────────────── */
+
+const SPIN = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏";
+let spinI = 0, spinTimer = 0;
 
 function tickClock() {
   $("#clock").textContent = etClock();
   paintStatus();
+}
+function tickSpin() {
+  const el_ = $("#spin");
+  if (!el_) return;
+  el_.textContent = S.pending.size ? SPIN[spinI++ % SPIN.length] : "";
+}
+
+/* ── boot log ────────────────────────────────────────────────────────────── */
+
+/**
+ * A short, honest boot transcript under the wordmark: the events that actually happen on a
+ * cold load, printed as they happen, then folded away. Reads as a terminal coming up because
+ * that is what it is.
+ */
+const bootLines = [];
+function bootLog(text, done = false) {
+  const log = $("#bootlog");
+  if (!log) return;
+  if (done && bootLines.length) bootLines[bootLines.length - 1] = text;
+  else bootLines.push(text);
+  log.replaceChildren();
+  bootLines.forEach((l, i) => {
+    const row = el("span", null);
+    const m = l.match(/^(.*?)(\s*\.{2,}\s*)(.*)$/);
+    if (m) row.append(m[1], el("i", { text: m[2] }), el("b", { text: m[3] }));
+    else row.append(l);
+    log.append(row);
+    if (i < bootLines.length - 1) log.append("\n");
+  });
+  log.classList.add("on");
+}
+function bootLogClose(delay = 1800) {
+  setTimeout(() => $("#bootlog")?.classList.remove("on"), delay);
 }
 
 /* ── boot ────────────────────────────────────────────────────────────────── */
@@ -306,14 +381,23 @@ function boot() {
   buildChrome();
   decode($("#wordmark"), 700);
 
+  bootLog(`auth ${api.getUser() || "operator"} ...... ok`);
   const snap = api.loadSnapshot();
   if (snap) { S.yyy = { ok: snap.ok, err: {}, at: snap.at }; S.snapAt = snap.at; }
+  bootLog(snap ? `snapshot ...... ${Object.keys(snap.ok).length} ep · ${agoText(snap.at)}` : "snapshot ...... cold");
+  bootLog(`session ....... ${isRth() ? "rth" : isUsSession() ? "us ext" : "off-hours"}`);
+  bootLog("link yyy ...... …");
+  // the last line resolves when the first live part lands
+  const unhook = () => { bootLog("link yyy ...... ok", true); bootLogClose(); document.removeEventListener("yyy:first", unhook); };
+  document.addEventListener("yyy:first", unhook);
+  setTimeout(() => { if (bootLines[bootLines.length - 1].endsWith("…")) { bootLog("link yyy ...... slow", true); bootLogClose(2600); } }, 9000);
 
   const saved = localStorage.getItem("view");
   setView(VIEW_BY_ID[saved] ? saved : "board");
 
   tickClock();
   setInterval(tickClock, 1000);
+  spinTimer = setInterval(tickSpin, 90);
 
   pullSpot();
   pullDesk();

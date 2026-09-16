@@ -238,7 +238,7 @@ export function termMatrix(host, o) {
         if (!isNum(v) || v === 0) return;
         const a = shape(v / scaleMax);
         root.append(svg("rect", {
-          class: `tmx-cell ${signClass(v)}`,
+          class: `tmx-cell ${signClass(v)}`, style: `--i:${i * cols.length + j}`,
           x: LBL + j * cw + 1, y: y + 1, width: cw - 2, height: ROW - 2,
           "fill-opacity": (0.06 + a * 0.88).toFixed(3),
         }));
@@ -297,7 +297,7 @@ export function matrix(host, o) {
         }
         const a = shape(v / scales[j]);
         root.append(svg("rect", {
-          class: `tmx-cell ${signClass(v)}`,
+          class: `tmx-cell ${signClass(v)}`, style: `--i:${i * cols.length + j}`,
           x: cx + 1, y: y + 1.5, width: cw - 2, height: ROW - 3,
           "fill-opacity": (0.05 + a * 0.85).toFixed(3),
         }));
@@ -659,7 +659,7 @@ export function stat(label, value, { sub, tone = "", jp } = {}) {
  * A lit line with a soft fill and a live dot at the last print. Sized by its host; used only
  * in the rail, where it replaces the old block-glyph sparkline.
  */
-export function spark(host, values) {
+export function spark(host, values, { draw = false } = {}) {
   const vals = (values || []).filter(isNum);
   if (!host || vals.length < 2) { if (host) host.replaceChildren(); return; }
   mount(host, ({ w }) => {
@@ -679,7 +679,8 @@ export function spark(host, values) {
     ]));
     root.append(svg("line", { class: "rs-base", x1: L, y1: T + ih, x2: L + iw, y2: T + ih }));
     root.append(svg("polygon", { class: "rs-fill", points: `${L},${T + ih} ${pts.join(" ")} ${L + iw},${T + ih}` }));
-    root.append(svg("polyline", { class: "rs-line", points: pts.join(" ") }));
+    // `pathLength` normalises the dash so the draw-on animation is one unit long regardless of width
+    root.append(svg("polyline", { class: `rs-line${draw ? " draw" : ""}`, points: pts.join(" "), pathLength: 1 }));
     root.append(svg("circle", { class: "rs-dot", cx: X(vals.length - 1), cy: Y(vals[vals.length - 1]), r: 2.6 }));
     // session high / low, pinned to the right edge so the line reads as a range at a glance
     root.append(svg("text", { class: "rs-hi", x: L + iw + 4, y: T + 3, text: hi.toFixed(2) }));
@@ -765,7 +766,8 @@ export function heatSurface(host, o) {
       c.iv.forEach((v, k) => {
         if (!isNum(v)) return;
         root.append(svg("rect", {
-          class: "hs-cell", x: L + k * cw, y: y + 1, width: Math.max(1, cw - 0.5), height: ROW - 2,
+          class: "hs-cell", style: `--i:${i * xs.length + k}`,
+          x: L + k * cw, y: y + 1, width: Math.max(1, cw - 0.5), height: ROW - 2,
           "fill-opacity": (0.04 + Math.pow((v - lo) / span, 1.3) * 0.9).toFixed(3),
         }));
       });
