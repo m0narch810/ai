@@ -253,7 +253,7 @@ body { min-height: 100dvh; overflow-x: hidden; }
 @keyframes scan { 0% { top: 0; opacity: 1 } 90% { opacity: 1 } 100% { top: 100%; opacity: 0 } }
 .pnl {
   position: relative;
-  background-color: color-mix(in srgb, var(--bg) 58%, transparent);
+  background-color: color-mix(in srgb, var(--bg) 72%, transparent);
   border: 1px solid var(--edge);
   animation: wipe .55s var(--snap) both;
   animation-delay: calc(var(--i, 0) * 70ms);
@@ -365,7 +365,7 @@ body { min-height: 100dvh; overflow-x: hidden; }
 
 /* ── STATS ───────────────────────────────────────────────────────────────── */
 .statgrid { display: grid; gap: 1px; grid-template-columns: repeat(auto-fit, minmax(122px, 1fr)); background: var(--edge); border: 1px solid var(--edge); }
-.stat { background: color-mix(in srgb, var(--bg-2) 55%, transparent); padding: 9px 11px 10px; display: flex; flex-direction: column; gap: 3px; }
+.stat { background: color-mix(in srgb, var(--bg-2) 70%, transparent); padding: 9px 11px 10px; display: flex; flex-direction: column; gap: 3px; }
 .stat-lbl { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; font-size: 8.5px; letter-spacing: .18em; color: var(--ink3); text-transform: uppercase; }
 .stat-lbl::before { content: "▸ "; color: var(--ink4); }
 .stat-jp { display: none; }

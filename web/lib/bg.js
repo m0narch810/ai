@@ -1,18 +1,20 @@
-// The field behind the terminal: an ASCII contour map that drifts.
+// The field behind the terminal: a subtle ASCII topographic map that drifts.
 //
-// A 2D fbm noise field, sampled once per character cell, drawn as glyphs: cells that sit on
-// a contour boundary get a `+`, the high ground between contours gets a density ramp of dots
-// and blocks, and everything else stays blank. A slow vertical scan band lifts whatever it
-// passes over. The result reads as a topographic map printed in the same alphabet as the data,
-// and it moves at a pace that never competes with a number changing.
+// A 2D fbm noise field, sampled once per character cell. Only the contour LINES are drawn —
+// no fill, no shading — and each contour cell is rendered with the box glyph that follows the
+// line's direction (─ │ ╱ ╲, chosen from the field gradient), so the lines read as continuous
+// curves rather than scattered marks. Every fourth contour is an index contour, a shade
+// heavier, the way a printed map does it. The result is a topo sheet in the same alphabet as
+// the data, quiet enough to sit under the panels.
 //
 // Cost: glyphs are pre-rendered once per (glyph, tone) to sprite canvases and blitted with
 // drawImage; ~6k cells at 12fps with ~35% drawn is a few thousand blits per frame, fine on a
 // laptop, and the cell size steps up on small screens. Reduced motion → one still frame;
 // hidden tab → paused.
 
-const RAMP = ["·", "∙", ":", "░", "▒", "▓"];   // · ∙ : ░ ▒ ▓
-const CONTOUR = "+";
+// contour glyphs by tangent direction: 0 = horizontal, then rising 45°, vertical, falling 45°
+const LINE = ["─", "╱", "│", "╲"];   // ─ ╱ │ ╲
+const GLYPHS = LINE;
 
 const reduced = () => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 const isDark = () => document.documentElement.dataset.theme !== "light";
@@ -78,7 +80,7 @@ export function initBackground(canvas) {
     sprites = {};
     const tn = tones();
     for (const [tone, rgb] of Object.entries(tn)) {
-      for (const g of [...RAMP, CONTOUR]) {
+      for (const g of GLYPHS) {
         const c = document.createElement("canvas");
         c.width = Math.ceil(CW * dpr); c.height = Math.ceil(CH * dpr);
         const cx = c.getContext("2d");
@@ -118,35 +120,43 @@ export function initBackground(canvas) {
     const w = canvas.width / dpr, h = canvas.height / dpr;
     ctx.clearRect(0, 0, w, h);
     const dark = isDark();
-    const baseInk = dark ? 0.18 : 0.16, baseAcc = dark ? 0.34 : 0.30;
-    const sx = 0.055, sy = 0.075;          // field scale in cells
-    const drift = t * 0.06;
+    const aMinor = dark ? 0.11 : 0.12, aIndex = dark ? 0.24 : 0.24;
+    const sx = 0.05, sy = 0.068;           // field scale in cells (lines ~8-14 cells apart)
+    const drift = t * 0.05;
     const scanRow = scan * rows;
+    const BANDS = 10, HALF = 0.055;        // contour spacing and line thickness in field units
+
+    // Sample the field on a (cols+1)×(rows+1) lattice once, then read neighbours for the
+    // gradient — three samples per cell would be the same noise evaluated three times.
+    const W = cols + 2, H = rows + 2;
+    const f = new Float32Array(W * H);
+    for (let r = 0; r < H; r++) for (let c = 0; c < W; c++) {
+      f[r * W + c] = (fbm(c * sx + drift, r * sy - drift * 0.4) + 1) * 0.5;
+    }
 
     for (let r = 0; r < rows; r++) {
-      // calmer toward the bottom of the viewport where the ladders live
-      const vfade = 1 - (r / rows) * 0.3;
+      const vfade = 1 - (r / rows) * 0.35;
       const dScan = Math.abs(r - scanRow);
-      const lift = dScan < 3 ? (3 - dScan) / 3 : 0;
+      const lift = dScan < 4 ? ((4 - dScan) / 4) * 0.08 : 0;
       const y = r * CH;
       for (let c = 0; c < cols; c++) {
-        const n = fbm(c * sx + drift, r * sy - drift * 0.45);          // ≈ [-1, 1]
-        const v = (n + 1) * 0.5;
-        const band = v * 7;
-        const f = band - Math.floor(band);
-        let g = null, tone = "ink", a = 0;
-        if (f < 0.08 || f > 0.92) {                                     // contour line
-          g = CONTOUR; tone = "acc"; a = baseAcc * (0.7 + 0.3 * v);
-        } else if (v > 0.6) {                                           // high ground
-          const k = Math.min(RAMP.length - 1, Math.floor(((v - 0.6) / 0.4) * RAMP.length));
-          g = RAMP[k]; tone = "ink"; a = baseInk * (0.5 + 0.5 * ((v - 0.6) / 0.4));
-        } else if (v < 0.22 && ((c * 7 + r * 13) % 5 === 0)) {          // sparse valley dots
-          g = RAMP[0]; tone = "ink"; a = baseInk * 0.5;
-        }
-        if (!g) continue;
-        a = Math.min(0.7, (a + lift * 0.2) * vfade);
+        const i = (r + 1) * W + (c + 1);
+        const v = f[i];
+        const band = v * BANDS;
+        const k = Math.round(band);
+        if (Math.abs(band - k) > HALF) continue;            // not on a contour
+        // gradient → contour tangent (perpendicular) → one of four line glyphs
+        const gx = (f[i + 1] - f[i - 1]) * CH;               // scale by cell aspect so angles are in pixels
+        const gy = (f[i + W] - f[i - W]) * CW;
+        if (gx === 0 && gy === 0) continue;
+        let ang = Math.atan2(gy, gx) + Math.PI / 2;          // tangent
+        ang = ((ang % Math.PI) + Math.PI) % Math.PI;          // fold to [0, π)
+        const q = Math.round(ang / (Math.PI / 4)) % 4;        // 0 ─, 1 ╱ (rising), 2 │, 3 ╲
+        const g = LINE[q === 1 ? 3 : q === 3 ? 1 : q];        // screen y is down: swap the diagonals
+        const index = k % 4 === 0;
+        const a = Math.min(0.45, ((index ? aIndex : aMinor) + lift) * vfade);
         ctx.globalAlpha = a;
-        ctx.drawImage(sprites[`${g}|${tone}`], c * CW, y, CW, CH);
+        ctx.drawImage(sprites[`${g}|${index ? "acc" : "ink"}`], c * CW, y, CW, CH);
       }
     }
     ctx.globalAlpha = 1;
