@@ -16,6 +16,11 @@ pdfs/
 # captured API samples (live account data)
 fixtures/
 
+# Local archive of raw captured options-flow data (43MB+ of JSONL). Same category as data/raw
+# and fixtures/ — live market captures stay on the box. snapshots/README.md IS tracked so the
+# directory's purpose is documented in the repo.
+snapshots/data/
+
 # local preview artifact
 _board_preview.png
 

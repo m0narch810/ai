@@ -4,304 +4,68 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#f4f4f2" />
-  <title>TORII · QQQ</title>
+  <title>TORII · QQQ OPTIONS FLOW</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Noto+Sans+JP:wght@500;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=24" />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
 
+<!-- the character field: one canvas, drawn in the same language as the data -->
 <canvas id="bg" class="bg-canvas" aria-hidden="true"></canvas>
 
 <main id="app">
 
-  <!-- ── HEADER ── -->
-  <div class="ruler" aria-hidden="true"></div>
-  <header class="topbar">
+  <header class="top">
     <div class="brand">
-      <span class="brand-mark">鳥居</span>
-      <span class="brand-en">TORII</span>
+      <span class="brand-mark" aria-hidden="true">鳥居</span>
+      <span class="brand-text">
+        <b>TORII</b>
+        <i>QQQ OPTIONS FLOW TERMINAL &middot; YYY</i>
+      </span>
     </div>
-    <div class="status">
-      <button id="themeToggle" class="theme-btn" type="button" aria-label="Toggle dark mode">☾</button>
-      <span class="clock" id="clock"></span>
-      <span class="status-sep"></span>
-      <span class="status-dot" id="statusDot"></span>
-      <span class="status-text" id="statusText">BOOT</span>
-      <span class="status-sep"></span>
-      <span class="next-score" id="nextScore" data-tip="Time until the next scheduled scoring tick">
-        <span class="ns-label" id="nsLabel">NEXT SCORE</span>
-        <span class="ns-time" id="nsTime">--:--</span>
+
+    <div class="top-right">
+      <span class="status">
+        <i class="dot" id="statusDot"></i>
+        <span id="statusText">BOOT</span>
+        <em id="statusAge"></em>
       </span>
-      <span class="status-sep"></span>
-      <span class="account-badge">
-        <span class="account-user" id="accountUser"></span>
-        <button class="signout-btn" id="signoutBtn" type="button" title="Sign out">⏻</button>
-      </span>
+      <span class="clock" id="clock">--:--:-- ET</span>
+      <button class="ibtn" id="themeToggle" type="button" aria-label="Toggle dark mode">☾</button>
+      <button class="ibtn" id="refresh" type="button" aria-label="Refresh" title="Refresh">↻</button>
+      <span class="who"><span id="accountUser"></span><button class="ibtn" id="signout" type="button" title="Sign out" aria-label="Sign out">⏻</button></span>
     </div>
   </header>
 
-  <!-- ── TABS ── -->
-  <nav class="tabs">
-    <button class="tab active" data-view="board" type="button">板 <span>BOARD</span></button>
-    <button class="tab" data-view="regime" type="button">局面 <span>REGIME</span></button>
-    <button class="tab" data-view="narrative" type="button">物語 <span>NARRATIVE</span></button>
-  </nav>
-
-  <!-- ════════════ BOARD VIEW ════════════ -->
-  <section id="viewBoard" class="view">
-
-    <div class="specbar" id="specbar">QQQ / MNQ — DEALER POSITIONING — LIMIT ORDERS AT LEVELS</div>
-
-    <div class="topgrid">
-      <section class="sec spot-sec">
-        <div class="sec-label"><span><i class="ix">01</i> SPOT</span><span class="jp">現値</span></div>
-        <div class="sec-body">
-          <div class="spot-line">
-            <span class="spotnum" id="heroSpot">—</span>
-            <span class="spotchg" id="heroChg"></span>
-          </div>
-          <span class="spotsrc" id="heroSrc"></span>
-          <div class="spark-panel">
-            <canvas id="sparkline" class="sparkline"></canvas>
-            <span class="spark-range" id="sparkRange"></span>
-          </div>
-        </div>
-      </section>
-
-      <section class="sec metrics-sec">
-        <div class="sec-label"><span><i class="ix">02</i> FLOW</span><span class="jp">需給</span></div>
-        <div class="sec-body metrics" id="metricsRow"></div>
-      </section>
+  <!-- always-visible price + context strip; every tab reads against this -->
+  <section class="rail" aria-label="Spot">
+    <div class="rail-price">
+      <span class="rail-spot" id="railSpot">—</span>
+      <span class="rail-chg" id="railChg"></span>
+      <span class="rail-src" id="railSrc"></span>
     </div>
-
-    <section class="sec read-sec" id="readWrap" hidden>
-      <div class="sec-label"><span><i class="ix">03</i> READ</span><span class="jp">読み</span></div>
-      <div class="sec-body"><p id="heroRead"></p></div>
-    </section>
-
-    <!-- TAPE — the desk's continuous action narrative: committed direction, expected path, THE trade -->
-    <section class="sec tape-sec" id="tapeWrap" hidden>
-      <div class="sec-label"><span><i class="ix">03A</i> TAPE</span><span class="jp">実況</span></div>
-      <div class="sec-body">
-        <div class="tape-head">
-          <span class="tape-dir" id="tapeDir">—</span>
-          <span class="tape-now" id="tapeNow"></span>
-        </div>
-        <p id="tapeNarrative"></p>
-        <div class="tape-path" id="tapePath"></div>
-        <div class="tape-trade" id="tapeTrade" hidden></div>
-      </div>
-    </section>
-
-    <div class="banner" id="banner" hidden></div>
-
-    <!-- DAY GATE — advisory "take levels today?" verdict (calendar × flow × regime) -->
-    <section class="sec day-gate" id="dayGate" hidden>
-      <div class="sec-label"><span><i class="ix">04</i> DAY GATE</span><span class="jp">日次判定</span></div>
-      <div class="sec-body">
-        <div class="dg-head">
-          <span class="dg-verdict" id="dgVerdict">—</span>
-          <span class="dg-score" id="dgScore"></span>
-          <span class="dg-note">advisory · calendar × flow × regime</span>
-        </div>
-        <ul class="dg-reasons" id="dgReasons"></ul>
-      </div>
-    </section>
-
-    <!-- TOPOGRAPHY — rotating 3D terrain of the dealer book (drag to rotate, hover to read) -->
-    <section class="sec topo-sec" id="topoSec" hidden>
-      <div class="sec-label">
-        <span><i class="ix">T</i> TOPOGRAPHY</span>
-        <span class="topo-tools"><span class="topo-readout" id="topoReadout"></span><span class="topo-chips" id="topoChips"></span><span class="jp">地形</span></span>
-      </div>
-      <div class="sec-body topo-body">
-        <canvas id="topoCanvas"></canvas>
-        <div class="topo-caption" id="topoCaption"></div>
-      </div>
-    </section>
-
-    <div class="charts-section" id="chartsSection">
-      <section class="sec chart-panel">
-        <div class="sec-label"><span><i class="ix">G</i> GEX PROFILE</span><span class="jp" id="gexChartSub">抵抗 / 支持</span></div>
-        <svg id="gexChart" class="chart-svg" viewBox="0 0 400 150" preserveAspectRatio="none"></svg>
-      </section>
-      <section class="sec chart-panel">
-        <div class="sec-label"><span><i class="ix">P</i> PRICE · VWAP</span><span class="jp" id="candleChartSub">5-MIN</span></div>
-        <svg id="candleChart" class="chart-svg" viewBox="0 0 400 150" preserveAspectRatio="none"></svg>
-      </section>
-    </div>
-
-    <section class="sec level-map-wrap" id="levelMapWrap" hidden>
-      <div class="sec-label"><span><i class="ix">M</i> MAP</span><span class="jp" id="levelMapLabel"></span></div>
-      <div class="sec-body"><svg id="levelMap" class="level-map"></svg></div>
-    </section>
-
-    <section class="sec coverage-wrap" id="coverageWrap" hidden>
-      <div class="sec-label"><span><i class="ix">C</i> EVERY STRIKE</span><span class="jp" id="coverageSub">全価格 · reversal score</span></div>
-      <div class="sec-body coverage" id="coverageGrid"></div>
-    </section>
-
-    <div class="ladder" id="ladderGrid" aria-label="Price levels">
-      <section class="sec lane res-lane">
-        <div class="sec-label">
-          <span><i class="ix tick-res">04</i> RESISTANCE</span>
-          <span class="jp">抵抗 <i class="lane-count" id="ceilCount"></i></span>
-        </div>
-        <div class="rungs" id="ceilings"></div>
-      </section>
-
-      <div class="spotrail" id="spotrail" hidden>
-        <span class="rail-line"></span>
-        <span class="rail-tag" id="railTag"></span>
-        <span class="rail-line"></span>
-      </div>
-
-      <section class="sec lane sup-lane">
-        <div class="sec-label">
-          <span><i class="ix tick-sup">05</i> SUPPORT</span>
-          <span class="jp">支持 <i class="lane-count" id="floorCount"></i></span>
-        </div>
-        <div class="rungs" id="floors"></div>
-      </section>
-    </div>
-
-    <div class="empty" id="empty" hidden></div>
+    <pre class="rail-spark" id="railSpark" aria-hidden="true"></pre>
+    <div class="rail-chips" id="railChips"></div>
   </section>
 
-  <!-- ════════════ REGIME VIEW ════════════ -->
-  <section id="viewRegime" class="view" hidden>
+  <nav class="tabs" id="tabs" aria-label="Sections"></nav>
 
-    <div class="specbar">MARKET REGIME — TOPOLOGY × GARCH × DEALER GAMMA — LIVE</div>
-
-    <section class="sec reg-hero">
-      <div class="sec-label"><span><i class="ix">00</i> STATE</span><span class="jp">局面</span></div>
-      <div class="sec-body" id="regHero">
-        <div class="narr-empty">Computing regime… refreshes every tick from the live tape.</div>
-      </div>
-    </section>
-
-    <section class="sec">
-      <div class="sec-label"><span><i class="ix">R1</i> READ</span><span class="jp">読み</span></div>
-      <div class="sec-body"><p id="regRead"></p></div>
-    </section>
-
-    <section class="sec">
-      <div class="sec-label"><span><i class="ix">R2</i> GAUGES</span><span class="jp">計器</span></div>
-      <div class="sec-body" id="regGauges"></div>
-    </section>
-
-    <section class="sec">
-      <div class="sec-label"><span><i class="ix">R3</i> MONITORS</span><span class="jp">監視</span></div>
-      <div class="sec-body">
-        <div class="viz-row">
-          <div class="viz-card viz-card--grow">
-            <div class="viz-lbl" style="align-self:flex-start;margin-bottom:8px">HURST OSCILLATOR</div>
-            <div class="viz-canvas-wrap">
-              <canvas id="hurstChart"></canvas>
-            </div>
-          </div>
-          <div class="viz-card">
-            <div class="viz-lbl" style="margin-bottom:8px">REGIME RADAR</div>
-            <div class="viz-canvas-wrap viz-canvas-sq">
-              <canvas id="radarChart"></canvas>
-            </div>
-          </div>
-        </div>
-        <div class="viz-card viz-wave-card">
-          <div class="viz-lbl" style="align-self:flex-start;margin-bottom:8px">IV SMILE · QQQ OPTIONS FLOW</div>
-          <div class="viz-canvas-wrap viz-canvas-wave">
-            <canvas id="ivSmileChart"></canvas>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <section class="sec">
-      <div class="sec-label"><span><i class="ix">R4</i> TOPOLOGY PIVOTS</span><span class="jp">転換点</span></div>
-      <div class="sec-body" id="regPivots"></div>
-    </section>
-
-  </section>
-
-  <!-- ════════════ NARRATIVE VIEW ════════════ -->
-  <section id="viewNarrative" class="view" hidden>
-
-    <div class="specbar" id="narrSpec">PRE-OPEN BRIEF — QQQ OPTIONS · ALTARIS · YAHOO FINANCE · FRED</div>
-
-    <!-- SIZE RULE — the gate, first thing visible -->
-    <div class="size-rule-banner" id="sizeRuleBanner" hidden>
-      <span class="srb-label">SIZE RULE</span>
-      <span class="srb-rule" id="sizeRuleVal">—</span>
-      <span class="srb-reason" id="sizeRuleReason"></span>
-    </div>
-
-    <div class="open-countdown" id="openCountdown">
-      <span class="oc-label">NEXT OPEN</span>
-      <span class="oc-kind" id="ocKind">—</span>
-      <span class="oc-time" id="ocTime">--:--:--</span>
-    </div>
-
-    <!-- VERDICT: 4-cell row — LEAN | ENTROPY | TOPOLOGY | OPEN TYPE -->
-    <section class="sec narr-hero">
-      <div class="sec-label"><span><i class="ix">00</i> VERDICT</span><span class="jp">予想</span></div>
-      <div class="sec-body" id="narrHero">
-        <div class="narr-empty">No narrative yet. It generates automatically before the open (≈09:00 ET), or run <code>npm run narrative</code>.</div>
-      </div>
-    </section>
-
-    <!-- GEX KEY LEVELS: call wall · put wall · vol trigger · max pain · exp move -->
-    <section class="sec" id="gexLevelsWrap" hidden>
-      <div class="sec-label"><span><i class="ix">G</i> KEY LEVELS</span><span class="jp">重要水準</span></div>
-      <div class="sec-body" id="gexLevelsBody"></div>
-    </section>
-
-    <section class="sec" id="liveMacroWrap" hidden>
-      <div class="sec-label"><span><i class="ix">M</i> LIVE MACRO</span><span class="jp">生マクロ</span></div>
-      <div class="sec-body" id="liveMacro"></div>
-    </section>
-
-    <div class="topgrid">
-      <section class="sec">
-        <div class="sec-label"><span><i class="ix">06</i> OPEN TYPE</span><span class="jp">寄り</span></div>
-        <div class="sec-body" id="narrOpen"></div>
-      </section>
-      <section class="sec">
-        <div class="sec-label"><span><i class="ix">08</i> REVERSAL ZONES</span><span class="jp">反転</span></div>
-        <div class="sec-body" id="narrZones"></div>
-      </section>
-    </div>
-
-  </section>
+  <div id="viewRoot" class="views"></div>
 
   <footer class="foot">
-    <div class="feeds-row">
-      <span class="feed-hdr">FEEDS</span>
-      <span class="feed-sep">·</span>
-      <span class="feed-item">SPOT <span class="feed-val" id="feedSpot">--</span></span>
-      <span class="feed-sep">·</span>
-      <span class="feed-item">BOARD <span class="feed-val" id="feedBoard">--</span></span>
-      <span class="feed-sep">·</span>
-      <span class="feed-item">CANDLES <span class="feed-val" id="feedCandles">--</span></span>
-      <span class="feed-sep">·</span>
-      <span class="feed-item">NARR <span class="feed-val" id="feedNarr">--</span></span>
-      <span class="feed-sep">·</span>
-      <span class="feed-item">REGIME <span class="feed-val" id="feedRegime">--</span></span>
-      <span class="feed-sep">·</span>
-      <span class="feed-item">MACRO <span class="feed-val" id="feedMacro">--</span></span>
-    </div>
-    <div class="foot-bar">
-      <span id="asOf"></span>
-      <button id="refresh" type="button" aria-label="Refresh">SYNC ↻</button>
-    </div>
+    <span>TORII</span>
+    <span class="foot-sep">│</span>
+    <span>live: YYY backend</span>
+    <span class="foot-sep">│</span>
+    <span>desk: local scorer (age-stamped)</span>
+    <span class="foot-sep">│</span>
+    <span>bars: Yahoo</span>
   </footer>
 
 </main>
 
-<div id="tip" class="tip" hidden></div>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js" integrity="sha384-NrKB+u6Ts6AtkIhwPixiKTzgSKNblyhlk0Sohlgar9UHUBzai/sgnNNWWd291xqt" crossorigin="anonymous"></script>
-<script src="topo.js?v=1"></script>
-<script src="app.js?v=41"></script>
+<script type="module" src="app.js"></script>
 </body>
 </html>

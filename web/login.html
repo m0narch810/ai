@@ -1,267 +1,193 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#f4f4f2" />
+<meta name="robots" content="noindex, nofollow" />
 <title>TORII · AUTH</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Noto+Sans+JP:wght@600&display=swap" rel="stylesheet" />
 <style>
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+/* Self-contained: the login must render before anything else is fetched, and it must not
+   depend on the app's stylesheet (which is versioned with the terminal, not with auth). */
 :root {
-  --bg:      #111210;
-  --surface: #17170f;
-  --border:  #2a2a22;
-  --border2: #3a3a2e;
-  --ink:     #f1f1ee;
-  --ink2:    #9b9a93;
-  --ink3:    #66655e;
-  --red:     #e60023;
-  --blue:    #1f5fd0;
-  --mono:    "JetBrains Mono", "Fira Mono", ui-monospace, monospace;
+  --bg:#f4f4f2; --panel:#fff; --ink:#0d0d0c; --ink2:#55554f; --ink3:#9a9a92;
+  --line:#e4e4e0; --line2:#cdcdc7; --red:#e0001e;
+  --mono:"JetBrains Mono",ui-monospace,monospace; --jp:"Noto Sans JP",var(--mono);
+  color-scheme: light;
 }
-html, body { height: 100%; }
-body {
-  background: var(--bg);
-  color: var(--ink);
-  font-family: var(--mono);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 100dvh;
-  overflow: hidden;
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg:#070707; --panel:#0c0c0c; --ink:#f1f1ef; --ink2:#9c9c95; --ink3:#63635d;
+    --line:#1c1c1a; --line2:#2c2c29; --red:#ff2233;
+    color-scheme: dark;
+  }
 }
-canvas#bg {
-  position: fixed; inset: 0; width: 100%; height: 100%;
-  pointer-events: none; z-index: 0;
+*,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
+html,body {
+  min-height:100dvh; background:var(--bg); color:var(--ink);
+  font-family:var(--mono); font-size:13px; -webkit-font-smoothing:antialiased;
+  font-variant-numeric:tabular-nums;
 }
+#bg { position:fixed; inset:0; z-index:0; pointer-events:none; }
+
 .shell {
-  position: relative; z-index: 1;
-  display: flex; flex-direction: column; align-items: center;
-  gap: 1.5rem;
-  width: min(400px, 94vw);
+  position:relative; z-index:1; min-height:100dvh;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:22px; padding:28px max(18px, env(safe-area-inset-left)) 40px;
 }
-.ident {
-  text-align: center;
-  display: flex; flex-direction: column; align-items: center; gap: .4rem;
-}
-.ident-kanji { font-size: 2.4rem; letter-spacing: .1em; color: var(--ink); line-height: 1; }
-.ident-en    { font-size: .62rem; letter-spacing: .35em; color: var(--ink2); text-transform: uppercase; }
-.ident-sub   { font-size: .58rem; letter-spacing: .2em; color: var(--red); text-transform: uppercase; margin-top: .1rem; }
 
-.card {
-  position: relative;
-  background: var(--surface);
-  border: 1px solid var(--border2);
-  padding: 2rem 2rem 1.75rem;
-  width: 100%;
-}
-.card::before, .card::after, .card-inner::before, .card-inner::after {
-  content: ""; position: absolute;
-  width: 12px; height: 12px;
-  border-color: var(--red); border-style: solid; opacity: .7;
-}
-.card::before      { top: -1px;    left: -1px;   border-width: 1.5px 0 0 1.5px; }
-.card::after       { top: -1px;    right: -1px;  border-width: 1.5px 1.5px 0 0; }
-.card-inner::before{ bottom: -1px; left: -1px;   border-width: 0 0 1.5px 1.5px; }
-.card-inner::after { bottom: -1px; right: -1px;  border-width: 0 1.5px 1.5px 0; }
+.ident { text-align:center; display:flex; flex-direction:column; gap:5px; }
+.ident-kanji { font-family:var(--jp); font-size:26px; color:var(--red); letter-spacing:.06em; line-height:1; }
+.ident-en { font-size:14px; font-weight:700; letter-spacing:.42em; padding-left:.42em; }
+.ident-sub { font-size:9px; letter-spacing:.22em; color:var(--ink3); text-transform:uppercase; }
 
+.card { width:min(360px, 100%); border:1px solid var(--line2); background:var(--panel); }
 .card-head {
-  font-size: .58rem; letter-spacing: .2em; color: var(--ink3);
-  text-transform: uppercase; margin-bottom: 1.5rem;
-  padding-bottom: .75rem; border-bottom: 1px solid var(--border);
-  display: flex; justify-content: space-between; align-items: center;
+  display:flex; align-items:center; justify-content:space-between;
+  padding:6px 10px 6px 0; border-bottom:1px solid var(--line);
+  font-size:9px; letter-spacing:.2em; color:var(--ink3); text-transform:uppercase;
 }
-.card-head-dot {
-  width: 5px; height: 5px; background: var(--red); border-radius: 50%;
-  animation: blink 2s step-end infinite;
-}
-@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.2} }
+.card-ix { background:var(--ink); color:var(--bg); padding:4px 7px; letter-spacing:.1em; }
+.card-body { padding:16px; display:flex; flex-direction:column; gap:14px; }
 
-.field { display: flex; flex-direction: column; gap: .4rem; margin-bottom: 1rem; }
-.field label { font-size: .58rem; letter-spacing: .18em; color: var(--ink3); text-transform: uppercase; }
+.field { display:flex; flex-direction:column; gap:5px; }
+.field label { font-size:9px; letter-spacing:.2em; color:var(--ink3); text-transform:uppercase; }
 .field input {
-  background: var(--bg); border: 1px solid var(--border);
-  color: var(--ink); font: .82rem/1 var(--mono);
-  padding: .55rem .7rem; width: 100%;
-  outline: none; transition: border-color .12s; letter-spacing: .04em;
+  font:inherit; font-size:13px; color:var(--ink);
+  background:transparent; border:0; border-bottom:1px solid var(--line2);
+  padding:6px 2px; outline:none; transition:border-color .15s ease;
 }
-.field input:focus { border-color: var(--blue); }
+.field input:focus { border-bottom-color:var(--red); }
+.field input:-webkit-autofill { -webkit-text-fill-color:var(--ink); transition:background-color 9999s; }
 
 .btn {
-  width: 100%; margin-top: .5rem;
-  background: var(--red); color: var(--ink);
-  border: none; font: .72rem/1 var(--mono);
-  letter-spacing: .2em; text-transform: uppercase;
-  padding: .75rem 1rem; cursor: pointer;
-  transition: opacity .12s;
+  font:inherit; font-size:10px; letter-spacing:.24em; text-transform:uppercase;
+  background:var(--ink); color:var(--bg); border:1px solid var(--ink);
+  padding:10px; cursor:pointer; transition:opacity .15s ease;
 }
-.btn:hover   { opacity: .86; }
-.btn:active  { opacity: .7; }
-.btn:disabled { opacity: .4; cursor: default; }
+.btn:hover:not(:disabled) { opacity:.82; }
+.btn:disabled { opacity:.45; cursor:progress; }
 
-#err {
-  font-size: .65rem; color: var(--red); letter-spacing: .05em;
-  min-height: .9rem; margin-top: .75rem; text-align: center;
-}
-.footer-note {
-  font-size: .56rem; color: var(--ink3); letter-spacing: .12em;
-  text-align: center; text-transform: uppercase;
-}
+#err { font-size:10px; color:var(--red); letter-spacing:.06em; min-height:14px; line-height:1.4; }
+.note { font-size:9px; letter-spacing:.18em; color:var(--ink3); text-transform:uppercase; }
+
+@media (prefers-reduced-motion: reduce) { * { animation:none !important; transition:none !important; } }
 </style>
 </head>
 <body>
-<canvas id="bg"></canvas>
+
+<canvas id="bg" aria-hidden="true"></canvas>
 
 <div class="shell">
   <div class="ident">
     <div class="ident-kanji">鳥居</div>
-    <div class="ident-en">TORII · QQQ</div>
-    <div class="ident-sub">Authentication Required</div>
+    <div class="ident-en">TORII</div>
+    <div class="ident-sub">QQQ options flow &middot; authentication required</div>
   </div>
 
   <div class="card">
-    <div class="card-inner">
-      <div class="card-head">
-        <span>Terminal Access</span>
-        <div class="card-head-dot"></div>
-      </div>
+    <div class="card-head"><span class="card-ix">00</span><span>SIGN IN</span></div>
+    <div class="card-body">
       <form id="f">
         <div class="field">
-          <label for="u">Username</label>
-          <input id="u" type="text" autocomplete="username" spellcheck="false" required>
+          <label for="u">Operator</label>
+          <input id="u" type="text" autocomplete="username" spellcheck="false" autocapitalize="off" required>
         </div>
-        <div class="field">
-          <label for="p">Passphrase</label>
+        <div class="field" style="margin-top:14px">
+          <label for="p">Key</label>
           <input id="p" type="password" autocomplete="current-password" required>
         </div>
-        <button class="btn" type="submit" id="btn">AUTHENTICATE</button>
-        <div id="err"></div>
+        <button class="btn" type="submit" id="btn" style="margin-top:18px;width:100%">Authenticate</button>
+        <div id="err" style="margin-top:10px"></div>
       </form>
     </div>
   </div>
 
-  <div class="footer-note">TORII//QQQ — DEALER POSITIONING SYSTEM</div>
+  <div class="note">private instrument &middot; no public access</div>
 </div>
 
 <script>
-(function () {
-  const canvas = document.getElementById("bg");
-  const ctx = canvas.getContext("2d");
-  const INK = "17,18,16", RED = "230,0,35", GRID = 44;
-  let W = 0, H = 0, dpr = 1, ticks = [], bits = [];
+/* The same character field the terminal uses, in miniature: a mostly-blank glyph grid with a
+   handful of cells resolving and dissolving. Decorative and fully optional. */
+(() => {
+  const c = document.getElementById("bg"), ctx = c.getContext("2d");
+  if (!ctx) return;
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const GL = "01█▓▒░+·=─│┼┴┬┤├/\\<>";
+  const CELL = 15;
+  let cols = 0, rows = 0, cells = [], scan = -0.3, last = 0, ink = "rgba(0,0,0,.06)";
 
-  function seed() {
-    ticks = Array.from({ length: 26 }, () => ({
-      x: Math.random() * W, y: Math.random() * H,
-      vy: 5 + Math.random() * 10, red: Math.random() < 0.22, s: 2 + Math.random() * 3,
-    }));
-    bits = Array.from({ length: 22 }, () => ({
-      x: Math.random() * W, y: Math.random() * H, vy: 8 + Math.random() * 16,
-      ch: Math.random() < 0.5 ? (Math.random() < 0.5 ? "0" : "1") : "0123456789ABCDEF"[Math.floor(Math.random() * 16)],
-    }));
+  function palette() {
+    ink = matchMedia("(prefers-color-scheme: dark)").matches ? "rgba(241,241,239,.085)" : "rgba(13,13,12,.055)";
   }
   function resize() {
-    dpr = Math.min(window.devicePixelRatio || 1, 2);
-    W = window.innerWidth; H = window.innerHeight;
-    canvas.width = W * dpr; canvas.height = H * dpr;
-    canvas.style.width = W + "px"; canvas.style.height = H + "px";
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); seed();
+    const dpr = Math.min(2, devicePixelRatio || 1), w = innerWidth, h = innerHeight;
+    c.width = w * dpr; c.height = h * dpr; c.style.width = w + "px"; c.style.height = h + "px";
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    cols = Math.ceil(w / CELL) + 1; rows = Math.ceil(h / CELL) + 1;
+    cells = new Array(cols * rows).fill(null);
+    ctx.font = '12px "JetBrains Mono",ui-monospace,monospace'; ctx.textBaseline = "top";
   }
-  const pad = (n, w) => String(n).padStart(w, "0");
-  let last = performance.now();
   function frame(now) {
-    const dt = Math.min((now - last) / 1000, 0.05); last = now;
-    ctx.clearRect(0, 0, W, H);
-    const off = (now * 0.006) % GRID;
-    ctx.lineWidth = 1;
-    ctx.strokeStyle = `rgba(${INK},.07)`;
-    ctx.beginPath();
-    for (let x = 0; x <= W; x += GRID) { ctx.moveTo(x + .5, 0); ctx.lineTo(x + .5, H); }
-    for (let y = -off; y <= H; y += GRID) { ctx.moveTo(0, y + .5); ctx.lineTo(W, y + .5); }
-    ctx.stroke();
-    ctx.strokeStyle = `rgba(${INK},.12)`;
-    ctx.beginPath();
-    for (let x = 0, i = 0; x <= W; x += GRID, i++) if (i % 4 === 0) { ctx.moveTo(x + .5, 0); ctx.lineTo(x + .5, H); }
-    for (let y = -off, j = 0; y <= H; y += GRID, j++) if (j % 4 === 0) { ctx.moveTo(0, y + .5); ctx.lineTo(W, y + .5); }
-    ctx.stroke();
-
-    ctx.save();
-    ctx.fillStyle = `rgba(${INK},.04)`;
-    const wm = Math.min(W, H) * 0.38;
-    ctx.font = `700 ${wm}px "Noto Sans JP", sans-serif`;
-    ctx.textAlign = "center"; ctx.textBaseline = "middle";
-    const wmx = W > 760 ? W - wm * 0.62 : W * 0.5;
-    ctx.fillText("鳥", wmx, H * 0.5 - wm * 0.56);
-    ctx.fillText("居", wmx, H * 0.5 + wm * 0.56);
-    ctx.restore();
-
-    const rcx = W > 760 ? W - 96 : W - 60, rcy = 110, rr = W > 760 ? 60 : 40;
-    ctx.strokeStyle = `rgba(${RED},.14)`; ctx.lineWidth = 1;
-    for (const f of [0.4, 0.7, 1]) { ctx.beginPath(); ctx.arc(rcx, rcy, rr * f, 0, Math.PI * 2); ctx.stroke(); }
-    ctx.beginPath(); ctx.moveTo(rcx - rr, rcy); ctx.lineTo(rcx + rr, rcy); ctx.moveTo(rcx, rcy - rr); ctx.lineTo(rcx, rcy + rr); ctx.stroke();
-    const ang = (now * 0.0009) % (Math.PI * 2);
-    const sw = ctx.createLinearGradient(rcx, rcy, rcx + Math.cos(ang) * rr, rcy + Math.sin(ang) * rr);
-    sw.addColorStop(0, `rgba(${RED},.3)`); sw.addColorStop(1, `rgba(${RED},0)`);
-    ctx.strokeStyle = sw; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(rcx, rcy); ctx.lineTo(rcx + Math.cos(ang) * rr, rcy + Math.sin(ang) * rr); ctx.stroke();
-
-    const beamY = ((now * 0.02) % (H + 240)) - 120;
-    const bg = ctx.createLinearGradient(0, beamY - 110, 0, beamY + 110);
-    bg.addColorStop(0, `rgba(${RED},0)`); bg.addColorStop(.5, `rgba(${RED},.05)`); bg.addColorStop(1, `rgba(${RED},0)`);
-    ctx.fillStyle = bg; ctx.fillRect(0, beamY - 110, W, 220);
-    ctx.fillStyle = `rgba(${RED},.12)`; ctx.fillRect(0, beamY, W, 1);
-
-    ctx.font = '10px "JetBrains Mono",monospace'; ctx.fillStyle = `rgba(${INK},.10)`; ctx.textAlign = "left"; ctx.textBaseline = "middle";
-    for (const b of bits) {
-      b.y += b.vy * dt; if (b.y > H + 6) { b.y = -6; b.x = Math.random() * W; }
-      ctx.fillText(b.ch, b.x, b.y);
-    }
-    ctx.lineWidth = 1;
-    for (const t of ticks) {
-      t.y += t.vy * dt; if (t.y > H + 8) { t.y = -8; t.x = Math.random() * W; }
-      ctx.strokeStyle = t.red ? `rgba(${RED},.22)` : `rgba(${INK},.14)`;
-      ctx.beginPath(); ctx.moveTo(t.x - t.s, t.y); ctx.lineTo(t.x + t.s, t.y); ctx.moveTo(t.x, t.y - t.s); ctx.lineTo(t.x, t.y + t.s); ctx.stroke();
-    }
-    const m = 14, L = 16;
-    ctx.strokeStyle = `rgba(${RED},.35)`; ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(m, m + L); ctx.lineTo(m, m); ctx.lineTo(m + L, m);
-    ctx.moveTo(W - m - L, m); ctx.lineTo(W - m, m); ctx.lineTo(W - m, m + L);
-    ctx.moveTo(W - m, H - m - L); ctx.lineTo(W - m, H - m); ctx.lineTo(W - m - L, H - m);
-    ctx.moveTo(m + L, H - m); ctx.lineTo(m, H - m); ctx.lineTo(m, H - m - L);
-    ctx.stroke();
-    ctx.font = '9px "JetBrains Mono",monospace'; ctx.fillStyle = `rgba(${INK},.25)`;
-    ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
-    ctx.fillText("TORII//QQQ AUTH", m + L + 8, H - m - 6);
-    ctx.textAlign = "right";
-    ctx.fillText(`SYS ${pad(Math.floor(now / 100) % 100000, 5)}`, W - m - L - 8, m + 4);
-    ctx.textAlign = "left";
-    ctx.fillText(`SCAN ${pad(Math.floor(Math.max(beamY, 0)), 4)}`, m + L + 8, m + 4);
     requestAnimationFrame(frame);
+    const dt = Math.min(.2, (now - last) / 1000);
+    if (dt < 1 / 13) return;
+    last = now;
+    ctx.clearRect(0, 0, c.width, c.height);
+    ctx.fillStyle = ink;
+    for (let i = 0; i < 3; i++) {
+      const k = Math.random() * cells.length | 0;
+      if (!cells[k]) cells[k] = { ch: GL[Math.random() * GL.length | 0], life: .6 + Math.random() * 2.4, age: 0 };
+    }
+    scan += dt * .055; if (scan > 1.3) scan = -.3;
+    const sr = scan * rows;
+    for (let i = 0; i < cells.length; i++) {
+      const cel = cells[i]; if (!cel) continue;
+      cel.age += dt;
+      if (cel.age >= cel.life) { cells[i] = null; continue; }
+      const r = i / cols | 0, col = i % cols, t = cel.age / cel.life;
+      let a = t < .25 ? t / .25 : (1 - t) / .75;
+      const d = Math.abs(r - sr);
+      if (d < 2) a = Math.min(1, a + (2 - d) * .55);
+      ctx.globalAlpha = Math.max(0, Math.min(1, a));
+      ctx.fillText(cel.ch, col * CELL, r * CELL);
+    }
+    ctx.globalAlpha = 1;
   }
-  resize(); window.addEventListener("resize", resize); frame(performance.now());
+  palette(); resize();
+  addEventListener("resize", resize);
+  matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", palette);
+  requestAnimationFrame(frame);
 })();
 
-if (localStorage.getItem("authToken")) window.location.href = "/";
+if (localStorage.getItem("authToken")) location.href = "/";
 
 document.getElementById("f").addEventListener("submit", async (e) => {
   e.preventDefault();
   const err = document.getElementById("err"), btn = document.getElementById("btn");
-  err.textContent = ""; btn.disabled = true; btn.textContent = "VERIFYING…";
+  err.textContent = ""; btn.disabled = true; btn.textContent = "Verifying…";
   try {
     const res = await fetch("/.netlify/functions/auth", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ username: document.getElementById("u").value.trim(), password: document.getElementById("p").value }),
+      body: JSON.stringify({
+        username: document.getElementById("u").value.trim(),
+        password: document.getElementById("p").value,
+      }),
     });
     if (res.status === 401) { err.textContent = "ACCESS DENIED — invalid credentials"; return; }
+    if (res.status === 429) { err.textContent = "TOO MANY ATTEMPTS — wait a few minutes"; return; }
     if (!res.ok) { err.textContent = `SERVER ERROR ${res.status} — try again`; return; }
     const { token, user } = await res.json();
     localStorage.setItem("authToken", token);
     localStorage.setItem("authUser", user);
     localStorage.setItem("lastSeen", String(Date.now()));
-    window.location.href = "/";
+    location.href = "/";
   } catch { err.textContent = "NETWORK ERROR — check connection"; }
-  finally { btn.disabled = false; btn.textContent = "AUTHENTICATE"; }
+  finally { btn.disabled = false; btn.textContent = "Authenticate"; }
 });
 </script>
 </body>

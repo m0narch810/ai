@@ -1,287 +1,261 @@
 {
-  "as_of": "2026-07-02T12:19:56",
-  "generated_at": "2026-07-02T16:21:53.400Z",
-  "scored_at": 1783009313400,
-  "spot": 714.8399999999999,
-  "macro_bias": "bearish",
-  "macro_bias_score": -70,
+  "as_of": "2026-07-28T09:01:00",
+  "generated_at": "2026-07-28T13:05:42.876Z",
+  "scored_at": 1785243942876,
+  "spot": 682.12,
+  "macro_bias": "neutral",
+  "macro_bias_score": -15,
   "macro_drivers": [
     {
-      "label": "Carry (USD/JPY)",
-      "reading": "160.98, down 153pts from 162.52 — YEN STRENGTHENING hard; carry unwind in progress",
-      "lean": "bear"
-    },
-    {
       "label": "2Y Yield",
-      "reading": "3.87, down 2.6bps from 3.896; falling but not sharply",
+      "reading": "3.961, down 10.1 bps fast; 10Y down 1.2 bps only → 2Y falling faster (bull steepening, easing expectations)",
       "lean": "bull"
     },
     {
-      "label": "Net Liquidity (TGA/RRP/Reserves)",
-      "reading": "TGA +42k (tightening), RRP -25.9 (draining), WRESBAL -82k (tightening) — net tightening",
-      "lean": "bear"
-    },
-    {
-      "label": "Fed Balance Sheet (WALCL)",
-      "reading": "6.735M, down 779 from 6.736M — QT continuing",
-      "lean": "bear"
-    },
-    {
-      "label": "OAS (Credit Spreads)",
-      "reading": "2.74, flat; healthy level, no credit stress signal",
+      "label": "Yield Curve (2s10s)",
+      "reading": "0.668 (10Y−2Y); steepening as 2Y reprices easing (bullish shape)",
       "lean": "bull"
     },
     {
-      "label": "VIX Term Structure",
-      "reading": "Front 13.58, back 16.71 (contango) — normal vol regime, range levels reliable",
-      "lean": "neutral"
-    },
-    {
-      "label": "COT (NASDAQ-100 Consolidated)",
-      "reading": "Net short -5.9%, percentile 2 — EXTREME crowding; short-covering on the table",
-      "lean": "neutral"
-    },
-    {
-      "label": "Cross-Asset Fear (VIX/VXN)",
-      "reading": "VIX +0.12 (16.71), VXN +0.85 (28.54) — both rising; fear creeping in",
+      "label": "Net Liquidity",
+      "reading": "TGA +9,099M (Treasury accumulating, tightening), reserves down 80k (tightening), RRP building → structural withdrawal",
       "lean": "bear"
     },
     {
-      "label": "Oil (Brent/WTI)",
-      "reading": "Brent 71.03 (-0.54), WTI 67.99 (-0.59) — calm, no supply shock signal",
+      "label": "COT Positioning",
+      "reading": "Speculator netPct −3.1, percentile 6 (crowded short at extreme); fuel for short-covering pump, but exhaustion risk",
       "lean": "neutral"
     },
     {
-      "label": "Dollar (DXY)",
-      "reading": "100.78, down 61bps from 101.39 — weakening",
+      "label": "Credit (OAS)",
+      "reading": "2.79 healthy, flat; no stress",
       "lean": "neutral"
+    },
+    {
+      "label": "Equities Vol (VIX / VXN)",
+      "reading": "VIX 18.6 falling (calm); VXN 28.65 rising +0.26 (tech-specific concern above broad)",
+      "lean": "bear"
+    },
+    {
+      "label": "Cross-Assets (Growth / Risk-On)",
+      "reading": "Oil −1.86 Brent, WTI −1.58 (falling, no geopolitical shock); copper −0.0555, gold −43.8, BTC −235 → growth weakness; DXY flat (no crisis flight)",
+      "lean": "bear"
+    },
+    {
+      "label": "Tail Risk (SKEW)",
+      "reading": "146.6, down 0.68 → crash hedges cheap, complacency priced",
+      "lean": "bear"
     }
   ],
   "open_type": "manip_up_real_down",
   "open_type_label": "Manipulation up → real move down",
   "expansion_direction": "down",
-  "targeted_level": 710,
-  "move_extent": "pump 4-6 pts to 720-725, then sharp reversal down 8-15 pts to 710 or lower",
-  "completion_signal": "Dealers cap the rally at 720-730, carry unwind forces reversal, price breaks below gamma flip (711.54) with conviction",
-  "next_target": 700,
+  "targeted_level": 680,
+  "move_extent": "2–3 pts down to 680 on first touch (short-covering pump reversed into dealer cap); if 680 breaks, extended 7–10 pts total to 675",
+  "completion_signal": "680 holds and reverses cleanly on first touch, OR breaks through into 675 as dealers abandon defense and momentum accelerates downward",
+  "next_target": 675,
   "clean_or_choppy": "choppy",
-  "manipulation_tell": "Fresh call buying across 716-732 (1125-2899 vol_oi_pct) positioned into overnight weakness; negative DEX (-10.5k) caps rally; dealer rehedging on failed breakout reverses the move. COT crowded short fuels the opening pop; dealers sell into the short-covering.",
+  "manipulation_tell": "Dealers forced strongly short (net DEX −8,712.5); every rally gets sold. Max pain magnet at 680 (put wall) pulls gravity down. Lack of fresh puts bought into overnight strength weakens the classic manip_up chain tell — lower conviction than a multi-strike positioning confirm, but DEX negative is unambiguous: dealers MUST cap. Expect short-covering pump at the bell (gamma unwind into flip, crowded-short covering), then sharp reversal as dealers sell every inch higher. Call wall at 690 offers a failure test; highest DEX short on board there (−881.6) + strongest negative charm (−125k) will crush momentum rallies.",
   "reversal_zones": [
     {
-      "price": 730,
+      "price": 680,
+      "side": "support",
+      "note": "Max pain + put wall; 3,433 call / 4,085 put OI mass; DEX −1,393 creates primary defense; clean 1–2 touch reversal likely."
+    },
+    {
+      "price": 690,
       "side": "resistance",
-      "note": "Call wall; fresh call buying exhaustion; dealers cap and short the bounce"
+      "note": "Call wall; heaviest DEX short needed (−881.6) + strongest negative charm on board (−125k theta decay); rallies sold into this wall."
     },
     {
-      "price": 710,
+      "price": 675,
       "side": "support",
-      "note": "Put wall; reversal_prob 21%; strong institutional bid stops the selloff"
+      "note": "Secondary put wall; if 680 breaks cleanly, next interior anchor; tests momentum exhaustion."
     },
     {
-      "price": 705,
-      "side": "support",
-      "note": "Secondary support; reversal_prob 26%; buyers regain footing if 710 breaks"
-    },
-    {
-      "price": 700,
-      "side": "support",
-      "note": "Major support; reversal_prob 48% (highest); strongest floor for reversal"
+      "price": 688,
+      "side": "resistance",
+      "note": "Intermediate resistance (board called); charm flips negative; step-down gravity from 690."
     }
   ],
-  "summary": "BEARISH bias (-70 score) dominated by carry unwind (USD/JPY down 153pts to 160.98, YEN strengthening) forcing equity deleveraging, and rising NQ fear (VXN +85bps to 28.54). COT NASDAQ-100 crowded short (percentile 2, net -5.9%) fuels a short-covering OPENING PUMP toward 720-725; fresh call buying across 716-732 (1125-2899 vol_oi_pct) confirms smart money front-running the squeeze. However, NEGATIVE DEX (-10.5k) is the structural cap — dealers SELL every bounce. Carry unwind gravity + dealer rehedging force a SHARP REVERSAL below gamma flip (711.54), targeting 710 (put wall) and 700 (major support, reversal_prob 48%). Expect CHOPPY action: pump into 720-730 exhausts fresh call flow on dealer resistance; reversal is fast and convincing on carry + dealer selling. Reversal zones: 730 (call wall exhaustion), 710 (put wall), 705 (secondary), 700 (major floor).",
-  "news_events": [
-    {
-      "headline": "USD/JPY collapse 160.98 (from 162.52) — YEN strengthening forces carry unwind",
-      "impact": "bearish",
-      "source": "FX cross-asset"
-    },
-    {
-      "headline": "VXN +85bps to 28.54, VIX +12 to 16.71 — NQ/broad volatility rising",
-      "impact": "bearish",
-      "source": "equity vol"
-    },
-    {
-      "headline": "COT NASDAQ-100 crowded short (percentile 2, -5.9%) — extreme short positioning",
-      "impact": "neutral",
-      "source": "COT positioning"
-    }
-  ],
+  "summary": "Neutral-to-bearish macro (2Y easing at +10bps counterweighted by structural tightening: TGA accumulating +$9B, reserves falling, liquidity contracting) fades into a dealer-short setup at the open. DEX −8,712.5 is unambiguous: dealers are forced sellers on every rally into call wall at 690. Spot at gamma flip (682.12) with max pain pinned at 680 (put wall, 2 pts below). No fresh overnight puts or calls visible lowers confidence in the classic manip_up chain tell, but the directional signal is clear: dealers cap rallies, max pain pulls down. Expect a technical pump at the bell (short-covering + gamma unwind into flip, crowded-short COT as fuel), then a sharp reversal as dealers sell into 688–690 resistance and price gravitates toward 680 on 2–3 pt drop. If 680 breaks, momentum extends to 675 (secondary put wall) on a 7–10 pt total move; 690 call wall is where rallies die (DEX short defense + charm sink). Tape: chop-then-reverse manip, not a flush. 680 is the live level — hold signals a range trade 680–690, break signals a dump to 675+.",
+  "news_events": [],
   "scoring_method": "ai",
   "macro": {
-    "asOf": "2026-07-02T12:20:12",
+    "asOf": "2026-07-28T09:01:36",
     "us2y": {
-      "last": 3.87,
-      "prev": 3.896,
-      "chg": -0.026,
+      "last": 3.961,
+      "prev": 4.062,
+      "chg": -0.101,
       "dir": "falling",
-      "asOf": "2026-07-02T12:20:02"
+      "asOf": "2026-07-28T09:01:14"
     },
     "us10y": {
-      "last": 4.465,
-      "prev": 4.475,
-      "chg": -0.01,
-      "velocity": 0.01,
-      "dir": "flat",
-      "asOf": "2026-07-02T12:20:03"
-    },
-    "curve2s10s": 0.595,
-    "usdjpy": {
-      "last": 160.981,
-      "prev": 162.519,
-      "chg": -1.538,
-      "velocity": 0.08,
+      "last": 4.629,
+      "prev": 4.641,
+      "chg": -0.012,
+      "velocity": -0.004,
       "dir": "falling",
-      "asOf": "2026-07-02T12:20:03"
+      "asOf": "2026-07-28T09:01:15"
+    },
+    "curve2s10s": 0.668,
+    "usdjpy": {
+      "last": 163.875,
+      "prev": 163.702,
+      "chg": 0.173,
+      "velocity": -0.01,
+      "dir": "rising",
+      "asOf": "2026-07-28T09:01:15"
     },
     "tga": {
-      "last": 919145,
-      "prev": 876961,
-      "chg": 42184,
+      "last": 886300,
+      "prev": 877201,
+      "chg": 9099,
       "dir": "rising",
-      "asOf": "2026-06-30"
+      "asOf": "2026-07-24"
     },
     "rrp": {
-      "last": 1,
-      "prev": 26.9,
-      "chg": -25.9,
-      "dir": "falling",
-      "asOf": "2026-07-01"
+      "last": 1.38,
+      "prev": 0.68,
+      "chg": 0.7,
+      "dir": "flat",
+      "asOf": "2026-07-27"
     },
     "cot": {
-      "netPct": -5.9,
-      "percentile": 2,
+      "netPct": -3.1,
+      "percentile": 6,
       "market": "NASDAQ-100 Consolidated"
     },
     "oas": {
-      "last": 2.74,
-      "prev": 2.75,
-      "chg": -0.01,
+      "last": 2.79,
+      "prev": 2.77,
+      "chg": 0.02,
       "dir": "flat",
-      "asOf": "2026-07-01",
+      "asOf": "2026-07-24",
       "level": "healthy"
     },
     "vix_term": {
-      "front": 13.58,
-      "back": 16.71,
-      "ratio": 0.813,
+      "front": 18.13,
+      "back": 18.6,
+      "ratio": 0.975,
       "structure": "contango"
     },
     "auction_today": false,
     "reserve_bal": {
-      "last": 2951416,
-      "prev": 3033444,
-      "chg": -82028,
+      "last": 3062149,
+      "prev": 3142721,
+      "chg": -80572,
       "dir": "falling",
-      "asOf": "2026-06-24"
+      "asOf": "2026-07-22"
     },
     "walcl": {
-      "last": 6735645,
-      "prev": 6736424,
-      "chg": -779,
-      "dir": "falling",
-      "asOf": "2026-06-24"
+      "last": 6747378,
+      "prev": 6743028,
+      "chg": 4350,
+      "dir": "rising",
+      "asOf": "2026-07-22"
     },
-    "copper_gold_ratio": 0.001493,
+    "copper_gold_ratio": 0.001568,
     "cross": {
       "brent": {
-        "last": 71.03,
-        "prev": 71.57,
-        "chg": -0.54,
-        "velocity": 0.41,
+        "last": 86.5,
+        "prev": 88.36,
+        "chg": -1.86,
+        "velocity": -0.59,
         "dir": "falling",
-        "asOf": "2026-07-02T12:20:03"
+        "asOf": "2026-07-28T09:01:15"
       },
       "wti": {
-        "last": 67.99,
-        "prev": 68.58,
-        "chg": -0.59,
-        "velocity": 0.36,
+        "last": 81.03,
+        "prev": 82.61,
+        "chg": -1.58,
+        "velocity": -0.53,
         "dir": "falling",
-        "asOf": "2026-07-02T12:20:03"
+        "asOf": "2026-07-28T09:01:15"
       },
       "gold": {
-        "last": 4135.3,
-        "prev": 4082.4,
-        "chg": 52.9,
-        "velocity": -3.3999,
-        "dir": "rising",
-        "asOf": "2026-07-02T12:20:03"
+        "last": 4033.2,
+        "prev": 4077,
+        "chg": -43.8,
+        "velocity": 2.8999,
+        "dir": "falling",
+        "asOf": "2026-07-28T09:01:15"
       },
       "copper": {
-        "last": 6.1755,
-        "prev": 6.1795,
-        "chg": -0.004,
-        "velocity": -0.025,
-        "dir": "flat",
-        "asOf": "2026-07-02T12:20:03"
+        "last": 6.3235,
+        "prev": 6.379,
+        "chg": -0.0555,
+        "velocity": 0.0045,
+        "dir": "falling",
+        "asOf": "2026-07-28T09:01:15"
       },
       "dxy": {
-        "last": 100.781,
-        "prev": 101.392,
-        "chg": -0.611,
-        "velocity": 0.056,
-        "dir": "falling",
-        "asOf": "2026-07-02T12:20:03"
+        "last": 101.53,
+        "prev": 101.535,
+        "chg": -0.005,
+        "velocity": -0.027,
+        "dir": "flat",
+        "asOf": "2026-07-28T09:01:15"
       },
       "vix": {
-        "last": 16.71,
-        "prev": 16.59,
-        "chg": 0.12,
-        "velocity": 0.17,
-        "dir": "rising",
-        "asOf": "2026-07-02T12:20:03"
+        "last": 18.6,
+        "prev": 18.67,
+        "chg": -0.07,
+        "velocity": -0.21,
+        "dir": "falling",
+        "asOf": "2026-07-28T09:01:15"
       },
       "vxn": {
-        "last": 28.54,
-        "prev": 27.69,
-        "chg": 0.85,
-        "velocity": 0.32,
+        "last": 28.65,
+        "prev": 28.39,
+        "chg": 0.26,
         "dir": "rising",
-        "asOf": "2026-07-02T12:20:03"
+        "asOf": "2026-07-28T09:01:15"
       },
       "btc": {
-        "last": 61430.19,
-        "prev": 59961.8,
-        "chg": 1468.39,
-        "velocity": -115.2578,
-        "dir": "rising",
-        "asOf": "2026-07-02T12:20:03"
+        "last": 63471.35,
+        "prev": 63706.66,
+        "chg": -235.31,
+        "velocity": 87.9023,
+        "dir": "falling",
+        "asOf": "2026-07-28T09:01:15"
       },
       "hyg": {
-        "last": 79.755,
-        "prev": 79.59,
-        "chg": 0.165,
-        "velocity": -0.015,
-        "dir": "rising",
-        "asOf": "2026-07-02T12:20:03"
+        "last": 79.27,
+        "prev": 79.23,
+        "chg": 0.04,
+        "velocity": 0.0186,
+        "dir": "flat",
+        "asOf": "2026-07-28T09:01:15"
       },
       "skew_index": {
-        "last": 154.82,
-        "prev": 154.82,
-        "chg": 0,
-        "dir": "flat",
-        "asOf": "2026-07-02T12:20:03"
+        "last": 146.6,
+        "prev": 147.28,
+        "chg": -0.68,
+        "dir": "falling",
+        "asOf": "2026-07-28T09:01:15"
       }
     },
     "headlines": [],
     "notes": [
-      "news (GDELT) unavailable"
+      "news (GDELT) unavailable",
+      "Altaris macro panel unavailable"
     ]
   },
-  "size_rule": "HALF",
-  "size_rule_reason": "entropy elevated (ρ=1.00) — noise in the flow, half size",
-  "entropy_state": "ELEVATED",
-  "entropy_ratio": 1,
+  "size_rule": "FULL",
+  "size_rule_reason": "entropy normal + topology aligned — full size",
+  "entropy_state": "NORMAL",
+  "entropy_ratio": 0.74,
   "topology_alignment": "aligned",
-  "topology_note": "Hurst 0.81 trending + GEX neg/GARCH elevated amplifying — trust direction",
-  "pca1_dir": "down",
+  "topology_note": "Hurst 0.69 trending + GEX neg/GARCH normal amplifying — trust direction",
+  "pca1_dir": "flat",
   "pca2_dir": "amplify",
   "vol_trigger_position": "above",
   "gex_key_levels": {
-    "call_wall": 740,
-    "put_wall": 710,
-    "vol_trigger": 711.5,
-    "max_pain": 690,
-    "expected_move": 16.99
+    "call_wall": 690,
+    "put_wall": 680,
+    "vol_trigger": 682.12,
+    "max_pain": 680,
+    "expected_move": 17.31
   }
 }

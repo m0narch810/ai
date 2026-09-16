@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Pulls Altaris options-flow data, scores QQQ strikes for reversal probability with Opus 4.8, serves a private level board.",
+  "description": "Pulls YYY options-flow data, scores QQQ strikes for reversal probability with Claude, and serves a private options-flow terminal.",
   "scripts": {
     "capture": "tsx src/run.ts --once",
     "backfill": "tsx src/run.ts --backfill",
@@ -14,7 +14,8 @@
     "web": "tsx src/web.ts",
     "publish": "tsx src/publish.ts",
     "typecheck": "tsc --noEmit",
-    "extract-knowledge": "python scripts/extract-knowledge.py"
+    "extract-knowledge": "python scripts/extract-knowledge.py",
+    "preview": "node scripts/preview.mjs"
   },
   "dependencies": {
     "@netlify/blobs": "^10.7.9",
