@@ -15,6 +15,8 @@ import { el, isNum, compact, compactSigned, strikeLabel, asciiSpine, asciiSpark,
 import { panel, tag, segmented, nodata, rule, skeleton } from "../ui.js";
 import { spine, termMatrix, matrix, stat } from "../draw.js";
 import { GREEKS, GREEK_BY_KEY, greek, termGrid, levelMarks, boardMarks } from "../data.js";
+import { liveIvWalls, wallZones } from "../ivwalls.js";
+import { etNow } from "../util.js";
 
 export const ID = "greeks";
 export const LABEL = "GREEKS";
@@ -22,7 +24,7 @@ export const JP = "希臘";
 export const EPS = [...GREEKS.map((g) => g.key), "levels"];
 
 let sel = "gex";
-let expIdx = null;
+let expIdx = 0;   // today's expiry by default; null = whole chain
 
 const refresh = () => document.dispatchEvent(new CustomEvent("view:refresh"));
 
@@ -50,10 +52,12 @@ export function render(host, ctx) {
     ...boardMarks(ctx.desk?.board),
   ]);
 
+  const zones = wallZones(liveIvWalls(ok.net_iv, spot, etNow().minutes) || ctx.desk?.board?.iv_walls || null);
+
   host.replaceChildren(
     bookPanel(live, spot),
     alignPanel(all, spot, marks),
-    ladderPanel(ok, spot, marks, err),
+    ladderPanel(ok, spot, marks, err, zones),
     tenorPanel(ok, spot),
   );
 }
@@ -76,7 +80,7 @@ function bookPanel(live, spot) {
 
     return el("div.gbook-row", {
       "data-on": meta.key === sel ? "" : null,
-      onClick: () => { sel = meta.key; expIdx = null; refresh(); },
+      onClick: () => { sel = meta.key; refresh(); },
       "data-tip": `${meta.name}\n${meta.sign}`,
     }, [
       el("span.gb-name", null, [el("b", { text: meta.name }), el("i.gb-jp", { text: meta.jp })]),
@@ -171,14 +175,17 @@ function alignPanel(all, spot, marks) {
 
 /* ── G2 LADDER ───────────────────────────────────────────────────────────── */
 
-function ladderPanel(ok, spot, marks, err) {
+function ladderPanel(ok, spot, marks, err, zones = []) {
   const meta = GREEK_BY_KEY[sel];
-  const g = greek(sel, ok[sel], expIdx);
+  // the chosen expiry column, clamped to what THIS greek carries (/gex has three, the rest eight)
+  const nExp = greek(sel, ok[sel], null).expiries.length;
+  const ei = expIdx === null ? null : Math.min(expIdx, Math.max(0, nExp - 1));
+  const g = greek(sel, ok[sel], ei);
 
   const greekPick = segmented(
     GREEKS.map((x) => ({ label: x.name, value: x.key, title: x.sign })),
     sel,
-    (v) => { sel = v; expIdx = null; refresh(); },
+    (v) => { sel = v; refresh(); },
     { cls: "seg-greek" },
   );
 
@@ -190,15 +197,15 @@ function ladderPanel(ok, spot, marks, err) {
   }
 
   const expPick = segmented(
-    [{ label: "CHAIN", value: null, title: "every expiry summed" },
-     ...g.expiries.map((e, i) => ({ label: e.short, value: i, title: `${e.label}${isNum(e.dte) ? ` · ${e.dte}d` : ""}` }))],
-    expIdx,
+    [...g.expiries.map((e, i) => ({ label: isNum(e.dte) ? `${e.dte}DTE` : e.short, value: i, title: `${e.label}${isNum(e.dte) ? ` \u00b7 ${e.dte}d` : ""}` })),
+     { label: "CHAIN", value: null, title: "every expiry summed" }],
+    ei,
     (v) => { expIdx = v; refresh(); },
   );
 
   const host = el("div.chart-host");
   queueMicrotask(() => spine(host, {
-    rows: g.rows, spot, marks, maxRows: 36, unit: meta.unit,
+    rows: g.rows, spot, marks, maxRows: 36, unit: meta.unit, zones,
     fmtVal: (n) => compact(n, 1),
   }));
 
@@ -207,7 +214,7 @@ function ladderPanel(ok, spot, marks, err) {
     stat("NET", compactSigned(t.net, 2), { tone: sgn(t.net) === "p" ? "cool" : "hot", sub: meta.unit || null }),
     stat("CALLS", compactSigned(t.call, 2), { tone: sgn(t.call) === "p" ? "cool" : "hot" }),
     stat("PUTS", compactSigned(t.put, 2), { tone: sgn(t.put) === "p" ? "cool" : "hot" }),
-    stat("STRIKES", String(g.rows.length), { sub: expIdx === null ? "whole chain" : g.expiries[expIdx]?.label }),
+    stat("STRIKES", String(g.rows.length), { sub: ei === null ? "whole chain" : g.expiries[ei]?.label }),
   ]);
 
   const clusters = Array.isArray(g.clusters) && g.clusters.length

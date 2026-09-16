@@ -25,7 +25,7 @@ function elevation(x, y, t) {
   return (n + 3.5) / 7;
 }
 
-export function initBackground(canvas, { cell = 12, levels = 8, lineWidth = 0.085, maxAlpha = 0.26, spread = 0.72, speed = 0.7 } = {}) {
+export function initBackground(canvas, { cell = 12, levels = 8, lineWidth = 0.09, maxAlpha = 0.42, spread = 0.72, speed = 0.7 } = {}) {
   if (!canvas) return null;
   const ctx = canvas.getContext("2d");
   if (!ctx) return null;
@@ -46,7 +46,7 @@ export function initBackground(canvas, { cell = 12, levels = 8, lineWidth = 0.08
   // instrument instead of a white texture behind it.
   function tones() {
     return isDark()
-      ? { lo: [126, 128, 148], hi: [169, 205, 255] }
+      ? { lo: [156, 158, 178], hi: [169, 205, 255] }
       : { lo: [124, 126, 140], hi: [43, 102, 204] };
   }
   const mixed = [];
@@ -83,7 +83,7 @@ export function initBackground(canvas, { cell = 12, levels = 8, lineWidth = 0.08
         const level = Math.max(0, Math.min(LEVEL_GLYPHS.length - 1, Math.floor(band) % LEVEL_GLYPHS.length));
         const edge = 1 - cells / (lineWidth * 10);        // 1 at line centre, 0 at edge
         // quieter toward the bottom of the viewport, where the ladders are
-        const vfade = 1 - (gy / rows) * 0.45;
+        const vfade = 1 - (gy / rows) * 0.3;
         const a = (0.3 + 0.7 * e) * edge * maxAlpha * vfade;
         if (a < 0.012) continue;
         ctx.fillStyle = `rgba(${mixed[level]}, ${a.toFixed(3)})`;

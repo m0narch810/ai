@@ -111,10 +111,16 @@ function anomalyPanel(anom, ctx) {
 
 /* ── V0b IV SURFACE ──────────────────────────────────────────────────────── */
 
-function surfacePanel(ivSurface, anom, ctx) {
+/** The surface panel, also mounted on BOARD — built here so both tabs draw the same thing. */
+export function buildSurfacePanel(ok, ctx, idx = "V1") {
+  const anom = findIvAnomalies({ net_iv: ok.net_iv, flow: ok.flow, spot: ctx.spot });
+  return surfacePanel(ok.iv_surface, anom, ctx, idx);
+}
+
+function surfacePanel(ivSurface, anom, ctx, idx = "V1") {
   const s = smileCurves(ivSurface);
   if (!s) {
-    return panel({ idx: "V1", title: "IV SURFACE", body: ctx.wait("iv_surface", "chart") || nodata("NO IV SURFACE") });
+    return panel({ idx, title: "IV SURFACE", body: ctx.wait("iv_surface", "chart") || nodata("NO IV SURFACE") });
   }
   const spot = isNum(s.spot) ? s.spot : ctx.spot;
   const curves = s.curves.map((c) => ({ ...c, dteIdx: c.rank }));
@@ -132,7 +138,7 @@ function surfacePanel(ivSurface, anom, ctx) {
   });
 
   return panel({
-    idx: "V1", title: "IV SURFACE",
+    idx, title: "IV SURFACE",
     tools: [tag(isNum(s.atm) ? `ATM ${(s.atm * 100).toFixed(2)}%` : "", "mute"), tag(`${marks.length} MARKED`, marks.length ? "cool" : "mute")],
     body: [
       el("div.twin-lbl", { text: "SURFACE \u00b7 moneyness across, expiry into the page, IV up" }),

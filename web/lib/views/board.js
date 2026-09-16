@@ -8,16 +8,17 @@ import { el, isNum, fmt, pct, compact, compactSigned, strikeLabel, agoText, clam
 import { panel, tag, segmented, statGrid, nodata, rule, skeleton } from "../ui.js";
 import { spine, candles, stat, emptyPanel } from "../draw.js";
 import { greek, levelMarks, boardMarks } from "../data.js";
-import { liveIvWalls } from "../ivwalls.js";
+import { liveIvWalls, wallZones } from "../ivwalls.js";
+import { buildSurfacePanel } from "./vol.js";
 import { etNow } from "../util.js";
 
 export const ID = "board";
 export const LABEL = "BOARD";
 export const JP = "板";
-export const EPS = ["gex", "chart", "zero_dte", "expected_move", "levels", "dealer_delta", "atr"];
+export const EPS = ["gex", "chart", "zero_dte", "expected_move", "levels", "dealer_delta", "atr", "iv_surface", "net_iv", "flow"];
 
-// Expiry column chosen in the gamma ladder; null = whole chain. Survives re-renders.
-let expIdx = null;
+// Expiry column chosen in the gamma ladder; 0 = today's expiry (the default), null = whole chain.
+let expIdx = 0;
 
 export function render(host, ctx) {
   const { ok, err } = ctx.yyy;
@@ -26,14 +27,20 @@ export function render(host, ctx) {
   const lv = g.levels || {};
   const marks = new Set([...levelMarks(lv), ...boardMarks(ctx.desk?.board)]);
 
+  const walls = liveIvWalls(ok.net_iv, spot, etNow().minutes) || ctx.desk?.board?.iv_walls || null;
+  const zones = wallZones(walls);
+
+  // Default order (the user can rearrange any of it — app.js applyLayout runs after this):
+  // structure + walls, the desk read, the gamma ladder, the surface, expected move, 0DTE, price last.
   host.replaceChildren(
     structurePanel(ok, spot, lv, ctx),
     ivWallsPanel(ok.net_iv, ctx.desk?.board?.iv_walls, spot, ctx),
-    pricePanel(ok, spot, lv, ctx.desk?.board, ctx),
-    zeroDtePanel(ok.zero_dte, spot, ctx),
-    gammaPanel(g, spot, marks, err, ctx),
-    movePanel(ok.expected_move, ok.levels, ok.atr, spot, ctx),
     deskPanel(ctx.desk, spot, ctx),
+    gammaPanel(g, spot, marks, err, ctx, zones),
+    buildSurfacePanel(ok, ctx, "07"),
+    movePanel(ok.expected_move, ok.levels, ok.atr, spot, ctx),
+    zeroDtePanel(ok.zero_dte, spot, ctx),
+    pricePanel(ok, spot, lv, ctx.desk?.board, ctx),
   );
 }
 
@@ -123,12 +130,12 @@ function ivWallsPanel(netIv, deskWalls, spot, ctx) {
     const v = live?.[r.k] ?? deskWalls?.[r.k];
     const d = isNum(v) && isNum(spot) ? v - spot : NaN;
     const desk = deskWalls?.[r.k];
-    return el(`div.ladder-row.is-${r.role}${r.strong ? ".is-strong" : ""}`, {
+    return el(`div.ladder-row.plain.is-${r.role}${r.strong ? ".is-strong" : ""}`, {
       "data-tip": `${r.label}\nlive: ${fmt(v, 2)}${isNum(desk) ? `\ndesk frozen: ${fmt(desk, 2)}` : ""}${isNum(d) ? `\nfrom spot: ${d >= 0 ? "+" : "\u2212"}${Math.abs(d).toFixed(2)}` : ""}`,
     }, [
       el("span.lr-name", { text: r.label }),
       el("span.lr-price", { text: fmt(v, 2) }),
-      el("span.lr-bar", null, el("span.lr-desk", { text: isNum(desk) ? `desk ${fmt(desk, 2)}` : "" })),
+      el("span.lr-bar", null, isNum(desk) ? el("span.lr-desk", { text: fmt(desk, 2) }) : null),
       el("span", { class: `lr-dist ${d >= 0 ? "p" : "n"}`, text: isNum(d) ? `${d >= 0 ? "+" : "\u2212"}${Math.abs(d).toFixed(2)}  ${(Math.abs(d) / spot * 100).toFixed(2)}%` : "\u2014" }),
     ]);
   }));
@@ -180,23 +187,25 @@ function pricePanel(ok, spot, lv, deskBoard, ctx) {
 
 /* ── 03 GAMMA LADDER ─────────────────────────────────────────────────────── */
 
-function gammaPanel(g, spot, marks, err, ctx) {
+function gammaPanel(g, spot, marks, err, ctx, zones = []) {
   if (!g.ok) {
     return panel({ idx: "03", title: "GAMMA LADDER", jp: "ガンマ", body: ctx.wait("gex", "rows", 12) || nodata(err?.gex ? `GEX: ${err.gex}` : "NO GEX") });
   }
   const host = el("div.chart-host");
   queueMicrotask(() => spine(host, {
-    rows: g.rows, spot, marks, maxRows: 34, unit: "$M",
+    rows: g.rows, spot, marks, maxRows: 34, unit: "$M", zones,
     fmtVal: (n) => compact(n, 1),
   }));
 
-  const items = [{ label: "CHAIN", value: null, title: "every expiry summed" },
-    ...g.expiries.map((e, i) => ({ label: e.short, value: i, title: `${e.label}${isNum(e.dte) ? ` · ${e.dte}d` : ""}` }))];
+  const items = [
+    ...g.expiries.map((e, i) => ({ label: isNum(e.dte) ? `${e.dte}DTE` : e.short, value: i, title: `${e.label}${isNum(e.dte) ? ` · ${e.dte}d` : ""}` })),
+    { label: "CHAIN", value: null, title: "every expiry summed" },
+  ];
   const tools = [segmented(items, expIdx, (v) => { expIdx = v; document.dispatchEvent(new CustomEvent("view:refresh")); })];
 
   return panel({
     idx: "03", title: "GAMMA LADDER", jp: "ガンマ", tools, body: host, flush: true,
-    note: "bar length = |gamma exposure|, colour = sign · cool bars suppress, hot bars amplify · flagged strikes are walls + desk levels",
+    note: "bar length = |gamma exposure|, colour = sign \u00b7 lit bars suppress, graphite bars amplify \u00b7 shaded bands are the IV-wall brackets \u00b7 flagged strikes are walls + desk levels",
   });
 }
 

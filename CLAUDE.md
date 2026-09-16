@@ -317,6 +317,23 @@ contour map that preceded it are gone — do not reintroduce a heightfield.
   front), height = IV; quads drawn back-to-front, filled and lit by IV so the mesh is solid, the
   0DTE front edge and the ATM ridge in the accent, anomaly marks on the surface. The heat grid
   stays beneath it.
+- **USER-ARRANGEABLE LAYOUT (v3.6).** Every panel carries `data-key` (its `idx`) and three
+  controls in its label bar (↑ ↓ ⇔); the label bar is also an HTML5 drag handle. `app.js`
+  `applyLayout(host)` runs after every render and imposes the saved order + width overrides
+  from `localStorage["layout.v1.<view>"]` (`{order:[keys], half:{key:bool}}`); unknown keys
+  keep their default position after the known ones, so adding a panel never wipes a user's
+  arrangement. `[ reset layout ]` in the footer clears the current tab. DEFAULT ORDERS are set
+  by the order of `host.replaceChildren(...)` in each view — BOARD is structure, IV walls, desk,
+  gamma ladder, surface, expected move, 0DTE, price last (user: "I'll never use price").
+- **Ladders default to today's expiry.** `expIdx = 0` in board/greeks; the segmented control
+  lists `0DTE, 1DTE, … , CHAIN` (chain last). greeks clamps the index to what the chosen greek
+  carries (/gex has three columns, the rest eight).
+- **IV-wall zones on every ladder.** `spine()` takes `zones:[{lo,hi,label}]` and shades the
+  bands (`wallZones()` in ivwalls.js); board gamma, greeks ladder, flow dealer + delta all pass
+  them. The IV SURFACE panel is also mounted on BOARD (`buildSurfacePanel` exported from vol.js).
+- **Sticky rail compacts on scroll position with hysteresis** (compact past sentinel+28px,
+  expand below sentinel−4px) — the IntersectionObserver version flickered because compacting
+  shrank the rail, moved the page, and flipped the observer back.
 - **IV WALLS are computed live in the browser** (`lib/ivwalls.js`, a port of `src/ivWalls.ts`:
   |Δ| 0.1925 strikes of the front expiry over its own smile from `/net_iv`, outer = spec widths
   as fractions of spot, T anchored to 16:00 ET for 0DTE). Panel 01b on BOARD, half width, next

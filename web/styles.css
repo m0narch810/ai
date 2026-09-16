@@ -87,7 +87,7 @@ body { min-height: 100dvh; overflow-x: hidden; }
 /* the contour field fades to the page colour at the edges, as on the reference */
 .bg-vignette {
   position: fixed; inset: 0; z-index: 0; pointer-events: none;
-  background: radial-gradient(ellipse 85% 75% at 50% 28%, transparent 30%, var(--bg) 92%);
+  background: radial-gradient(ellipse 90% 85% at 50% 32%, transparent 42%, var(--bg) 100%);
 }
 
 #app {
@@ -956,3 +956,36 @@ body { min-height: 100dvh; overflow-x: hidden; }
 
 /* IV walls: the desk's frozen value sits in the bar slot */
 .lr-desk { font-size: 9px; letter-spacing: .08em; color: var(--ink3); }
+
+/* ── v3.6 ────────────────────────────────────────────────────────────────── */
+
+/* gamma ladder glow: lit bars carry a second, wider halo; the spine and spot rail glow too */
+.spine .sp-bar.p { filter: drop-shadow(0 0 3px var(--acc-glow)) drop-shadow(0 0 9px var(--acc-dim)); }
+.spine .sp-spine { filter: drop-shadow(0 0 4px var(--acc-glow)); }
+.spine .sp-spot { filter: drop-shadow(0 0 6px var(--acc-glow)); }
+.spine .sp-markbar { filter: drop-shadow(0 0 5px var(--acc-glow)); }
+
+/* IV-wall zones on every ladder */
+.sp-zone { fill: var(--acc); fill-opacity: .07; }
+.sp-zone-edge { stroke: var(--acc-line); stroke-width: 1; stroke-dasharray: 2 4; stroke-opacity: .7; }
+.sp-zone-lbl { font-size: 7.5px; letter-spacing: .16em; fill: var(--acc); fill-opacity: .8; font-family: var(--mono); }
+
+/* IV WALLS panel: the desk's frozen value is a plain column, not a meter */
+.ladder-row.plain .lr-bar { background: none; height: auto; display: flex; align-items: center; }
+.lr-desk { font-size: 9px; letter-spacing: .1em; color: var(--ink3); }
+.lr-desk::before { content: "desk "; color: var(--ink4); }
+
+/* layout controls */
+.p-label[draggable="true"] { cursor: grab; }
+.p-label[draggable="true"]:active { cursor: grabbing; }
+.p-lay { display: inline-flex; gap: 2px; margin-left: 6px; opacity: 0; transition: opacity .15s var(--ease); }
+.pnl:hover .p-lay, .pnl:focus-within .p-lay { opacity: 1; }
+@media (hover: none) { .p-lay { opacity: .7; } }
+.p-laybtn {
+  font: inherit; font-size: 10px; line-height: 1; background: none; border: 1px solid var(--edge); color: var(--ink3);
+  width: 18px; height: 18px; cursor: pointer; padding: 0; transition: color .12s var(--ease), border-color .12s var(--ease);
+}
+.p-laybtn:hover { color: var(--acc); border-color: var(--acc-line); }
+.pnl.dragging { opacity: .35; outline: 1px dashed var(--acc-line); }
+.pnl.moved { animation: flashbg 1s var(--ease) both; }
+.foot .kbtn { padding: 2px 2px; font-size: 9px; }

@@ -8,6 +8,8 @@
 import { el, isNum, fmt, compact, compactSigned, strikeLabel, clamp } from "../util.js";
 import { panel, tag, statGrid, nodata, rule } from "../ui.js";
 import { spine, lineChart, stat, biMeter, emptyPanel } from "../draw.js";
+import { liveIvWalls, wallZones } from "../ivwalls.js";
+import { etNow } from "../util.js";
 
 export const ID = "flow";
 export const LABEL = "FLOW";
@@ -25,10 +27,11 @@ const signedRows = (list, key) => (list || [])
 
 export function render(host, ctx) {
   const { ok, err } = ctx.yyy;
+  const zones = wallZones(liveIvWalls(ok.net_iv, ctx.spot, etNow().minutes) || ctx.desk?.board?.iv_walls || null);
   host.replaceChildren(
-    dealerPanel(ok.dealer_delta, ctx.spot, err, ctx),
+    dealerPanel(ok.dealer_delta, ctx.spot, err, ctx, zones),
     anomalyPanel(ok.dealer_anomalies),
-    dexPanel(ok.dex_ladder, ctx.spot),
+    dexPanel(ok.dex_ladder, ctx.spot, zones),
     expiryPanel(ok.option_matrix),
     crossPanel(ok.scanner),
     notePanel(),
@@ -37,7 +40,7 @@ export function render(host, ctx) {
 
 /* ── F0 DEALER INVENTORY ─────────────────────────────────────────────────── */
 
-function dealerPanel(dd, spot, err, ctx) {
+function dealerPanel(dd, spot, err, ctx, zones = []) {
   if (!dd || dd.error) {
     return panel({ idx: "F0", title: "DEALER INVENTORY", jp: "在庫", body: ctx.wait("dealer_delta", "rows", 10) || nodata(err?.dealer_delta ? `dealer_delta: ${err.dealer_delta}` : "NO DEALER DATA") });
   }
@@ -52,7 +55,7 @@ function dealerPanel(dd, spot, err, ctx) {
   const rows = signedRows(dd.strike_data, "net_delta");
   const host = el("div.chart-host");
   queueMicrotask(() => (rows.length
-    ? spine(host, { rows, spot, maxRows: 30, fmtVal: (n) => compact(n, 1), marks: isNum(dd.delta_flip) ? new Set([dd.delta_flip]) : undefined })
+    ? spine(host, { rows, spot, maxRows: 30, zones, fmtVal: (n) => compact(n, 1), marks: isNum(dd.delta_flip) ? new Set([dd.delta_flip]) : undefined })
     : emptyPanel(host)));
 
   return panel({
@@ -125,7 +128,7 @@ function anomalyPanel(da) {
 
 /* ── F2 DEX LADDER ───────────────────────────────────────────────────────── */
 
-function dexPanel(dl, spot) {
+function dexPanel(dl, spot, zones = []) {
   const rows = (dl?.ladder || [])
     .filter((r) => isNum(r?.strike))
     .map((r) => ({
@@ -138,7 +141,7 @@ function dexPanel(dl, spot) {
   if (!rows.length) return null;
 
   const host = el("div.chart-host");
-  queueMicrotask(() => spine(host, { rows, spot, maxRows: 30, fmtVal: (n) => compact(n, 2) }));
+  queueMicrotask(() => spine(host, { rows, spot, maxRows: 30, zones, fmtVal: (n) => compact(n, 2) }));
 
   return panel({
     idx: "F2", title: "DELTA LADDER", jp: "デルタ", cls: "half", body: host, flush: true,

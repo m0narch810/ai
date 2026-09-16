@@ -90,6 +90,31 @@ export function spine(host, o) {
       root.append(svg("line", { class: "sp-grid", x1: x, y1: PAD_T - 2, x2: x, y2: h - PAD_B }));
     }
 
+    // price → y, interpolated between the window's strikes (rows descend), clamped to the ladder
+    const yOf = (price) => {
+      const n = window_.length;
+      if (price >= window_[0].strike) return PAD_T;
+      if (price <= window_[n - 1].strike) return PAD_T + n * ROW;
+      for (let i = 0; i < n - 1; i++) {
+        const a = window_[i].strike, b = window_[i + 1].strike;
+        if (price <= a && price >= b) {
+          const f = (a - price) / (a - b || 1);
+          return PAD_T + (i + 0.5) * ROW + f * ROW;
+        }
+      }
+      return PAD_T;
+    };
+    // zones: shaded price bands (the IV-wall brackets) behind the rows
+    for (const z of o.zones || []) {
+      if (!isNum(z.lo) || !isNum(z.hi)) continue;
+      const y1 = yOf(z.hi), y2 = yOf(z.lo);
+      if (y2 - y1 < 1) continue;
+      root.append(svg("rect", { class: "sp-zone", x: 0, y: y1, width: w, height: y2 - y1, "data-tip": `${z.label}\n${z.lo.toFixed(2)} \u2013 ${z.hi.toFixed(2)}` }));
+      root.append(svg("line", { class: "sp-zone-edge", x1: 0, y1: y1, x2: w, y2: y1 }));
+      root.append(svg("line", { class: "sp-zone-edge", x1: 0, y1: y2, x2: w, y2: y2 }));
+      if (z.label) root.append(svg("text", { class: "sp-zone-lbl", x: w - 3, y: y1 + 8, "text-anchor": "end", text: z.label, "pointer-events": "none" }));
+    }
+
     let spotDrawn = false;
     window_.forEach((r, i) => {
       const y = PAD_T + i * ROW, cy = y + ROW / 2, bh = Math.max(4, ROW - 6);

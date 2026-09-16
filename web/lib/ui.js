@@ -10,17 +10,26 @@ import { el, append } from "./util.js";
  * views did not all need touching when the kanji went.)
  */
 export function panel({ idx, title, tools, body, note, cls = "", flush = false }) {
-  const label = el("div.p-label", null, [
+  const key = String(idx || title).replace(/\s+/g, "-");
+  // layout controls: every panel can be moved and resized by the user; the label bar is the
+  // drag handle on a pointer, the arrows do the same on touch. app.js owns the persistence.
+  const lay = el("span.p-lay", null, [
+    el("button.p-laybtn", { type: "button", title: "move up", "data-lay": "up", text: "\u2191" }),
+    el("button.p-laybtn", { type: "button", title: "move down", "data-lay": "down", text: "\u2193" }),
+    el("button.p-laybtn", { type: "button", title: "toggle width", "data-lay": "width", text: "\u21d4" }),
+  ]);
+  const label = el("div.p-label", { draggable: "true" }, [
     el("span.p-label-l", null, [
       idx ? el("i.p-ix", { text: idx }) : null,
       el("span.p-title", { text: title, "data-decode": "" }),
     ]),
     el("i.p-line"),
     tools ? el("span.p-tools", null, tools) : null,
+    lay,
   ]);
   const inner = el(`div.p-body${flush ? ".flush" : ""}`);
   if (body) append(inner, body);
-  return el(`section.pnl${cls ? "." + cls.split(" ").join(".") : ""}`, null, [
+  return el(`section.pnl${cls ? "." + cls.split(" ").join(".") : ""}`, { "data-key": key }, [
     label,
     inner,
     note ? el("div.p-note", { text: note }) : null,

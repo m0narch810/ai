@@ -109,3 +109,12 @@ export function liveIvWalls(netIv, spot, nowMinutesEt) {
   }
   return null;
 }
+
+/** The two bracket bands as ladder zones: [{lo, hi, label}] — what every spine shades. */
+export function wallZones(w) {
+  if (!w) return [];
+  const z = [];
+  if (isNum(w.u_inner) && isNum(w.u_outer)) z.push({ lo: Math.min(w.u_inner, w.u_outer), hi: Math.max(w.u_inner, w.u_outer), label: "IV WALL \u25b2" });
+  if (isNum(w.l_inner) && isNum(w.l_outer)) z.push({ lo: Math.min(w.l_inner, w.l_outer), hi: Math.max(w.l_inner, w.l_outer), label: "IV WALL \u25bc" });
+  return z;
+}

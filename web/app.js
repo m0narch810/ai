@@ -79,11 +79,111 @@ function buildChrome() {
   });
   document.addEventListener("view:refresh", () => paintView());
 
-  // The rail compacts once the header has scrolled away.
+  // The rail compacts once the header has scrolled away. Scroll position with hysteresis, not
+  // an IntersectionObserver: compacting shrinks the rail, which moves the page, which used to
+  // flip the observer straight back — the flicker between the two rail states on some scrolls.
   const rail = $("#rail"), sentinel = $("#railSentinel");
-  if (rail && sentinel && "IntersectionObserver" in window) {
-    new IntersectionObserver(([e]) => rail.classList.toggle("compact", !e.isIntersecting), { threshold: 0 }).observe(sentinel);
+  if (rail && sentinel) {
+    let compact = false, raf = 0;
+    const check = () => {
+      raf = 0;
+      const y = window.scrollY, top = sentinel.offsetTop;
+      if (!compact && y > top + 28) { compact = true; rail.classList.add("compact"); }
+      else if (compact && y < top - 4) { compact = false; rail.classList.remove("compact"); }
+    };
+    window.addEventListener("scroll", () => { if (!raf) raf = requestAnimationFrame(check); }, { passive: true });
+    check();
   }
+
+  initLayoutControls();
+  $("#resetLayout")?.addEventListener("click", () => { resetLayout(S.view); paintView(); toast("layout reset for this tab"); });
+}
+
+/* ── layout: user-arranged panel order + width, per tab ─────────────────── */
+
+const LAY_KEY = (view) => `layout.v1.${view}`;
+const loadLayout = (view) => { try { return JSON.parse(localStorage.getItem(LAY_KEY(view)) || "null") || { order: [], half: {} }; } catch { return { order: [], half: {} }; } };
+const saveLayout = (view, lay) => { try { localStorage.setItem(LAY_KEY(view), JSON.stringify(lay)); } catch { /* optional */ } };
+const resetLayout = (view) => { try { localStorage.removeItem(LAY_KEY(view)); } catch { /* optional */ } };
+
+/** Read the current DOM order into the store (called after any user move). */
+function captureLayout(host) {
+  const lay = loadLayout(S.view);
+  lay.order = Array.from(host.children).map((c) => c.dataset.key).filter(Boolean);
+  saveLayout(S.view, lay);
+}
+
+/**
+ * Impose the saved order and width overrides on a freshly rendered view. Panels the store has
+ * never seen keep their default position relative to their neighbours (appended in default
+ * order after the known ones), so a new panel shows up without wiping the user's arrangement.
+ */
+function applyLayout(host) {
+  const lay = loadLayout(S.view);
+  const kids = Array.from(host.children);
+  if (lay.order?.length) {
+    const rank = new Map(lay.order.map((k, i) => [k, i]));
+    const known = kids.filter((c) => rank.has(c.dataset.key)).sort((a, b) => rank.get(a.dataset.key) - rank.get(b.dataset.key));
+    const fresh = kids.filter((c) => !rank.has(c.dataset.key));
+    host.replaceChildren(...known, ...fresh);
+  }
+  for (const c of host.children) {
+    const ov = lay.half?.[c.dataset.key];
+    if (ov === true) c.classList.add("half");
+    else if (ov === false) c.classList.remove("half");
+  }
+}
+
+function initLayoutControls() {
+  const host = $("#viewRoot");
+  if (!host) return;
+
+  // arrows + width toggle (work everywhere, including touch)
+  host.addEventListener("click", (e) => {
+    const btn = e.target.closest?.(".p-laybtn");
+    if (!btn) return;
+    const pnl = btn.closest(".pnl");
+    if (!pnl) return;
+    const act = btn.dataset.lay;
+    if (act === "up" && pnl.previousElementSibling) pnl.previousElementSibling.before(pnl);
+    else if (act === "down" && pnl.nextElementSibling) pnl.nextElementSibling.after(pnl);
+    else if (act === "width") {
+      const lay = loadLayout(S.view);
+      const now = pnl.classList.toggle("half");
+      lay.half = { ...(lay.half || {}), [pnl.dataset.key]: now };
+      saveLayout(S.view, lay);
+    }
+    captureLayout(host);
+    pnl.classList.add("moved");
+    setTimeout(() => pnl.classList.remove("moved"), 500);
+  });
+
+  // drag by the label bar (pointer devices)
+  let dragging = null;
+  host.addEventListener("dragstart", (e) => {
+    const label = e.target.closest?.(".p-label");
+    if (!label) { e.preventDefault(); return; }
+    dragging = label.closest(".pnl");
+    dragging.classList.add("dragging");
+    e.dataTransfer.effectAllowed = "move";
+    try { e.dataTransfer.setData("text/plain", dragging.dataset.key); } catch { /* firefox needs data set */ }
+  });
+  host.addEventListener("dragover", (e) => {
+    if (!dragging) return;
+    e.preventDefault();
+    const over = e.target.closest?.(".pnl");
+    if (!over || over === dragging) return;
+    const r = over.getBoundingClientRect();
+    const before = e.clientY < r.top + r.height / 2;
+    if (before) over.before(dragging); else over.after(dragging);
+  });
+  host.addEventListener("drop", (e) => { if (dragging) e.preventDefault(); });
+  host.addEventListener("dragend", () => {
+    if (!dragging) return;
+    dragging.classList.remove("dragging");
+    dragging = null;
+    captureLayout(host);
+  });
 }
 
 function setView(id) {
@@ -209,6 +309,7 @@ function paintView() {
     console.error("[view]", S.view, e);
     host.replaceChildren(el("div.chart-empty", { text: `render error: ${e?.message ?? e}` }));
   }
+  applyLayout(host);
   if (first) {
     Array.from(host.children).forEach((c, i) => c.style.setProperty("--i", String(i)));
     host.querySelectorAll(".statgrid").forEach((g) => Array.from(g.children).forEach((c, i) => c.style.setProperty("--i", String(i))));
