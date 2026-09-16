@@ -10,6 +10,7 @@ import { el } from "./util.js";
 
 let node = null;
 let current = null;
+let currentText = "";
 
 function ensure() {
   if (node) return node;
@@ -33,7 +34,8 @@ function show(target, x, y) {
   const text = target.getAttribute("data-tip");
   if (!text) return hide();
   const n = ensure();
-  if (current !== target) {
+  if (current !== target || currentText !== text) {
+    currentText = text;
     n.replaceChildren();
     text.split("\n").forEach((line, i) => {
       if (i) n.append(el("br"));

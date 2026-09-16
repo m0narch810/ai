@@ -138,6 +138,24 @@ function initLayoutControls() {
   const host = $("#viewRoot");
   if (!host) return;
 
+  /**
+   * FLIP: record where every panel is, mutate the DOM, then animate each one from its old spot
+   * to its new one. This is what makes the other panels visibly slide out of the way while a
+   * panel is being dragged, instead of teleporting.
+   */
+  const flip = (mutate) => {
+    const kids = Array.from(host.children);
+    const before = new Map(kids.map((k) => [k, k.getBoundingClientRect()]));
+    mutate();
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    for (const k of kids) {
+      const a = before.get(k), b = k.getBoundingClientRect();
+      const dx = a.left - b.left, dy = a.top - b.top;
+      if (Math.abs(dx) < 1 && Math.abs(dy) < 1) continue;
+      k.animate([{ transform: `translate(${dx}px, ${dy}px)` }, { transform: "none" }], { duration: 260, easing: "cubic-bezier(.2,.75,.2,1)" });
+    }
+  };
+
   // arrows + width toggle (work everywhere, including touch)
   host.addEventListener("click", (e) => {
     const btn = e.target.closest?.(".p-laybtn");
@@ -145,8 +163,8 @@ function initLayoutControls() {
     const pnl = btn.closest(".pnl");
     if (!pnl) return;
     const act = btn.dataset.lay;
-    if (act === "up" && pnl.previousElementSibling) pnl.previousElementSibling.before(pnl);
-    else if (act === "down" && pnl.nextElementSibling) pnl.nextElementSibling.after(pnl);
+    if (act === "up" && pnl.previousElementSibling) flip(() => pnl.previousElementSibling.before(pnl));
+    else if (act === "down" && pnl.nextElementSibling) flip(() => pnl.nextElementSibling.after(pnl));
     else if (act === "width") {
       const lay = loadLayout(S.view);
       const now = pnl.classList.toggle("half");
@@ -159,29 +177,45 @@ function initLayoutControls() {
   });
 
   // drag by the label bar (pointer devices)
-  let dragging = null;
+  let dragging = null, dragRaf = 0, lastOver = null;
   host.addEventListener("dragstart", (e) => {
     const label = e.target.closest?.(".p-label");
     if (!label) { e.preventDefault(); return; }
     dragging = label.closest(".pnl");
     dragging.classList.add("dragging");
     e.dataTransfer.effectAllowed = "move";
-    try { e.dataTransfer.setData("text/plain", dragging.dataset.key); } catch { /* firefox needs data set */ }
+    try {
+      e.dataTransfer.setData("text/plain", dragging.dataset.key);
+      // ghost = the whole panel, not just its title bar
+      e.dataTransfer.setDragImage(dragging, Math.min(160, e.offsetX), 14);
+    } catch { /* firefox needs data set; setDragImage is best-effort */ }
   });
   host.addEventListener("dragover", (e) => {
     if (!dragging) return;
     e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
     const over = e.target.closest?.(".pnl");
     if (!over || over === dragging) return;
-    const r = over.getBoundingClientRect();
-    const before = e.clientY < r.top + r.height / 2;
-    if (before) over.before(dragging); else over.after(dragging);
+    const y = e.clientY;
+    if (dragRaf) return;
+    dragRaf = requestAnimationFrame(() => {
+      dragRaf = 0;
+      const r = over.getBoundingClientRect();
+      const before = y < r.top + r.height / 2;
+      // Already in the requested slot → nothing to do. This is the stutter fix: moving the
+      // dragged panel changes the layout under the cursor, and without this check a tall
+      // neighbour flip-flopped the dragged panel above and below itself every frame.
+      if (before && over.previousElementSibling === dragging) return;
+      if (!before && over.nextElementSibling === dragging) return;
+      lastOver = over;
+      flip(() => (before ? over.before(dragging) : over.after(dragging)));
+    });
   });
   host.addEventListener("drop", (e) => { if (dragging) e.preventDefault(); });
   host.addEventListener("dragend", () => {
     if (!dragging) return;
     dragging.classList.remove("dragging");
-    dragging = null;
+    dragging = null; lastOver = null;
     captureLayout(host);
   });
 }

@@ -8,9 +8,10 @@
 
 import { el, isNum, fmt, compactSigned, strikeLabel } from "../util.js";
 import { panel, tag, statGrid, nodata } from "../ui.js";
-import { smile, lineChart, bars, cone, matrix, stat, emptyPanel, surface3d, heatSurface } from "../draw.js";
+import { smile, lineChart, bars, cone, matrix, stat, emptyPanel, heatSurface } from "../draw.js";
 import { smileCurves } from "../data.js";
 import { findIvAnomalies } from "../ivanom.js";
+import { mountTopo } from "../topo.js";
 import { asciiBar } from "../util.js";
 
 export const ID = "vol";
@@ -132,8 +133,27 @@ function surfacePanel(ivSurface, anom, ctx, idx = "V1") {
 
   const ridgeHost = el("div.chart-host");
   const heatHost = el("div.chart-host");
+  // terrain: rows = expiries nearest first, cols = strikes (moneyness × spot), height = IV
+  const byDte = [...curves].sort((a, b) => (a.dte ?? 0) - (b.dte ?? 0));
+  const strikes = s.moneyness.map((m) => (isNum(spot) ? +(m * spot).toFixed(1) : m));
+  const topoMarks = marks.map((m) => ({
+    x: isNum(spot) ? m.m * spot : m.m,
+    row: byDte.findIndex((c) => c.dteIdx === m.dteIdx),
+    label: m.cheap ? "CHEAP" : "RICH",
+    tone: m.cheap ? "hot" : "cool",
+  })).filter((m) => m.row >= 0).slice(0, 6);
   queueMicrotask(() => {
-    surface3d(ridgeHost, { moneyness: s.moneyness, curves, marks, spot });
+    mountTopo(ridgeHost, {
+      cols: strikes,
+      rows: byDte.map((c) => c.iv.map((v) => (isNum(v) ? v * 100 : 0))),
+      rowLabels: byDte.map((c) => c.label),
+      colLabel: (k) => (isNum(spot) ? `${k} (${((k / spot) * 100).toFixed(0)}%)` : String(k)),
+      spot,
+      marks: topoMarks,
+      mode: "mag",
+      fmtVal: (v) => `${v.toFixed(1)}%`,
+      height: 360,
+    });
     heatSurface(heatHost, { moneyness: s.moneyness, curves, marks, spot });
   });
 
@@ -141,7 +161,7 @@ function surfacePanel(ivSurface, anom, ctx, idx = "V1") {
     idx, title: "IV SURFACE",
     tools: [tag(isNum(s.atm) ? `ATM ${(s.atm * 100).toFixed(2)}%` : "", "mute"), tag(`${marks.length} MARKED`, marks.length ? "cool" : "mute")],
     body: [
-      el("div.twin-lbl", { text: "SURFACE \u00b7 moneyness across, expiry into the page, IV up" }),
+      el("div.twin-lbl", { text: "TERRAIN \u00b7 strikes across, expiries into the page, IV as height \u00b7 drag to rotate, scroll to zoom, double-click to reset" }),
       ridgeHost,
       el("div.twin-lbl", { text: "GRID · expiry × moneyness, lit by IV level" }),
       heatHost,

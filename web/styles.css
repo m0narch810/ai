@@ -986,6 +986,13 @@ body { min-height: 100dvh; overflow-x: hidden; }
   width: 18px; height: 18px; cursor: pointer; padding: 0; transition: color .12s var(--ease), border-color .12s var(--ease);
 }
 .p-laybtn:hover { color: var(--acc); border-color: var(--acc-line); }
-.pnl.dragging { opacity: .35; outline: 1px dashed var(--acc-line); }
+.pnl.dragging { opacity: .5; outline: 1px dashed var(--acc-line); outline-offset: 2px; }
 .pnl.moved { animation: flashbg 1s var(--ease) both; }
 .foot .kbtn { padding: 2px 2px; font-size: 9px; }
+
+/* ── TOPO (rotating terrain) ────────────────────────────────────────────── */
+.topo-wrap { position: relative; width: 100%; overflow: hidden; }
+.topo-canvas { position: absolute; inset: 0; width: 100%; height: 100%; cursor: grab; touch-action: none; user-select: none; }
+.topo-canvas:active { cursor: grabbing; }
+.topo-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 9.5px; letter-spacing: .1em; }
+.topo-read { color: var(--ink); min-height: 1em; text-transform: uppercase; }
