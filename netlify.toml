@@ -28,6 +28,12 @@
 [functions."regime-cron"]
   schedule = "*/15 * * * *"
 
+# YYY cache warmer: every 5 min in the extended US session it refreshes every proxy endpoint
+# into the shared "yyy-cache" Blobs store, so a cold page load answers from a blob a few
+# minutes old instead of waiting 10–15s on the slowest upstream route. See yyy-warm.mjs.
+[functions."yyy-warm"]
+  schedule = "*/5 * * * *"
+
 # News watchdog: every 15 min it checks today's USD high-impact ("red folder") economic
 # calendar (NFP, CPI, FOMC, etc.) and pushes an ntfy alert ~20 min ahead of each release, plus
 # one morning digest of the day's times. Self-gates to 06:00-16:00 ET Mon-Fri. Reuses

@@ -81,22 +81,22 @@ async function getJson(url, { timeout = 25_000 } = {}) {
  * @param {string[]} eps  endpoint names from the proxy allowlist
  * @returns {Promise<{ok: Record<string,any>, err: Record<string,string>, at: string}>}
  */
-export async function yyy(eps, { ticker = "QQQ" } = {}) {
+export async function yyy(eps, { ticker = "QQQ", onPart } = {}) {
   const list = [...new Set(eps)].filter(Boolean);
   if (!list.length) return { ok: {}, err: {}, at: new Date().toISOString() };
 
-  // The proxy caps a batch at 20; chunk so callers never have to think about it.
-  const chunks = [];
-  for (let i = 0; i < list.length; i += 16) chunks.push(list.slice(i, i + 16));
-
+  const chunks = planBatches(list);
   const parts = await Promise.all(chunks.map(async (chunk) => {
+    let part;
     try {
-      return await getJson(`${URLS.yyy}?ticker=${encodeURIComponent(ticker)}&ep=${chunk.join(",")}`);
+      part = await getJson(`${URLS.yyy}?ticker=${encodeURIComponent(ticker)}&ep=${chunk.join(",")}`);
     } catch (e) {
-      // Whole-chunk failure (offline, function cold-start timeout): report it per endpoint so
-      // the UI shows "no data" on those panels rather than silently keeping the last paint.
-      return { ok: {}, err: Object.fromEntries(chunk.map((c) => [c, String(e?.message ?? e)])), at: null };
+      // Whole-batch failure (offline, cold-start timeout): report it per endpoint so the UI
+      // shows a real error on those panels rather than a skeleton forever.
+      part = { ok: {}, err: Object.fromEntries(chunk.map((c) => [c, String(e?.message ?? e)])), at: null };
     }
+    if (part) onPart?.(part, chunk);
+    return part;
   }));
 
   const ok = {}, err = {};
@@ -106,6 +106,45 @@ export async function yyy(eps, { ticker = "QQQ" } = {}) {
     Object.assign(err, p.err || {});
   }
   return { ok, err, at: new Date().toISOString() };
+}
+
+/**
+ * Endpoints that are slow or heavy upstream. Each gets its own request so it can never hold
+ * the small, fast ones hostage — one batch of twelve used to return only when the slowest
+ * (probability, ~15s cold) did, which is why the whole page used to flash in at once.
+ */
+const HEAVY = new Set(["iv_surface", "probability", "bias", "hurst", "flow", "chart", "history"]);
+const BATCH = 4;
+
+function planBatches(list) {
+  const heavy = list.filter((e) => HEAVY.has(e));
+  const light = list.filter((e) => !HEAVY.has(e));
+  const out = [];
+  for (let i = 0; i < light.length; i += BATCH) out.push(light.slice(i, i + BATCH));
+  for (const h of heavy) out.push([h]);
+  return out;
+}
+
+/* ── LOCAL SNAPSHOT ──────────────────────────────────────────────────────── */
+
+const SNAP_KEY = "yyy.snapshot.v1";
+
+/**
+ * The last good frame, so a return visit paints instantly (stamped with its age) instead of
+ * staring at skeletons until the proxy answers. ~400KB across all thirty endpoints; well
+ * inside the storage budget, and quota errors are swallowed because the cache is optional.
+ */
+export function saveSnapshot(ok) {
+  try { localStorage.setItem(SNAP_KEY, JSON.stringify({ at: Date.now(), ok })); }
+  catch { /* quota / private mode — the live path still works */ }
+}
+
+export function loadSnapshot(maxAgeMs = 6 * 60 * 60_000) {
+  try {
+    const j = JSON.parse(localStorage.getItem(SNAP_KEY) || "null");
+    if (!j || typeof j.at !== "number" || !j.ok || Date.now() - j.at > maxAgeMs) return null;
+    return j;
+  } catch { return null; }
 }
 
 /* ── LIVE: spot ──────────────────────────────────────────────────────────── */

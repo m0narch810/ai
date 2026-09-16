@@ -6,7 +6,7 @@
 // rather than quietly presented as this morning's call.
 
 import { el, isNum, fmt, agoText, msAgo, strikeLabel, etNow } from "../util.js";
-import { panel, tag, statGrid, nodata, rule } from "../ui.js";
+import { panel, tag, statGrid, nodata, rule, skeleton } from "../ui.js";
 import { stat } from "../draw.js";
 
 export const ID = "narrative";
@@ -25,7 +25,7 @@ export function render(host, ctx) {
   if (!n) {
     host.replaceChildren(panel({
       idx: "N0", title: "PRE-OPEN BRIEF", jp: JP,
-      body: nodata("NO BRIEF PUBLISHED — generates before the open, or run `npm run narrative`"),
+      body: ctx.deskPending ? skeleton("rows", 5) : nodata("NO BRIEF PUBLISHED — generates before the open, or run `npm run narrative`"),
     }));
     return;
   }
@@ -129,7 +129,7 @@ function zonePanel(n, spot) {
   if (!zones.length) return null;
 
   return panel({
-    idx: "N2", title: "REVERSAL ZONES", jp: "反転",
+    idx: "N2", title: "REVERSAL ZONES", jp: "反転", cls: "half",
     body: el("div.nzones", null, zones.map((z) => {
       const d = isNum(spot) ? z.price - spot : NaN;
       return el(`div.nzone.is-${z.side === "support" ? "sup" : "res"}`, null, [
@@ -155,7 +155,7 @@ function levelPanel(n, spot) {
   if (!rows.length) return null;
 
   return panel({
-    idx: "N3", title: "LEVELS AT THE BRIEF", jp: "水準", cls: "p-quiet",
+    idx: "N3", title: "LEVELS AT THE BRIEF", jp: "水準", cls: "p-quiet half",
     body: el("div.nglv", null, [
       ...rows.map(([k, v]) => el("div.ngl-row", null, [
         el("span.ngl-k", { text: k }),

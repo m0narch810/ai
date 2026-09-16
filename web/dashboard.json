@@ -1,9 +1,9 @@
 {
-  "as_of": "2026-09-15T20:45:00",
-  "scored_at": 1789519513321,
-  "generated_at": "2026-09-16T00:45:13.330Z",
+  "as_of": "2026-09-15T21:30:00",
+  "scored_at": 1789522211064,
+  "generated_at": "2026-09-16T01:33:18.535Z",
   "session": "Asia",
-  "spot": 705.1050087040678,
+  "spot": 705.189317552376,
   "regime": "negative",
   "read": "Rule-based alignment read: resistance $709.00 (aligned significant), support $700.00 (mixed dominant). Negative gamma — bar raised to aligned dominant structure. VIX settlement tomorrow — vol unwind chop likely.",
   "hard_stop_pts": 0.9828009828009827,

@@ -12,7 +12,7 @@
 //   G3  TENOR      — the selected greek, strike × expiry, 0DTE first.
 
 import { el, isNum, compact, compactSigned, strikeLabel, asciiSpine, asciiSpark, sum, nearestBy } from "../util.js";
-import { panel, tag, segmented, nodata, rule } from "../ui.js";
+import { panel, tag, segmented, nodata, rule, skeleton } from "../ui.js";
 import { spine, termMatrix, matrix, stat } from "../draw.js";
 import { GREEKS, GREEK_BY_KEY, greek, termGrid, levelMarks, boardMarks } from "../data.js";
 
@@ -35,9 +35,12 @@ export function render(host, ctx) {
   const live = all.filter((a) => a.chain.ok);
 
   if (!live.length) {
+    // `err` is an object even before the first fetch — only a populated one is a failure.
+    const inflight = GREEKS.some((g) => ctx.pending?.has(g.key));
+    const failed = Object.values(err || {})[0];
     host.replaceChildren(panel({
       idx: "G0", title: "GREEK BOOK", jp: JP,
-      body: nodata(err ? `UPSTREAM: ${Object.values(err)[0] ?? "unreachable"}` : "NO GREEK DATA"),
+      body: inflight ? skeleton("rows", 9) : nodata(failed ? `UPSTREAM: ${failed}` : "NO GREEK DATA"),
     }));
     return;
   }

@@ -19,8 +19,8 @@ export const EPS = ["iv_surface", "net_iv", "expected_move", "probability", "vol
 export function render(host, ctx) {
   const { ok, err } = ctx.yyy;
   host.replaceChildren(
-    statePanel(ok),
-    smilePanel(ok.iv_surface, err),
+    statePanel(ok, ctx),
+    smilePanel(ok.iv_surface, err, ctx),
     termPanel(ok.net_iv),
     ivGridPanel(ok.net_iv, ctx.spot),
     conePanel(ok.probability, ctx.spot),
@@ -31,9 +31,9 @@ export function render(host, ctx) {
 
 /* ── V0 STATE ────────────────────────────────────────────────────────────── */
 
-function statePanel(ok) {
+function statePanel(ok, ctx) {
   const em = ok.expected_move, fl = ok.flow, vf = ok.vol_forecast, z = ok.zero_dte;
-  if (!em && !fl && !vf) return panel({ idx: "V0", title: "VOL STATE", jp: JP, body: nodata("NO VOL FEED") });
+  if (!em && !fl && !vf) return panel({ idx: "V0", title: "VOL STATE", jp: JP, body: ctx.wait("expected_move", "stats", 6) || ctx.wait("flow", "stats", 6) || nodata("NO VOL FEED") });
 
   const cells = [
     stat("ATM IV", isNum(em?.atm_iv) ? `${em.atm_iv.toFixed(2)}%` : "—", { sub: isNum(em?.iv_percentile) ? `${em.iv_percentile.toFixed(0)}th percentile` : null }),
@@ -65,12 +65,12 @@ function statePanel(ok) {
 
 /* ── V1 SMILE ────────────────────────────────────────────────────────────── */
 
-function smilePanel(ivSurface, err) {
+function smilePanel(ivSurface, err, ctx) {
   const s = smileCurves(ivSurface);
   if (!s) {
     return panel({
-      idx: "V1", title: "IV SMILE", jp: "スマイル",
-      body: nodata(err?.iv_surface ? `iv_surface: ${err.iv_surface}` : "NO IV SURFACE"),
+      idx: "V1", title: "IV SMILE", jp: "スマイル", cls: "half",
+      body: ctx.wait("iv_surface", "chart") || nodata(err?.iv_surface ? `iv_surface: ${err.iv_surface}` : "NO IV SURFACE"),
     });
   }
 
@@ -84,7 +84,7 @@ function smilePanel(ivSurface, err) {
   })));
 
   return panel({
-    idx: "V1", title: "IV SMILE", jp: "スマイル",
+    idx: "V1", title: "IV SMILE", jp: "スマイル", cls: "half",
     tools: [tag(isNum(s.atm) ? `ATM ${(s.atm * 100).toFixed(2)}%` : "", "mute")],
     body: [host, legend],
     note: "one curve per expiry, nearest in solid · a steep left wing is paid downside protection; a lifted right wing is call demand",
@@ -128,7 +128,7 @@ function termPanel(nv) {
     : null;
 
   return panel({
-    idx: "V2", title: "TERM STRUCTURE · SKEW", jp: "期間構造",
+    idx: "V2", title: "TERM STRUCTURE · SKEW", jp: "期間構造", cls: "half",
     tools: shape ? [tag(shape, shape === "BACKWARDATION" ? "hot" : "cool")] : null,
     body: el("div.twin", null, [
       el("div.twin-cell", null, [el("div.twin-lbl", { text: "ATM IV BY EXPIRY" }), termHost]),
@@ -218,7 +218,7 @@ function conePanel(p, spot) {
   ]);
 
   return panel({
-    idx: "V4", title: "FORWARD CONE", jp: "確率",
+    idx: "V4", title: "FORWARD CONE", jp: "確率", cls: "half",
     tools: [tag(`σ ${fmt(p.sigma_daily_pct, 2)}%/d`, "mute")],
     body: [host, tbl],
     note: `drift ${fmt(p.mu_daily_pct, 3)}%/day, fitted on ${p.n_days ?? "—"} sessions`,
@@ -248,7 +248,7 @@ function distPanel(p) {
   ];
 
   return panel({
-    idx: "V5", title: "RETURN DISTRIBUTION", jp: "分布",
+    idx: "V5", title: "RETURN DISTRIBUTION", jp: "分布", cls: "half",
     body: [host, statGrid(cells)],
     note: `${p.n_days ?? "—"} daily returns · the marker is zero`,
   });

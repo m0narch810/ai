@@ -21,7 +21,7 @@ export const EPS = ["flux", "bias", "hurst", "history", "macro", "macro_extended
 export function render(host, ctx) {
   const { ok, err } = ctx.yyy;
   host.replaceChildren(
-    statePanel(ok.flux, ok.bias, ok.levels, err),
+    statePanel(ok.flux, ok.bias, ok.levels, err, ctx),
     factorPanel(ok.flux),
     votePanel(ok.bias),
     hurstPanel(ok.hurst),
@@ -34,9 +34,9 @@ export function render(host, ctx) {
 
 /* ── R0 STATE ────────────────────────────────────────────────────────────── */
 
-function statePanel(flux, bias, lvls, err) {
+function statePanel(flux, bias, lvls, err, ctx) {
   if (!flux && !bias) {
-    return panel({ idx: "R0", title: "STATE", jp: JP, body: nodata(err?.flux ? `flux: ${err.flux}` : "NO REGIME FEED") });
+    return panel({ idx: "R0", title: "STATE", jp: JP, body: ctx.wait("flux", "stats", 4) || ctx.wait("bias", "stats", 4) || nodata(err?.flux ? `flux: ${err.flux}` : "NO REGIME FEED") });
   }
   const b = bias?.bias;
   const killed = flux?.killed || b?.killed;
@@ -84,7 +84,7 @@ function factorPanel(flux) {
       note: x.description || "",
     });
   });
-  return panel({ idx: "R1", title: "FLUX FACTORS", jp: "要因", body: el("div.meters", null, items) });
+  return panel({ idx: "R1", title: "FLUX FACTORS", jp: "要因", cls: "half", body: el("div.meters", null, items) });
 }
 
 /* ── R2 BIAS VOTES ───────────────────────────────────────────────────────── */
@@ -97,7 +97,7 @@ function votePanel(bias) {
   const scale = Math.max(1, ...entries.map(([, val]) => Math.abs(val)));
 
   return panel({
-    idx: "R2", title: "BIAS VOTES", jp: "票",
+    idx: "R2", title: "BIAS VOTES", jp: "票", cls: "half",
     tools: [tag(isNum(bias.bias.score) ? `SCORE ${bias.bias.score.toFixed(3)}` : "", "mute")],
     body: el("div.meters", null, entries
       .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))
@@ -136,7 +136,7 @@ function hurstPanel(h) {
 
   const cur = h.current_h64;
   return panel({
-    idx: "R3", title: "HURST · H64", jp: "記憶",
+    idx: "R3", title: "HURST · H64", jp: "記憶", cls: "half",
     tools: [tag(h.current_regime || "—", cur > 0.55 ? "cool" : cur < 0.45 ? "hot" : "mute")],
     body: [host, el("div.hnote", { text: `current ${fmt(cur, 4)} · above 0.55 trends and continuation is favoured, below 0.45 mean-reverts and fades are favoured` })],
   });
@@ -203,7 +203,7 @@ function deskVolPanel(reg) {
   const old = Number.isFinite(age) && age > 60 * 60_000;
 
   return panel({
-    idx: "R5", title: "VOL ENGINE", jp: "分析", cls: old ? "p-desk is-old" : "p-desk",
+    idx: "R5", title: "VOL ENGINE", jp: "分析", cls: old ? "p-desk half is-old" : "p-desk half",
     tools: [tag(reg.state || "—", "mute"), tag(agoText(reg.scored_at).toUpperCase(), old ? "warn" : "pos")],
     body: [
       reg.read ? el("p.reg-narr", { text: reg.read }) : null,
@@ -314,7 +314,7 @@ function macroPanel(m, mx) {
     .map((t) => el("li", { text: t }));
 
   return panel({
-    idx: "R7", title: "MACRO · YYY", jp: "宏観",
+    idx: "R7", title: "MACRO · YYY", jp: "宏観", cls: "half",
     tools: m?.auctions?.warning ? [tag("AUCTION AHEAD", "warn")] : null,
     body: [
       statGrid(cells),

@@ -1,18 +1,26 @@
-// YYY terminal proxy — the single cloud data path for the redesigned front end.
+// YYY terminal proxy — the single cloud data path for the front end.
 //
-// WHY THIS EXISTS: the scoring PC is almost never on any more (school), so a board that only
-// renders `dashboard.json` shows a frozen snapshot for days at a time. YYY is public and
-// unauthenticated at the source, so the browser can have the WHOLE options-flow surface live
-// with the box off — it just can't call YYY directly (no CORS headers, and we don't want the
-// upstream URL sitting in client JS). This function is that bridge: one authed request fans out
-// to N YYY endpoints in parallel and returns them merged.
+// WHY THIS EXISTS: the scoring PC is almost never on any more, so a board that only renders
+// `dashboard.json` shows a frozen snapshot for days at a time. YYY is public and unauthenticated
+// at the source, so the browser can have the WHOLE options-flow surface live with the box off —
+// it just can't call YYY directly (no CORS headers, and the upstream URL stays out of client JS).
 //
 //   GET /.netlify/functions/yyy?ep=gex,dex,charm&ticker=QQQ
-//   → { at, ticker, ok: { gex: {...}, dex: {...} }, err: { charm: "timeout" } }
+//   → { at, ticker, ok: { gex: {...}, dex: {...} }, err: { charm: "timeout" }, meta: { gex: {src, age} } }
 //
 // Endpoints are ALLOWLISTED (EP map below) — the client picks names, never URLs.
+//
+// CACHE (added 2026-09-16, the load-time fix): three layers, cheapest first.
+//   1. per-container memo (20s) — same lambda, back-to-back requests.
+//   2. Netlify Blobs "yyy-cache" (75s) — SHARED across every lambda instance and every viewer,
+//      and kept warm during market hours by yyy-warm.mjs. This is what makes a cold page load
+//      answer in well under a second instead of waiting on a 10–15s upstream route.
+//   3. upstream YYY — on a miss, or when the blob is older than the TTL. A successful fetch
+//      refreshes the blob. If upstream fails and a blob exists (up to 30 min old), the stale
+//      blob is served with `meta.src = "stale"` so a wobble upstream never blanks the terminal.
 // Env: YYY_BASE_URL (same var capture.mjs uses).
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { getStore } from "@netlify/blobs";
 
 const BASE = () => (process.env.YYY_BASE_URL || "https://web-production-8a6973.up.railway.app").replace(/\/$/, "");
 
@@ -33,10 +41,10 @@ function verifyToken(authHeader) {
  * Allowlist: name → path builder. `t` is the ticker.
  * Anything not in here is rejected, so the client can never point this at an arbitrary URL.
  */
-const EP = {
+export const EP = {
   // ── per-strike greeks. All nine share one shape: {spot, total, call_total, put_total,
   //    expiries[8], rows[{strike, call_cells[8], put_cells[8], total}]} — which is exactly what
-  //    the spine charts consume. /gex and /theta are the two that deviate (see below).
+  //    the spine charts consume. /gex and /theta are the two that deviate.
   gex:        (t) => `/gex?ticker=${t}`,
   dex:        (t) => `/dex?ticker=${t}`,
   charm:      (t) => `/charm?ticker=${t}`,
@@ -83,8 +91,6 @@ const EP = {
  */
 const SLIM = {
   probability: (d) => { const { heatmap, normal_fit_x, normal_fit_y, ...rest } = d; return rest; },
-  // iv_surface: keep the moneyness×dte grid (that's the smile we draw) and the raw points, but
-  // drop points far out of the wings — 0.80–1.20 moneyness is the whole tradable smile.
   iv_surface: (d) => ({
     ...d,
     points: Array.isArray(d.points)
@@ -93,17 +99,23 @@ const SLIM = {
   }),
 };
 
-// Per-container memo. YYY recomputes on its own cadence and several clients poll the same
-// endpoints from different tabs; 20s of reuse keeps the upstream quiet without ever showing
-// a print that's meaningfully behind.
-const TTL_MS = 20_000;
+const MEMO_MS  = 20_000;
+const BLOB_MS  = 75_000;
+const STALE_MS = 30 * 60_000;
 const memo = new Map();
 
-async function pull(name, ticker) {
-  const key = `${name}:${ticker}`;
-  const hit = memo.get(key);
-  if (hit && Date.now() - hit.at < TTL_MS) return hit.val;
+let _store = undefined;
+/** Blobs handle, or null when the store is unavailable (local dev, missing context). */
+function blobs() {
+  if (_store !== undefined) return _store;
+  try { _store = getStore("yyy-cache"); } catch { _store = null; }
+  return _store;
+}
 
+export const cacheKey = (name, ticker) => `${ticker}/${name}`;
+
+/** Straight to YYY, trimmed. Exported so the warmer uses exactly the same fetch. */
+export async function fetchUpstream(name, ticker) {
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), 22_000);
   try {
@@ -111,10 +123,39 @@ async function pull(name, ticker) {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     let data = await res.json();
     if (SLIM[name]) data = SLIM[name](data);
-    memo.set(key, { at: Date.now(), val: data });
     return data;
   } finally {
     clearTimeout(timer);
+  }
+}
+
+async function pull(name, ticker) {
+  const key = cacheKey(name, ticker);
+  const now = Date.now();
+
+  const m = memo.get(key);
+  if (m && now - m.at < MEMO_MS) return { val: m.val, src: "memo", age: now - m.at };
+
+  const store = blobs();
+  let blob = null;
+  if (store) {
+    try { blob = await store.get(key, { type: "json" }); } catch { blob = null; }
+    if (blob && typeof blob.at === "number" && now - blob.at < BLOB_MS) {
+      memo.set(key, { at: blob.at, val: blob.val });
+      return { val: blob.val, src: "blob", age: now - blob.at };
+    }
+  }
+
+  try {
+    const val = await fetchUpstream(name, ticker);
+    memo.set(key, { at: now, val });
+    if (store) store.setJSON(key, { at: now, val }).catch(() => {});
+    return { val, src: "live", age: 0 };
+  } catch (e) {
+    if (blob && typeof blob.at === "number" && now - blob.at < STALE_MS) {
+      return { val: blob.val, src: "stale", age: now - blob.at };
+    }
+    throw e;
   }
 }
 
@@ -140,11 +181,16 @@ export default async function handler(req) {
   if (!want.length) return json({ error: "no valid ep= given", available: Object.keys(EP) }, 400);
   if (want.length > 20) return json({ error: "too many endpoints in one call (max 20)" }, 400);
 
-  const ok = {}, err = {};
+  const ok = {}, err = {}, meta = {};
   await Promise.all(want.map(async (name) => {
-    try { ok[name] = await pull(name, ticker); }
-    catch (e) { err[name] = e?.name === "AbortError" ? "timeout" : String(e?.message ?? e).slice(0, 160); }
+    try {
+      const r = await pull(name, ticker);
+      ok[name] = r.val;
+      meta[name] = { src: r.src, age: r.age };
+    } catch (e) {
+      err[name] = e?.name === "AbortError" ? "timeout" : String(e?.message ?? e).slice(0, 160);
+    }
   }));
 
-  return json({ at: new Date().toISOString(), ticker, ok, err });
+  return json({ at: new Date().toISOString(), ticker, ok, err, meta });
 }

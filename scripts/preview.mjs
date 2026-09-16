@@ -129,6 +129,7 @@ document.getElementById("refresh").onclick = () => location.reload();
 const f = await (await fetch("/__fixture.json")).json();
 const ctx = {
   yyy: { ok: f.yyy, err: {}, at: Date.now() },
+  pending: new Set(), wait: () => null, deskPending: false,
   spot: f.spot, spotMeta: { source: "QQQ", session: "PREVIEW" },
   desk: f.desk ? { board: f.desk, source: "desk", at: (f.desk.scored_at || Date.now()) } : null,
   narrative: f.narrative, regime: f.regime, macro: f.macro,

@@ -26,7 +26,7 @@ const signedRows = (list, key) => (list || [])
 export function render(host, ctx) {
   const { ok, err } = ctx.yyy;
   host.replaceChildren(
-    dealerPanel(ok.dealer_delta, ctx.spot, err),
+    dealerPanel(ok.dealer_delta, ctx.spot, err, ctx),
     anomalyPanel(ok.dealer_anomalies),
     dexPanel(ok.dex_ladder, ctx.spot),
     expiryPanel(ok.option_matrix),
@@ -37,9 +37,9 @@ export function render(host, ctx) {
 
 /* ── F0 DEALER INVENTORY ─────────────────────────────────────────────────── */
 
-function dealerPanel(dd, spot, err) {
+function dealerPanel(dd, spot, err, ctx) {
   if (!dd || dd.error) {
-    return panel({ idx: "F0", title: "DEALER INVENTORY", jp: "在庫", body: nodata(err?.dealer_delta ? `dealer_delta: ${err.dealer_delta}` : "NO DEALER DATA") });
+    return panel({ idx: "F0", title: "DEALER INVENTORY", jp: "在庫", body: ctx.wait("dealer_delta", "rows", 10) || nodata(err?.dealer_delta ? `dealer_delta: ${err.dealer_delta}` : "NO DEALER DATA") });
   }
 
   const long = dd.dealer_lean === "long";
@@ -103,7 +103,7 @@ function anomalyPanel(da) {
   const total = (da.buy_count ?? 0) + (da.sell_count ?? 0);
 
   return panel({
-    idx: "F1", title: "BAR PRESSURE", jp: "偏り",
+    idx: "F1", title: "BAR PRESSURE", jp: "偏り", cls: "half",
     tools: [tag(da.imbalance || "—", da.imbalance === "BALANCED" ? "mute" : bal > 0 ? "cool" : "hot")],
     body: [
       el("div.dealer-bal", null, [
@@ -140,7 +140,7 @@ function dexPanel(dl, spot) {
   queueMicrotask(() => spine(host, { rows, spot, maxRows: 30, fmtVal: (n) => compact(n, 2) }));
 
   return panel({
-    idx: "F2", title: "DELTA LADDER", jp: "デルタ", body: host, flush: true,
+    idx: "F2", title: "DELTA LADDER", jp: "デルタ", cls: "half", body: host, flush: true,
     note: "per-strike call and put delta exposure · the strike where net delta changes sign is where hedging flips direction",
   });
 }
@@ -230,7 +230,7 @@ function crossPanel(sc) {
   ]));
 
   return panel({
-    idx: "F4", title: "CROSS ASSET", jp: "市場",
+    idx: "F4", title: "CROSS ASSET", jp: "市場", cls: "half",
     tools: [tag(`${list.length} SYMBOLS`, "mute")],
     body: el("div.xa", null, groups),
     note: "1-day move (bar) and 5-day move (right column)",
@@ -241,7 +241,7 @@ function crossPanel(sc) {
 
 function notePanel() {
   return panel({
-    idx: "F5", title: "FEED LIMITS", jp: "欠損", cls: "p-quiet",
+    idx: "F5", title: "FEED LIMITS", jp: "欠損", cls: "p-quiet half",
     body: el("ul.limits", null, [
       el("li", { text: "No traded order-flow delta. YYY has no tape feed; /chart is OHLCV and /dex is open-interest derived. Nothing on this page confirms absorption or initiative." }),
       el("li", { text: "Tenor depth stops at the eight front expiries, so anything past ~15 days is structurally absent rather than zero." }),

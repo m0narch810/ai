@@ -150,20 +150,20 @@ export function spine(host, o) {
         x: colStrike, y: cy + 3.5, "text-anchor": "end", text: strikeLabel(r.strike),
       }));
 
-      // put bar — grows left
+      // put bar — grows left (the CSS animation scales it out from the spine)
       if (isNum(r.put) && r.put !== 0) {
         const len = shape(r.put / scaleMax) * half;
         root.append(svg("rect", {
-          class: `sp-bar ${signClass(r.put)}`,
-          x: mid - len, y: cy - bh / 2, width: len, height: bh,
+          class: `sp-bar l ${signClass(r.put)}`, style: `--i:${i}`,
+          x: mid - len, y: cy - bh / 2, width: len, height: bh, rx: 1.5,
         }));
       }
       // call bar — grows right
       if (isNum(r.call) && r.call !== 0) {
         const len = shape(r.call / scaleMax) * half;
         root.append(svg("rect", {
-          class: `sp-bar ${signClass(r.call)}`,
-          x: mid, y: cy - bh / 2, width: len, height: bh,
+          class: `sp-bar r ${signClass(r.call)}`, style: `--i:${i}`,
+          x: mid, y: cy - bh / 2, width: len, height: bh, rx: 1.5,
         }));
       }
 
@@ -421,7 +421,7 @@ export function bars(host, o) {
       const y = v >= 0 ? Y(v) : zero;
       const bh = Math.max(0.6, Math.abs(Y(v) - zero));
       const cls = o.tones?.[i] ?? signClass(v);
-      root.append(svg("rect", { class: `bc-bar ${cls}`, x, y, width: bw, height: bh }));
+      root.append(svg("rect", { class: `bc-bar ${cls}`, style: `--i:${i}`, x, y, width: bw, height: bh, rx: 1 }));
     });
 
     if (o.mark !== undefined && isNum(o.mark)) {
@@ -651,4 +651,36 @@ export function stat(label, value, { sub, tone = "", jp } = {}) {
     el("div", { class: `stat-val ${tone}`, text: value ?? "—" }),
     sub ? el("div.stat-sub", { text: sub }) : null,
   ]);
+}
+
+/* ── SPARK: the hero rail's session line ─────────────────────────────────── */
+
+/**
+ * A lit line with a soft fill and a live dot at the last print. Sized by its host; used only
+ * in the rail, where it replaces the old block-glyph sparkline.
+ */
+export function spark(host, values) {
+  const vals = (values || []).filter(isNum);
+  if (!host || vals.length < 2) { if (host) host.replaceChildren(); return; }
+  mount(host, ({ w }) => {
+    const h = Math.max(36, host.clientHeight || 56);
+    const T = 6, B = 6, L = 2, R = 10;
+    const iw = w - L - R, ih = h - T - B;
+    const lo = Math.min(...vals), hi = Math.max(...vals), span = hi - lo || 1;
+    const X = (i) => L + (i / (vals.length - 1)) * iw;
+    const Y = (v) => T + ih - ((v - lo) / span) * ih;
+    const pts = vals.map((v, i) => `${X(i).toFixed(1)},${Y(v).toFixed(1)}`);
+    const root = svg("svg", { viewBox: `0 0 ${w} ${h}`, width: w, height: h, preserveAspectRatio: "none" });
+    root.append(svg("defs", null, [
+      svg("linearGradient", { id: "rsGrad", x1: 0, y1: 0, x2: 0, y2: 1 }, [
+        svg("stop", { offset: "0%", "stop-color": "var(--acc)", "stop-opacity": ".22" }),
+        svg("stop", { offset: "100%", "stop-color": "var(--acc)", "stop-opacity": "0" }),
+      ]),
+    ]));
+    root.append(svg("line", { class: "rs-base", x1: L, y1: T + ih, x2: L + iw, y2: T + ih }));
+    root.append(svg("polygon", { class: "rs-fill", points: `${L},${T + ih} ${pts.join(" ")} ${L + iw},${T + ih}` }));
+    root.append(svg("polyline", { class: "rs-line", points: pts.join(" ") }));
+    root.append(svg("circle", { class: "rs-dot", cx: X(vals.length - 1), cy: Y(vals[vals.length - 1]), r: 2.6 }));
+    return root;
+  });
 }

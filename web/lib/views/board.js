@@ -5,7 +5,7 @@
 // age-stamped block rather than the page's headline, because in practice it is days old.
 
 import { el, isNum, fmt, pct, compact, compactSigned, strikeLabel, agoText, clamp, asciiBar } from "../util.js";
-import { panel, tag, segmented, statGrid, nodata, rule } from "../ui.js";
+import { panel, tag, segmented, statGrid, nodata, rule, skeleton } from "../ui.js";
 import { spine, candles, stat, emptyPanel } from "../draw.js";
 import { greek, levelMarks, boardMarks } from "../data.js";
 
@@ -25,18 +25,18 @@ export function render(host, ctx) {
   const marks = new Set([...levelMarks(lv), ...boardMarks(ctx.desk?.board)]);
 
   host.replaceChildren(
-    structurePanel(ok, spot, lv),
-    pricePanel(ok, spot, lv, ctx.desk?.board),
-    gammaPanel(g, spot, marks, err),
-    zeroDtePanel(ok.zero_dte, spot),
-    movePanel(ok.expected_move, ok.levels, ok.atr, spot),
-    deskPanel(ctx.desk, spot),
+    structurePanel(ok, spot, lv, ctx),
+    zeroDtePanel(ok.zero_dte, spot, ctx),
+    pricePanel(ok, spot, lv, ctx.desk?.board, ctx),
+    gammaPanel(g, spot, marks, err, ctx),
+    movePanel(ok.expected_move, ok.levels, ok.atr, spot, ctx),
+    deskPanel(ctx.desk, spot, ctx),
   );
 }
 
 /* ── 01 STRUCTURE: the wall ladder ───────────────────────────────────────── */
 
-function structurePanel(ok, spot, lv) {
+function structurePanel(ok, spot, lv, ctx) {
   const rows = [
     { k: "call_wall_2", label: "CALL WALL 2", role: "res" },
     { k: "call_wall",   label: "CALL WALL",   role: "res", strong: true },
@@ -48,7 +48,7 @@ function structurePanel(ok, spot, lv) {
     .map((r) => ({ ...r, price: lv[r.k] }))
     .filter((r) => isNum(r.price));
 
-  if (!rows.length) return panel({ idx: "01", title: "STRUCTURE", jp: "構造", body: nodata("NO GEX LEVELS") });
+  if (!rows.length) return panel({ idx: "01", title: "STRUCTURE", jp: "構造", cls: "half", body: ctx.wait("gex", "rows", 7) || nodata("NO GEX LEVELS") });
 
   // One ordering, top to bottom by price, with spot spliced into its true place — this is the
   // panel that answers "what is above me and what is below me" in one glance.
@@ -90,7 +90,7 @@ function structurePanel(ok, spot, lv) {
   ];
 
   return panel({
-    idx: "01", title: "STRUCTURE", jp: "構造", tools, body,
+    idx: "01", title: "STRUCTURE", jp: "構造", cls: "half", tools, body,
     note: isNum(lv.net_gex_bn)
       ? `net gamma ${compactSigned(lv.net_gex_bn, 3)}Bn · ${lv.positive_gamma ? "dealer hedging suppresses moves" : "dealer hedging amplifies moves"}`
       : null,
@@ -99,7 +99,7 @@ function structurePanel(ok, spot, lv) {
 
 /* ── 02 PRICE ────────────────────────────────────────────────────────────── */
 
-function pricePanel(ok, spot, lv, deskBoard) {
+function pricePanel(ok, spot, lv, deskBoard, ctx) {
   const chart = ok.chart;
   const host = el("div.chart-host");
 
@@ -114,7 +114,9 @@ function pricePanel(ok, spot, lv, deskBoard) {
 
   const body = [host];
   queueMicrotask(() => {
-    if (!Array.isArray(chart?.candles) || chart.candles.length < 2) return emptyPanel(host, "NO CANDLES");
+    if (!Array.isArray(chart?.candles) || chart.candles.length < 2) {
+      return ctx.pending.has("chart") ? host.replaceChildren(skeleton("chart")) : emptyPanel(host, "NO CANDLES");
+    }
     candles(host, { bars: chart.candles, spot, levels, height: 230 });
   });
 
@@ -128,9 +130,9 @@ function pricePanel(ok, spot, lv, deskBoard) {
 
 /* ── 03 GAMMA LADDER ─────────────────────────────────────────────────────── */
 
-function gammaPanel(g, spot, marks, err) {
+function gammaPanel(g, spot, marks, err, ctx) {
   if (!g.ok) {
-    return panel({ idx: "03", title: "GAMMA LADDER", jp: "ガンマ", body: nodata(err?.gex ? `GEX: ${err.gex}` : "NO GEX") });
+    return panel({ idx: "03", title: "GAMMA LADDER", jp: "ガンマ", body: ctx.wait("gex", "rows", 12) || nodata(err?.gex ? `GEX: ${err.gex}` : "NO GEX") });
   }
   const host = el("div.chart-host");
   queueMicrotask(() => spine(host, {
@@ -150,8 +152,8 @@ function gammaPanel(g, spot, marks, err) {
 
 /* ── 04 ZERO-DTE ─────────────────────────────────────────────────────────── */
 
-function zeroDtePanel(z, spot) {
-  if (!z || z.error) return panel({ idx: "04", title: "ZERO DTE", jp: "当日", body: nodata("NO 0DTE CHAIN") });
+function zeroDtePanel(z, spot, ctx) {
+  if (!z || z.error) return panel({ idx: "04", title: "ZERO DTE", jp: "当日", cls: "half", body: ctx.wait("zero_dte", "stats", 6) || nodata("NO 0DTE CHAIN") });
 
   const cells = [
     stat("GAMMA FLIP", strikeLabel(z.gamma_flip), { sub: isNum(z.gamma_flip) && isNum(spot) ? `${(spot - z.gamma_flip >= 0 ? "+" : "−")}${Math.abs(spot - z.gamma_flip).toFixed(2)} from spot` : null }),
@@ -177,7 +179,7 @@ function zeroDtePanel(z, spot) {
   ]);
 
   return panel({
-    idx: "04", title: "ZERO DTE", jp: "当日",
+    idx: "04", title: "ZERO DTE", jp: "当日", cls: "half",
     tools: [tag(z.expiry || "", "mute")],
     body: [statGrid(cells), drift, oi],
     note: "charm and vanna are the two forces that move a 0DTE hedge without price moving at all",
@@ -201,8 +203,11 @@ function driftRow(name, dir, note, val) {
 
 /* ── 05 EXPECTED MOVE ────────────────────────────────────────────────────── */
 
-function movePanel(em, lvls, atr, spot) {
-  if (!em && !lvls) return null;
+function movePanel(em, lvls, atr, spot, ctx) {
+  if (!em && !lvls) {
+    const sk = ctx.wait("expected_move", "stats", 6);
+    return sk ? panel({ idx: "05", title: "EXPECTED MOVE", jp: "想定幅", cls: "half", body: sk }) : null;
+  }
 
   const bars = [];
   for (const [k, label] of [["1d", "1 DAY"], ["1w", "1 WEEK"], ["1m", "1 MONTH"]]) {
@@ -234,7 +239,7 @@ function movePanel(em, lvls, atr, spot) {
   const conf = confluencePanel(lvls, spot);
 
   return panel({
-    idx: "05", title: "EXPECTED MOVE", jp: "想定幅",
+    idx: "05", title: "EXPECTED MOVE", jp: "想定幅", cls: "half",
     body: [statGrid(cells), bars.length ? el("div.emlist", null, bars) : null, conf],
   });
 }
@@ -266,11 +271,11 @@ function confluencePanel(lvls, spot) {
  * The locally-scored board. Deliberately last and deliberately stamped: the scoring box is
  * rarely on, so this is usually a historical read and must never be mistaken for live.
  */
-function deskPanel(desk, spot) {
+function deskPanel(desk, spot, ctx) {
   if (!desk?.board) {
     return panel({
-      idx: "06", title: "DESK BOARD", jp: "採点", cls: "p-desk",
-      body: nodata("NO SCORED BOARD REACHABLE"),
+      idx: "06", title: "DESK BOARD", jp: "採点", cls: "p-desk half",
+      body: ctx.deskPending ? skeleton("rows", 4) : nodata("NO SCORED BOARD REACHABLE"),
     });
   }
   const b = desk.board;
@@ -319,7 +324,7 @@ function deskPanel(desk, spot) {
   const tape = b.tape ? tapeBlock(b.tape) : null;
 
   return panel({
-    idx: "06", title: "DESK BOARD", jp: "採点", cls: `p-desk${old ? " is-old" : ""}`,
+    idx: "06", title: "DESK BOARD", jp: "採点", cls: `p-desk half${old ? " is-old" : ""}`,
     tools: [tag(`SPOT@SCORE ${fmt(b.spot, 2)}`, "mute")],
     body: [head, tape, list, gate, walls],
     note: old

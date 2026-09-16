@@ -272,7 +272,35 @@ Always route price-dependent logic through `effectiveSpot`/`fetchSessionBars` �
 - **`watchdog.mjs`** — scheduled `*/15 * * * *`, 09:50–16:00 ET Mon–Fri. Alerts via ntfy if board
   stale > `WATCHDOG_STALE_MIN` (35). Fires once on stall + once on recovery (Blobs state).
 
-## Front end (rebuilt 2026-09-15)
+## Front end (rebuilt 2026-09-15, restyled + load path fixed 2026-09-16)
+
+**v2 (2026-09-16) — user verdict on v1 was "very very bland… same vibe, things just moved around".**
+Three changes, all in `web/`:
+- **DESIGN → dark-first glass + MONO + glow.** Tokens in `styles.css` `:root`: near-black field,
+  glass panels (`--glass`/`--edge`, 12px radius), and a TWO-TONE data language — `--acc` (ice)
+  for positive/active/live, `--neg` graphite for negative/inert. Red is brand mark + alarm only.
+  Glow is structural (rail hairline, big numeral, lit bars, live dot, hovered panel spotlight),
+  never on body text. Motion: `reveal` blur→sharp per panel (staggered by `--i`, once per tab
+  visit — `.views.no-reveal` suppresses it on data repaints), spine/bar `growR`/`growY` from the
+  spine, spot numeral ticks (`tickSpot`), skeleton shimmer while in flight. Background is ONE
+  WebGL fbm-noise shader (`lib/bg.js`, quarter-res, 12fps-ish) + a CSS dot grid; the ASCII field
+  is gone. Panels can be `cls: "half"` for the two-column bento grid ≥1100px.
+- **LOAD PATH.** v1 fired one 12-endpoint batch and painted "NO DATA"/"UPSTREAM unreachable"
+  until the slowest upstream route (probability, ~15s cold) returned, then everything flashed in.
+  Now: (1) `api.loadSnapshot()` paints the last localStorage frame instantly, stamped CACHED;
+  (2) `api.yyy()` splits into batches of 4 with the HEAVY set (iv_surface, probability, bias,
+  hurst, flow, chart, history) each on its own request, and `onPart` merges + repaints per batch;
+  (3) `ctx.wait(ep, kind)` gives every panel a skeleton while its endpoint is in `S.pending` —
+  "NO DATA" is only ever an actual failure now; (4) the proxy has a shared Netlify Blobs cache
+  (`yyy-cache`, 75s TTL, stale-on-error to 30 min) kept warm every 5 min in market hours by
+  `yyy-warm.mjs`. `CORE_EPS` grew to include levels/zero_dte/dealer_delta (all tiny) so the
+  LEVELS button works from any tab.
+- **⧉ LEVELS button** (top bar) → `lib/levels.js` `collectLevels()` → clipboard, one line per
+  price, descending, `705 "Call Wall / Max Pain"` — the exact `Batch Strikes` input format of
+  `converter.pine`. Same-price sources merge into one line. Sources: GEX walls 1&2 / vol trigger /
+  max pain, 0DTE flip + walls + ±1σ, delta flip, EM ±1d, HOD/LOD confluence, session VWAP, desk
+  levels (with prob), IV walls.
+
 
 **THE PREMISE CHANGED.** The scoring box is almost never on now, so a dashboard whose primary
 content is `dashboard.json` shows a frozen board for days. The terminal is therefore **live-first**:
@@ -332,6 +360,8 @@ hairlines, zero radius, no shadow, no glow. Exactly three data colours — `--co
 `--hot` negative, muted zero — with `--red` reserved for the brand mark and real alarms.
 **The panel class is `.pnl`, NOT `.p`** — `.p` is the positive-value class and a bare `.p` rule
 would put a border and background on every positive number on the page.
+**Data colour classes:** `.p`/`.cool`/`.pos` → `--acc`; `.n`/`.hot` → `--neg-2` graphite; `.neg` →
+red (alarm only: NEGATIVE GAMMA chip, KILLED). There is no third hue — don't add amber back.
 
 `npm run preview` serves the real modules and the real stylesheet against a one-shot live YYY
 snapshot with auth bypassed (`?all=1` stacks every tab, `&theme=dark` flips it). It generates its
