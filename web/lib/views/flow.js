@@ -77,7 +77,8 @@ function anomalyPanel(da) {
 
   const host = el("div.chart-host");
   queueMicrotask(() => lineChart(host, {
-    series: [{ values: da.z_scores, tone: "ink", dot: true }],
+    series: [{ name: "bar delta z", values: da.z_scores, tone: "ink", dot: true }],
+    xTips: (da.times || []).map((t) => String(t).slice(5, 16)),
     marks: [
       { value: da.z_threshold ?? 2, label: "+2σ", tone: "cool" },
       { value: -(da.z_threshold ?? 2), label: "−2σ", tone: "hot" },

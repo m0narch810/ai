@@ -77,7 +77,7 @@ function bookPanel(live, spot) {
     return el("div.gbook-row", {
       "data-on": meta.key === sel ? "" : null,
       onClick: () => { sel = meta.key; expIdx = null; refresh(); },
-      title: meta.sign,
+      "data-tip": `${meta.name}\n${meta.sign}`,
     }, [
       el("span.gb-name", null, [el("b", { text: meta.name }), el("i.gb-jp", { text: meta.jp })]),
       el("span", { class: `gb-net ${sgn(t.net)}`, text: compactSigned(t.net, 2) }),

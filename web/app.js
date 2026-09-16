@@ -13,6 +13,7 @@ import * as api from "./lib/api.js";
 import { initBackground } from "./lib/bg.js";
 import { toast, skeleton, decode, decodeAll } from "./lib/ui.js";
 import { spark } from "./lib/draw.js";
+import { initTips } from "./lib/tip.js";
 import { collectLevels, formatLevels, copyText } from "./lib/levels.js";
 
 import * as board from "./lib/views/board.js";
@@ -151,7 +152,8 @@ function paintRail() {
   $("#railSrc").textContent = S.spotMeta ? `${S.spotMeta.source} · ${S.spotMeta.session}` : (isNum(S.yyy.ok?.gex?.spot) ? "yyy chain" : "");
 
   if (bars?.length) {
-    spark($("#railSpark"), bars.slice(-78).map((b) => b.close), { draw: !S.sparkDrawn });
+    const last78 = bars.slice(-78);
+    spark($("#railSpark"), last78.map((b) => b.close), { draw: !S.sparkDrawn, tips: last78.map((b) => String(b.time ?? "").match(/T?(\d{2}:\d{2})/)?.[1] ?? "") });
     S.sparkDrawn = true;
   }
 
@@ -379,6 +381,7 @@ function boot() {
   applyTheme(localStorage.getItem("theme") || "dark");
   bg = initBackground($("#bg"));
   buildChrome();
+  initTips();
   decode($("#wordmark"), 700);
 
   bootLog(`auth ${api.getUser() || "operator"} ...... ok`);

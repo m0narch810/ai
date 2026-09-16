@@ -1,9 +1,9 @@
 {
-  "as_of": "2026-09-15T22:45:00",
-  "scored_at": 1789526713707,
-  "generated_at": "2026-09-16T02:59:20.707Z",
+  "as_of": "2026-09-15T23:30:00",
+  "scored_at": 1789529413690,
+  "generated_at": "2026-09-16T03:31:51.132Z",
   "session": "Asia",
-  "spot": 705.1832954917826,
+  "spot": 706.5141708829327,
   "regime": "negative",
   "read": "Rule-based alignment read: resistance $709.00 (aligned significant), support $700.00 (mixed dominant). Negative gamma — bar raised to aligned dominant structure. VIX settlement tomorrow — vol unwind chop likely.",
   "hard_stop_pts": 0.9828009828009827,
@@ -15,10 +15,6 @@
   "expected_move": 12.45,
   "scoring_method": "rule",
   "gex_profile": [
-    {
-      "strike": 699,
-      "gex_m": -34.8
-    },
     {
       "strike": 700,
       "gex_m": -1334.1
@@ -70,24 +66,13 @@
     {
       "strike": 712,
       "gex_m": -53.4
+    },
+    {
+      "strike": 713,
+      "gex_m": 11.3
     }
   ],
   "term_profile": [
-    {
-      "strike": 699,
-      "gex": [
-        -12.7,
-        -20.7,
-        -1.3,
-        0
-      ],
-      "charm": [
-        2112.9,
-        5581.5,
-        33.3,
-        0
-      ]
-    },
     {
       "strike": 700,
       "gex": [
@@ -282,9 +267,31 @@
         -212.7,
         0
       ]
+    },
+    {
+      "strike": 713,
+      "gex": [
+        15,
+        -1.3,
+        -2.5,
+        0
+      ],
+      "charm": [
+        -8033.8,
+        -17531.5,
+        -356.7,
+        0
+      ]
     }
   ],
   "coverage": [
+    {
+      "strike": 713,
+      "side": "resistance",
+      "reaction": "mixed",
+      "tags": [],
+      "prob": 10
+    },
     {
       "strike": 712,
       "side": "resistance",
@@ -349,7 +356,7 @@
     },
     {
       "strike": 706,
-      "side": "resistance",
+      "side": "support",
       "reaction": "chop",
       "tags": [
         "Pass-Through",
@@ -423,16 +430,6 @@
         "Terminal"
       ],
       "prob": 48
-    },
-    {
-      "strike": 699,
-      "side": "support",
-      "reaction": "mixed",
-      "tags": [
-        "Weaker Node",
-        "Front-OI Thin"
-      ],
-      "prob": 16
     }
   ],
   "zero_gamma": 704.54,
@@ -487,6 +484,20 @@
       "touched": false
     },
     {
+      "strike": 713,
+      "reversal_prob": 52,
+      "side": "resistance",
+      "reaction": "clean",
+      "tags": [
+        "Call Wall",
+        "Aligned",
+        "0DTE Pin"
+      ],
+      "why": "significant node (call wall); aligned: charm− drift, 0DTE charm confirms; 0DTE-heavy, today-only",
+      "outcome": "untouched",
+      "touched": false
+    },
+    {
       "strike": 700,
       "reversal_prob": 40,
       "side": "support",
@@ -499,22 +510,6 @@
       "why": "dominant node (major wall); mixed: put-side gamma, charm+ drift, 0DTE charm confirms; against: dex− vulnerable; durable across tenors",
       "outcome": "untouched",
       "touched": false
-    },
-    {
-      "strike": 704,
-      "reversal_prob": 36,
-      "side": "support",
-      "reaction": "chop",
-      "tags": [
-        "Mixed Greeks",
-        "Battleground"
-      ],
-      "why": "significant node; mixed: put-side gamma, 0DTE charm confirms; against: dex− vulnerable; battleground vol/OI; durable across tenors",
-      "outcome": "pending",
-      "touched": true,
-      "touchedAt": "2026-09-15T21:54:00",
-      "overshoot": 0,
-      "clean": true
     }
   ]
 }

@@ -8,7 +8,7 @@
 
 import { el, isNum, fmt, compactSigned, strikeLabel } from "../util.js";
 import { panel, tag, statGrid, nodata } from "../ui.js";
-import { smile, lineChart, bars, cone, matrix, stat, emptyPanel, ridgeline, heatSurface } from "../draw.js";
+import { smile, lineChart, bars, cone, matrix, stat, emptyPanel, surface3d, heatSurface } from "../draw.js";
 import { smileCurves } from "../data.js";
 import { findIvAnomalies } from "../ivanom.js";
 import { asciiBar } from "../util.js";
@@ -127,20 +127,20 @@ function surfacePanel(ivSurface, anom, ctx) {
   const ridgeHost = el("div.chart-host");
   const heatHost = el("div.chart-host");
   queueMicrotask(() => {
-    ridgeline(ridgeHost, { moneyness: s.moneyness, curves, marks });
-    heatSurface(heatHost, { moneyness: s.moneyness, curves, marks });
+    surface3d(ridgeHost, { moneyness: s.moneyness, curves, marks, spot });
+    heatSurface(heatHost, { moneyness: s.moneyness, curves, marks, spot });
   });
 
   return panel({
     idx: "V1", title: "IV SURFACE",
     tools: [tag(isNum(s.atm) ? `ATM ${(s.atm * 100).toFixed(2)}%` : "", "mute"), tag(`${marks.length} MARKED`, marks.length ? "cool" : "mute")],
     body: [
-      el("div.twin-lbl", { text: "RIDGE · nearest expiry front, furthest back" }),
+      el("div.twin-lbl", { text: "SURFACE \u00b7 moneyness across, expiry into the page, IV up" }),
       ridgeHost,
       el("div.twin-lbl", { text: "GRID · expiry × moneyness, lit by IV level" }),
       heatHost,
     ],
-    note: "boxed / dotted cells are surface anomalies (solid = rich, dashed = cheap) · a steep left shoulder that persists across rows is structural put demand; a lift that only exists in the top row is today's positioning",
+    note: "hover any cell for the exact IV \u00b7 marks are surface anomalies (filled = rich, hollow = cheap) \u00b7 a steep left shoulder that persists into the back rows is structural put demand; a lift that exists only on the front edge is today's positioning",
   });
 }
 
@@ -156,7 +156,7 @@ function smilePanel(ivSurface, err, ctx) {
   }
 
   const host = el("div.chart-host");
-  queueMicrotask(() => smile(host, { moneyness: s.moneyness, curves: s.curves, height: 250 }));
+  queueMicrotask(() => smile(host, { moneyness: s.moneyness, curves: s.curves, height: 250, spot: ctx.spot }));
 
   const legend = el("div.smile-key", null, s.curves.map((c) => el("span", {
     class: `sk${c.dte === 0 ? " is-0dte" : ""}`,
@@ -185,7 +185,8 @@ function termPanel(nv) {
   queueMicrotask(() => {
     if (ts.length) {
       lineChart(termHost, {
-        series: [{ values: ts.map((r) => (isNum(r.atm_iv) ? r.atm_iv * 100 : NaN)), tone: "cool", fill: true }],
+        series: [{ name: "atm iv", values: ts.map((r) => (isNum(r.atm_iv) ? r.atm_iv * 100 : NaN)), tone: "cool", fill: true }],
+        xTips: ts.map((r) => r.label ?? `${r.dte}d`),
         xLabels: ts.map((r) => (isNum(r.dte) ? `${r.dte}d` : "")),
         fmtY: (n) => `${n.toFixed(0)}%`,
         height: 150,
@@ -198,6 +199,7 @@ function termPanel(nv) {
         xLabels: sk.map((r) => (isNum(r.dte) ? `${r.dte}d` : "")),
         fmtY: (n) => `${n.toFixed(1)}`,
         tones: sk.map((r) => ((r.skew ?? 0) > 0 ? "n" : "p")),  // put wing over call wing = fear
+        tips: sk.map((r) => `${r.label ?? r.dte + "d"} \u00b7 put ${(r.put_wing * 100).toFixed(1)}% / call ${(r.call_wing * 100).toFixed(1)}%`),
         height: 150,
       });
     } else emptyPanel(skewHost);
@@ -279,6 +281,7 @@ function conePanel(p, spot) {
 
   queueMicrotask(() => cone(host, {
     spot,
+    xTips: (p.dte_grid || []).map((d) => `${d}d forward`),
     xLabel: `FORWARD DAYS → ${p.dte_grid[p.dte_grid.length - 1] ?? ""}d`,
     height: 230,
     bands: [
@@ -317,6 +320,7 @@ function distPanel(p) {
   queueMicrotask(() => bars(host, {
     values: counts, height: 150, mark: zeroIdx, gap: 0.88,
     tones: centers.map((c) => (c < 0 ? "n" : "p")),
+    tips: centers.map((c) => `return ${c.toFixed(2)}%`),
     fmtY: (n) => n.toFixed(2),
     xLabels: centers.map((c, i) => (i % 12 === 0 ? `${c.toFixed(1)}%` : "")),
   }));
@@ -346,8 +350,8 @@ function forecastPanel(vf) {
 
   queueMicrotask(() => lineChart(host, {
     series: [
-      hist.length ? { values: hist, tone: "cool", fill: true } : null,
-      raw.length ? { values: raw, tone: "warn", dot: false } : null,
+      hist.length ? { name: "history", values: hist, tone: "cool", fill: true } : null,
+      raw.length ? { name: "intraday", values: raw, tone: "warn", dot: false } : null,
     ].filter(Boolean),
     marks: isNum(vf.long_run_vol) ? [{ value: vf.long_run_vol, label: "LONG RUN", tone: "mute" }] : [],
     fmtY: (n) => n.toFixed(1),

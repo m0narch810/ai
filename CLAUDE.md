@@ -301,6 +301,28 @@ sleek futuristic Bloomberg terminal, ASCII designs throughout, not the ugly gree
   `IV Rich 3.2` / `IV Cheap 2.7`. `net_iv` and `flow` joined `CORE_EPS` for this.
 - Views still pass `jp:` to `panel()`; it is accepted and ignored.
 
+**v3.2 — the reference was the trifekta site (`~/Downloads/YYYmacropad/macropad/src/components/fx/
+AsciiContour.tsx`).** `lib/bg.js` is now a faithful port: layered-sine elevation, one glyph per
+contour LEVEL (`· : - = + * ─ # %`), line width normalised by the local gradient so contours stay
+one cell wide on flat ground, alpha by elevation × edge distance, cell 14, 9 levels, maxAlpha .5,
+12fps, plus `.bg-vignette` (radial fade to `--bg`). The 3D ridge terrain and the line-only
+contour map that preceded it are gone — do not reintroduce a heightfield.
+- **Tooltips everywhere** (`lib/tip.js`): one delegated listener; any element with `data-tip`
+  shows a bracketed tag that follows the pointer (`
+` = line break, `key: value` lines dim the
+  key). Every renderer in `draw.js` puts `data-tip` on its bars/cells or on invisible `.hit`
+  columns over lines; ladder rows, greek-book rows and meters carry it in HTML. Renderers take
+  optional `xTips`/`tips`/`name` for the head line and series names.
+- **IV SURFACE is a projected mesh** (`draw.surface3d`): x = moneyness, depth = expiry (0DTE
+  front), height = IV; quads drawn back-to-front, filled and lit by IV so the mesh is solid, the
+  0DTE front edge and the ATM ridge in the accent, anomaly marks on the surface. The heat grid
+  stays beneath it.
+- **IV WALLS are computed live in the browser** (`lib/ivwalls.js`, a port of `src/ivWalls.ts`:
+  |Δ| 0.1925 strikes of the front expiry over its own smile from `/net_iv`, outer = spec widths
+  as fractions of spot, T anchored to 16:00 ET for 0DTE). Panel 01b on BOARD, half width, next
+  to STRUCTURE; the desk's frozen bracket is shown alongside when present. LEVELS uses the live
+  bracket and falls back to the desk one.
+
 **v3.1 — "actually getting very very nice… just a bit bland, more animations, a background
 that matches the theme."** The motion layer, all in the `MOTION LAYER` block at the end of
 `styles.css` plus small hooks in `app.js`:

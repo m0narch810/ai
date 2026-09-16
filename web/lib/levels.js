@@ -11,6 +11,8 @@
 
 import { isNum } from "./util.js";
 import { findIvAnomalies } from "./ivanom.js";
+import { liveIvWalls } from "./ivwalls.js";
+import { etNow } from "./util.js";
 
 /**
  * @param {object} ctx  the same ctx the views get: { yyy:{ok}, spot, desk }
@@ -82,11 +84,15 @@ export function collectLevels(ctx) {
     const side = l.side === "support" ? "Sup" : "Res";
     add(l.strike, isNum(l.reversal_prob) ? `Desk ${side} ${l.reversal_prob}%` : `Desk ${side}`);
   }
-  const w = b?.iv_walls;
-  add(w?.u_outer, "IV Wall Upper Outer");
-  add(w?.u_inner, "IV Wall Upper Inner");
-  add(w?.l_inner, "IV Wall Lower Inner");
-  add(w?.l_outer, "IV Wall Lower Outer");
+  // IV walls: the live bracket from the front-expiry smile; the desk's frozen one if the chain is thin
+  let w = null;
+  try { w = liveIvWalls(ok.net_iv, ctx?.spot ?? ok.gex?.spot, etNow().minutes); } catch { w = null; }
+  const src = w ? "IV Wall" : "IV Wall (desk)";
+  w = w || b?.iv_walls;
+  add(w?.u_outer, `${src} Upper Outer`);
+  add(w?.u_inner, `${src} Upper Inner`);
+  add(w?.l_inner, `${src} Lower Inner`);
+  add(w?.l_outer, `${src} Lower Outer`);
 
   return [...out.values()].sort((a, b2) => b2.price - a.price);
 }

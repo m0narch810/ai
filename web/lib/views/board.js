@@ -8,6 +8,8 @@ import { el, isNum, fmt, pct, compact, compactSigned, strikeLabel, agoText, clam
 import { panel, tag, segmented, statGrid, nodata, rule, skeleton } from "../ui.js";
 import { spine, candles, stat, emptyPanel } from "../draw.js";
 import { greek, levelMarks, boardMarks } from "../data.js";
+import { liveIvWalls } from "../ivwalls.js";
+import { etNow } from "../util.js";
 
 export const ID = "board";
 export const LABEL = "BOARD";
@@ -26,8 +28,9 @@ export function render(host, ctx) {
 
   host.replaceChildren(
     structurePanel(ok, spot, lv, ctx),
-    zeroDtePanel(ok.zero_dte, spot, ctx),
+    ivWallsPanel(ok.net_iv, ctx.desk?.board?.iv_walls, spot, ctx),
     pricePanel(ok, spot, lv, ctx.desk?.board, ctx),
+    zeroDtePanel(ok.zero_dte, spot, ctx),
     gammaPanel(g, spot, marks, err, ctx),
     movePanel(ok.expected_move, ok.levels, ok.atr, spot, ctx),
     deskPanel(ctx.desk, spot, ctx),
@@ -75,7 +78,7 @@ function structurePanel(ok, spot, lv, ctx) {
     }
     const d = isNum(spot) ? r.price - spot : NaN;
     const frac = clamp(Math.abs(r.price - (laddered[laddered.length - 1].price)) / span, 0, 1);
-    return el(`div.ladder-row.is-${r.role}${r.strong ? ".is-strong" : ""}`, null, [
+    return el(`div.ladder-row.is-${r.role}${r.strong ? ".is-strong" : ""}`, { "data-tip": `${r.label}\nprice: ${strikeLabel(r.price)}${isNum(d) ? `\nfrom spot: ${d >= 0 ? "+" : "\u2212"}${Math.abs(d).toFixed(2)} (${(Math.abs(d) / spot * 100).toFixed(2)}%)` : ""}` }, [
       el("span.lr-name", { text: r.label }),
       el("span.lr-price", { text: strikeLabel(r.price) }),
       el("span.lr-bar", null, el("i.lr-fill", { style: `width:${(frac * 100).toFixed(1)}%` })),
@@ -94,6 +97,53 @@ function structurePanel(ok, spot, lv, ctx) {
     note: isNum(lv.net_gex_bn)
       ? `net gamma ${compactSigned(lv.net_gex_bn, 3)}Bn · ${lv.positive_gamma ? "dealer hedging suppresses moves" : "dealer hedging amplifies moves"}`
       : null,
+  });
+}
+
+/* ── 01b IV WALLS ────────────────────────────────────────────────────────── */
+
+/**
+ * The four IV-wall brackets, computed LIVE in the browser from the front expiry's smile
+ * (lib/ivwalls.js, a port of the desk's src/ivWalls.ts). The desk's frozen bracket — one per
+ * session, from its first usable chain — is shown beside it when it exists; the two differing
+ * is information (IV has moved since that chain), not a bug.
+ */
+function ivWallsPanel(netIv, deskWalls, spot, ctx) {
+  const live = liveIvWalls(netIv, spot, etNow().minutes);
+  if (!live && !deskWalls) {
+    return panel({ idx: "01b", title: "IV WALLS", cls: "half", body: ctx.wait("net_iv", "rows", 4) || nodata("CHAIN TOO THIN FOR A 19\u0394 CROSSING") });
+  }
+  const rows = [
+    { k: "u_outer", label: "UPPER OUTER", role: "res" },
+    { k: "u_inner", label: "UPPER INNER", role: "res", strong: true },
+    { k: "l_inner", label: "LOWER INNER", role: "sup", strong: true },
+    { k: "l_outer", label: "LOWER OUTER", role: "sup" },
+  ];
+  const body = el("div.ladder", null, rows.map((r) => {
+    const v = live?.[r.k] ?? deskWalls?.[r.k];
+    const d = isNum(v) && isNum(spot) ? v - spot : NaN;
+    const desk = deskWalls?.[r.k];
+    return el(`div.ladder-row.is-${r.role}${r.strong ? ".is-strong" : ""}`, {
+      "data-tip": `${r.label}\nlive: ${fmt(v, 2)}${isNum(desk) ? `\ndesk frozen: ${fmt(desk, 2)}` : ""}${isNum(d) ? `\nfrom spot: ${d >= 0 ? "+" : "\u2212"}${Math.abs(d).toFixed(2)}` : ""}`,
+    }, [
+      el("span.lr-name", { text: r.label }),
+      el("span.lr-price", { text: fmt(v, 2) }),
+      el("span.lr-bar", null, el("span.lr-desk", { text: isNum(desk) ? `desk ${fmt(desk, 2)}` : "" })),
+      el("span", { class: `lr-dist ${d >= 0 ? "p" : "n"}`, text: isNum(d) ? `${d >= 0 ? "+" : "\u2212"}${Math.abs(d).toFixed(2)}  ${(Math.abs(d) / spot * 100).toFixed(2)}%` : "\u2014" }),
+    ]);
+  }));
+  const src = live ? live : deskWalls;
+  return panel({
+    idx: "01b", title: "IV WALLS", cls: "half",
+    tools: [
+      tag(live ? "LIVE 19\u0394" : "DESK FROZEN", live ? "cool" : "warn"),
+      tag(`${src.dte ?? 0}DTE`, "mute"),
+      tag(`\u03c3atm ${fmt(src.sigma_atm_pct, 1)}%`, "mute"),
+    ],
+    body,
+    note: live
+      ? `inner walls = the |\u0394| 0.1925 strikes of the front expiry over its own smile (${live.n} strikes), outer = spec widths as fractions of spot \u00b7 recomputed every tick from /net_iv${deskWalls ? " \u00b7 desk value alongside is the session's frozen bracket" : ""}`
+      : "live chain too thin right now \u2014 showing the desk's frozen bracket",
   });
 }
 

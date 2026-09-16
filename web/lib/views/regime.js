@@ -123,7 +123,8 @@ function hurstPanel(h) {
   const times = (h.times || []).slice(-n);
 
   queueMicrotask(() => lineChart(host, {
-    series: [{ values: series, tone: "ink", fill: false }],
+    series: [{ name: "h64", values: series, tone: "ink", fill: false }],
+    xTips: times.map((t) => String(t).slice(5, 16)),
     marks: [{ value: 0.5, label: "RANDOM", tone: "mute" }],
     bands: [
       { from: 0.55, to: Math.max(0.75, ...series), tone: "cool" },
@@ -152,17 +153,17 @@ function entropyPanel(hist, bias) {
   queueMicrotask(() => {
     lineChart(host, {
       series: [
-        { values: hist.entropy, tone: "ink" },
-        { values: hist.threshold, tone: "warn", dot: false },
+        { name: "entropy", values: hist.entropy, tone: "ink" },
+        { name: "threshold", values: hist.threshold, tone: "warn", dot: false },
       ],
       fmtY: (v) => v.toFixed(4),
       height: 150,
     });
     lineChart(pcaHost, {
       series: [
-        { values: hist.pca1, tone: "cool" },
-        { values: hist.pca2, tone: "warn", dot: false },
-        { values: hist.vol_z, tone: "hot", dot: false },
+        { name: "pca1", values: hist.pca1, tone: "cool" },
+        { name: "pca2", values: hist.pca2, tone: "warn", dot: false },
+        { name: "vol z", values: hist.vol_z, tone: "hot", dot: false },
       ],
       marks: [{ value: 0, tone: "mute" }],
       fmtY: (v) => v.toFixed(1),
