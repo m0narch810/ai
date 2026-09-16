@@ -58,6 +58,8 @@ const S = {
   painted: {},
   shownSpot: NaN,
   sparkDrawn: false,
+  dragLock: false,
+  paintAfterDrag: false,
   lastVals: new Map(),       // "view|key" → last rendered text, for the change flash
 };
 
@@ -183,6 +185,7 @@ function initLayoutControls() {
     if (!label) { e.preventDefault(); return; }
     dragging = label.closest(".pnl");
     dragging.classList.add("dragging");
+    S.dragLock = true;    // hold re-renders: replacing the DOM mid-drag detaches the held panel
     e.dataTransfer.effectAllowed = "move";
     try {
       e.dataTransfer.setData("text/plain", dragging.dataset.key);
@@ -198,25 +201,31 @@ function initLayoutControls() {
     if (!over || over === dragging) return;
     const y = e.clientY;
     if (dragRaf) return;
+    const d = dragging;   // captured: dragend can null `dragging` before this frame runs
     dragRaf = requestAnimationFrame(() => {
       dragRaf = 0;
+      if (!d || d !== dragging || !d.isConnected || !over.isConnected) return;
       const r = over.getBoundingClientRect();
       const before = y < r.top + r.height / 2;
       // Already in the requested slot → nothing to do. This is the stutter fix: moving the
       // dragged panel changes the layout under the cursor, and without this check a tall
       // neighbour flip-flopped the dragged panel above and below itself every frame.
-      if (before && over.previousElementSibling === dragging) return;
-      if (!before && over.nextElementSibling === dragging) return;
+      if (before && over.previousElementSibling === d) return;
+      if (!before && over.nextElementSibling === d) return;
       lastOver = over;
-      flip(() => (before ? over.before(dragging) : over.after(dragging)));
+      flip(() => (before ? over.before(d) : over.after(d)));
     });
   });
   host.addEventListener("drop", (e) => { if (dragging) e.preventDefault(); });
   host.addEventListener("dragend", () => {
     if (!dragging) return;
+    cancelAnimationFrame(dragRaf); dragRaf = 0;
     dragging.classList.remove("dragging");
     dragging = null; lastOver = null;
+    S.dragLock = false;
     captureLayout(host);
+    // a data tick that arrived mid-drag was held back; paint it now
+    if (S.paintAfterDrag) { S.paintAfterDrag = false; paintView(); }
   });
 }
 
@@ -322,6 +331,7 @@ function paintView() {
   const host = $("#viewRoot");
   const v = VIEW_BY_ID[S.view];
   if (!v) return;
+  if (S.dragLock) { S.paintAfterDrag = true; return; }
 
   const ctx = {
     yyy: S.yyy,
