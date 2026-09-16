@@ -681,6 +681,107 @@ export function spark(host, values) {
     root.append(svg("polygon", { class: "rs-fill", points: `${L},${T + ih} ${pts.join(" ")} ${L + iw},${T + ih}` }));
     root.append(svg("polyline", { class: "rs-line", points: pts.join(" ") }));
     root.append(svg("circle", { class: "rs-dot", cx: X(vals.length - 1), cy: Y(vals[vals.length - 1]), r: 2.6 }));
+    // session high / low, pinned to the right edge so the line reads as a range at a glance
+    root.append(svg("text", { class: "rs-hi", x: L + iw + 4, y: T + 3, text: hi.toFixed(2) }));
+    root.append(svg("text", { class: "rs-lo", x: L + iw + 4, y: T + ih + 1, text: lo.toFixed(2) }));
+    return root;
+  });
+}
+
+/* ── RIDGELINE: the IV surface as stacked smiles ────────────────────────── */
+
+/**
+ * Eight expiries drawn back-to-front, each a filled smile offset up the page — the surface as
+ * terrain. `marks` are anomaly points {dteIdx, m (K/S), iv, cheap} drawn on the curve they
+ * belong to. Nearest expiry sits at the bottom, lit.
+ */
+export function ridgeline(host, o) {
+  const xs = o.moneyness || [];
+  const curves = (o.curves || []).filter((c) => (c.iv || []).some(isNum));
+  if (xs.length < 3 || !curves.length) return emptyPanel(host, "NO IV SURFACE");
+  const all = curves.flatMap((c) => c.iv.filter(isNum));
+  const lo = Math.min(...all), hi = Math.max(...all), span = hi - lo || 1;
+
+  mount(host, ({ w }) => {
+    const n = curves.length;
+    const L = 44, R = 12, T = 14, B = 22;
+    const step = Math.max(16, Math.min(30, Math.round((w * 0.5) / n)));   // vertical offset per expiry
+    const amp = step * 2.6;                                               // curve height scale
+    const h = T + amp + step * (n - 1) + B;
+    const root = svg("svg", { class: "lchart ridge", viewBox: `0 0 ${w} ${h}`, width: w, height: h });
+    const iw = w - L - R;
+    const X = (m) => L + ((m - xs[0]) / (xs[xs.length - 1] - xs[0])) * iw;
+    const base = (i) => T + amp + step * i;                               // i = 0 is the BACK (furthest expiry)
+    const Y = (i, v) => base(i) - ((v - lo) / span) * amp;
+
+    // back-to-front so each nearer curve occludes the one behind
+    const order = [...curves].sort((a, b) => (b.dte ?? 0) - (a.dte ?? 0));
+    const atmX = X(1);
+    root.append(svg("line", { class: "rg-atm", x1: atmX, y1: T, x2: atmX, y2: h - B + 4 }));
+    order.forEach((c, i) => {
+      const pts = [];
+      c.iv.forEach((v, k) => { if (isNum(v) && isNum(xs[k])) pts.push(`${X(xs[k]).toFixed(1)},${Y(i, v).toFixed(1)}`); });
+      if (pts.length < 2) return;
+      const y0 = base(i) + 1;
+      root.append(svg("path", {
+        class: `rg-curve${c.dte === 0 ? " is-0dte" : ""}`,
+        d: `M${L},${y0} L${pts.join(" L")} L${L + iw},${y0} Z`,
+        "stroke-opacity": c.dte === 0 ? 1 : (0.55 + (i / Math.max(1, n - 1)) * 0.4).toFixed(2),
+      }));
+      root.append(svg("text", { class: `rg-lbl${c.dte === 0 ? " is-0dte" : ""}`, x: L - 6, y: y0 - 2, "text-anchor": "end", text: c.label }));
+    });
+    for (const m of o.marks || []) {
+      const i = order.findIndex((c) => c.dteIdx === m.dteIdx);
+      if (i < 0 || !isNum(m.m) || !isNum(m.iv)) continue;
+      root.append(svg("circle", { class: `rg-anom${m.cheap ? " cheap" : ""}`, cx: X(m.m), cy: Y(i, m.iv), r: 3 }));
+    }
+    root.append(svg("text", { class: "lc-ax", x: L, y: h - 6, text: `${(xs[0] * 100).toFixed(0)}%` }));
+    root.append(svg("text", { class: "lc-ax", x: atmX, y: h - 6, "text-anchor": "middle", text: "ATM" }));
+    root.append(svg("text", { class: "lc-ax", x: L + iw, y: h - 6, "text-anchor": "end", text: `${(xs[xs.length - 1] * 100).toFixed(0)}%` }));
+    return root;
+  });
+}
+
+/* ── HEAT SURFACE: expiry × moneyness IV grid ────────────────────────────── */
+
+/** The same surface as a grid — one row per expiry, lit by IV level, anomalies boxed. */
+export function heatSurface(host, o) {
+  const xs = o.moneyness || [];
+  const rows = (o.curves || []).filter((c) => (c.iv || []).some(isNum));
+  if (xs.length < 3 || !rows.length) return emptyPanel(host, "NO IV SURFACE");
+  const all = rows.flatMap((c) => c.iv.filter(isNum));
+  const lo = Math.min(...all), hi = Math.max(...all), span = hi - lo || 1;
+
+  mount(host, ({ w }) => {
+    const L = 40, R = 6, T = 8, B = 18, ROW = 16;
+    const iw = w - L - R;
+    const cw = iw / xs.length;
+    const h = T + rows.length * ROW + B;
+    const root = svg("svg", { class: "tmx heat", viewBox: `0 0 ${w} ${h}`, width: w, height: h });
+    const ordered = [...rows].sort((a, b) => (a.dte ?? 0) - (b.dte ?? 0));   // 0DTE on top
+    ordered.forEach((c, i) => {
+      const y = T + i * ROW;
+      root.append(svg("text", { class: `hs-k${c.dte === 0 ? " is-0dte" : ""}`, x: L - 5, y: y + ROW / 2 + 3, "text-anchor": "end", text: c.label }));
+      c.iv.forEach((v, k) => {
+        if (!isNum(v)) return;
+        root.append(svg("rect", {
+          class: "hs-cell", x: L + k * cw, y: y + 1, width: Math.max(1, cw - 0.5), height: ROW - 2,
+          "fill-opacity": (0.04 + Math.pow((v - lo) / span, 1.3) * 0.9).toFixed(3),
+        }));
+      });
+    });
+    for (const m of o.marks || []) {
+      const i = ordered.findIndex((c) => c.dteIdx === m.dteIdx);
+      if (i < 0 || !isNum(m.m)) continue;
+      let k = 0, best = Infinity;
+      xs.forEach((x, idx) => { const d = Math.abs(x - m.m); if (d < best) { best = d; k = idx; } });
+      root.append(svg("rect", { class: `hs-anom${m.cheap ? " cheap" : ""}`, x: L + k * cw - 0.5, y: T + i * ROW, width: cw + 1, height: ROW }));
+    }
+    const atmK = xs.reduce((b, x, i) => (Math.abs(x - 1) < Math.abs(xs[b] - 1) ? i : b), 0);
+    root.append(svg("line", { class: "rg-atm", x1: L + (atmK + 0.5) * cw, y1: T, x2: L + (atmK + 0.5) * cw, y2: T + rows.length * ROW }));
+    [0, Math.floor(xs.length / 2), xs.length - 1].forEach((k) => {
+      root.append(svg("text", { class: "lc-ax", x: L + (k + 0.5) * cw, y: h - 5, "text-anchor": k === 0 ? "start" : k === xs.length - 1 ? "end" : "middle", text: `${(xs[k] * 100).toFixed(0)}%` }));
+    });
     return root;
   });
 }

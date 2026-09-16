@@ -8,14 +8,14 @@
 <title>TORII · AUTH</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Noto+Sans+JP:wght@600&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@300..700&display=swap" rel="stylesheet" />
 <style>
 /* Self-contained: the login must render before anything else is fetched, and it must not
    depend on the app's stylesheet (which is versioned with the terminal, not with auth). */
 :root {
   --bg:#f4f4f2; --panel:#fff; --ink:#0d0d0c; --ink2:#55554f; --ink3:#9a9a92;
   --line:#e4e4e0; --line2:#cdcdc7; --red:#e0001e;
-  --mono:"JetBrains Mono",ui-monospace,monospace; --jp:"Noto Sans JP",var(--mono);
+  --mono:"Geist Mono","JetBrains Mono",ui-monospace,monospace;
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
@@ -40,11 +40,11 @@ html,body {
 }
 
 .ident { text-align:center; display:flex; flex-direction:column; gap:5px; }
-.ident-kanji { font-family:var(--jp); font-size:26px; color:var(--red); letter-spacing:.06em; line-height:1; }
-.ident-en { font-size:14px; font-weight:700; letter-spacing:.42em; padding-left:.42em; }
+.ident-mark { font-family:var(--mono); font-size:10px; line-height:1.05; color:var(--ink); white-space:pre; margin:0; text-shadow:0 0 12px rgba(255,255,255,.12); }
 .ident-sub { font-size:9px; letter-spacing:.22em; color:var(--ink3); text-transform:uppercase; }
 
 .card { width:min(360px, 100%); border:1px solid var(--line2); background:var(--panel); }
+.card { background-image: linear-gradient(var(--ink),var(--ink)),linear-gradient(var(--ink),var(--ink)),linear-gradient(var(--ink),var(--ink)),linear-gradient(var(--ink),var(--ink)),linear-gradient(var(--ink),var(--ink)),linear-gradient(var(--ink),var(--ink)),linear-gradient(var(--ink),var(--ink)),linear-gradient(var(--ink),var(--ink)); background-repeat:no-repeat; background-size:8px 1px,1px 8px,8px 1px,1px 8px,8px 1px,1px 8px,8px 1px,1px 8px; background-position:0 0,0 0,right 0 top 0,right 0 top 0,0 100%,0 100%,right 0 bottom 0,right 0 bottom 0; }
 .card-head {
   display:flex; align-items:center; justify-content:space-between;
   padding:6px 10px 6px 0; border-bottom:1px solid var(--line);
@@ -83,13 +83,14 @@ html,body {
 
 <div class="shell">
   <div class="ident">
-    <div class="ident-kanji">鳥居</div>
-    <div class="ident-en">TORII</div>
-    <div class="ident-sub">QQQ options flow &middot; authentication required</div>
+    <pre class="ident-mark" aria-label="TORII">▀▀█▀▀ █▀▀█ █▀▀█ ▀█▀ ▀█▀
+  █   █  █ █▄▄▀  █   █
+  ▀   ▀▀▀▀ ▀  ▀ ▀▀▀ ▀▀▀</pre>
+    <div class="ident-sub">sys │ auth required</div>
   </div>
 
   <div class="card">
-    <div class="card-head"><span class="card-ix">00</span><span>SIGN IN</span></div>
+    <div class="card-head"><span class="card-ix">▮ 00</span><span>sign in</span></div>
     <div class="card-body">
       <form id="f">
         <div class="field">
@@ -106,7 +107,7 @@ html,body {
     </div>
   </div>
 
-  <div class="note">private instrument &middot; no public access</div>
+  <div class="note">private instrument │ no public access</div>
 </div>
 
 <script>
@@ -129,7 +130,7 @@ html,body {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     cols = Math.ceil(w / CELL) + 1; rows = Math.ceil(h / CELL) + 1;
     cells = new Array(cols * rows).fill(null);
-    ctx.font = '12px "JetBrains Mono",ui-monospace,monospace'; ctx.textBaseline = "top";
+    ctx.font = '12px "Geist Mono",ui-monospace,monospace'; ctx.textBaseline = "top";
   }
   function frame(now) {
     requestAnimationFrame(frame);

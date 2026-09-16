@@ -4,14 +4,14 @@
 // data path is YYY (live, cloud, no desk required) and the locally-scored artefacts — board,
 // pre-open brief, vol engine — are secondary and always age-stamped.
 //
-// Load path (the second thing that was wrong with v1): paint the last snapshot from
-// localStorage immediately, then fetch in small parallel batches and repaint as each lands.
-// Panels whose endpoint is still in flight show a skeleton, never an error.
+// Load path: paint the last snapshot from localStorage immediately, then fetch in small
+// parallel batches and repaint as each lands. Panels whose endpoint is still in flight show
+// a skeleton, never an error.
 
 import { $, el, isNum, etClock, isRth, isUsSession, agoText } from "./lib/util.js";
 import * as api from "./lib/api.js";
 import { initBackground } from "./lib/bg.js";
-import { tag, toast, skeleton, initSpotlight } from "./lib/ui.js";
+import { toast, skeleton, decode, decodeAll } from "./lib/ui.js";
 import { spark } from "./lib/draw.js";
 import { collectLevels, formatLevels, copyText } from "./lib/levels.js";
 
@@ -25,8 +25,11 @@ import * as narrative from "./lib/views/narrative.js";
 const VIEWS = [board, greeks, vol, flow, regime, narrative];
 const VIEW_BY_ID = Object.fromEntries(VIEWS.map((v) => [v.ID, v]));
 
-/** Always fetched, whatever tab is open — feeds the rail and the LEVELS button. All small. */
-const CORE_EPS = ["gex", "chart", "atr", "expected_move", "levels", "zero_dte", "dealer_delta"];
+/**
+ * Always fetched, whatever tab is open — feeds the rail and the LEVELS button. net_iv and
+ * flow are here because the IV-anomaly pass that feeds LEVELS needs them from any tab.
+ */
+const CORE_EPS = ["gex", "chart", "atr", "expected_move", "levels", "zero_dte", "dealer_delta", "net_iv", "flow"];
 
 /* ── cadence ─────────────────────────────────────────────────────────────── */
 
@@ -40,7 +43,7 @@ const IDLE_MS = 2 * 24 * 60 * 60_000;
 const S = {
   view: "board",
   yyy: { ok: {}, err: {}, at: 0 },
-  pending: new Set(),        // endpoints currently in flight
+  pending: new Set(),
   spot: NaN,
   spotMeta: null,
   desk: null,
@@ -48,11 +51,11 @@ const S = {
   narrative: null,
   regime: null,
   macro: null,
-  lastLive: 0,               // last time a live part landed
-  snapAt: 0,                 // age of the restored snapshot, if that is what is on screen
+  lastLive: 0,
+  snapAt: 0,
   lastErr: null,
-  painted: {},               // view id → true once revealed (subsequent paints don't re-animate)
-  shownSpot: NaN,            // what the rail numeral currently reads (for the tick-up)
+  painted: {},
+  shownSpot: NaN,
 };
 
 const currentSpot = () => (isNum(S.spot) ? S.spot : S.yyy.ok?.gex?.spot);
@@ -62,17 +65,22 @@ const currentSpot = () => (isNum(S.spot) ? S.spot : S.yyy.ok?.gex?.spot);
 function buildChrome() {
   $("#accountUser").textContent = api.getUser();
   $("#signout").addEventListener("click", () => api.signOut());
-  $("#refresh").addEventListener("click", () => { pullLive(true); pullDesk(); });
+  $("#refresh").addEventListener("click", () => { pullLive(true); pullDesk(); toast("resyncing"); });
   $("#copyLevels").addEventListener("click", copyLevels);
   $("#themeToggle").addEventListener("click", toggleTheme);
 
   const tabs = $("#tabs");
-  for (const v of VIEWS) {
+  VIEWS.forEach((v, i) => {
     tabs.append(el("button.tab", { type: "button", "data-view": v.ID, onClick: () => setView(v.ID) },
-      [el("i.tab-jp", { text: v.JP }), el("span.tab-en", { text: v.LABEL })]));
-  }
+      [el("i", { text: String(i + 1).padStart(2, "0") }), el("span", { text: v.LABEL })]));
+  });
   document.addEventListener("view:refresh", () => paintView());
-  initSpotlight($("#viewRoot"));
+
+  // The rail compacts once the header has scrolled away.
+  const rail = $("#rail"), sentinel = $("#railSentinel");
+  if (rail && sentinel && "IntersectionObserver" in window) {
+    new IntersectionObserver(([e]) => rail.classList.toggle("compact", !e.isIntersecting), { threshold: 0 }).observe(sentinel);
+  }
 }
 
 function setView(id) {
@@ -81,7 +89,7 @@ function setView(id) {
   S.view = id;
   localStorage.setItem("view", id);
   for (const b of document.querySelectorAll(".tab")) b.classList.toggle("on", b.dataset.view === id);
-  if (changed) delete S.painted[id];   // a tab you switch to reveals again
+  if (changed) delete S.painted[id];
   paintView();
   pullLive();
 }
@@ -92,8 +100,8 @@ let bg = null;
 
 function applyTheme(t) {
   document.documentElement.dataset.theme = t;
-  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", t === "dark" ? "#050507" : "#f5f5f8");
-  $("#themeToggle").textContent = t === "dark" ? "☀" : "☾";
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", t === "dark" ? "#06060a" : "#f4f4f7");
+  $("#themeToggle").textContent = t === "dark" ? "light" : "dark";
   bg?.repaint();
 }
 
@@ -107,7 +115,6 @@ function toggleTheme() {
 /* ── the rail ────────────────────────────────────────────────────────────── */
 
 let tickRaf = 0;
-/** Tick the big numeral from what it reads now to the new print. */
 function tickSpot(to) {
   const node = $("#railSpot");
   const from = isNum(S.shownSpot) ? S.shownSpot : to;
@@ -120,12 +127,14 @@ function tickSpot(to) {
   const step = (now) => {
     const p = Math.min(1, (now - t0) / dur);
     const e = 1 - Math.pow(1 - p, 3);
-    const v = from + (to - from) * e;
-    node.textContent = v.toFixed(2);
+    node.textContent = (from + (to - from) * e).toFixed(2);
     if (p < 1) tickRaf = requestAnimationFrame(step); else S.shownSpot = to;
   };
   tickRaf = requestAnimationFrame(step);
 }
+
+const chip = (label, value, tone = "", opt = false) =>
+  el(`span.chip${tone ? "." + tone : ""}${opt ? ".opt" : ""}`, null, [`${label} `, el("b", { text: value })]);
 
 function paintRail() {
   const s = currentSpot();
@@ -137,33 +146,33 @@ function paintRail() {
   const chgEl = $("#railChg");
   chgEl.textContent = isNum(chg) ? `${chg >= 0 ? "+" : "−"}${Math.abs(chg).toFixed(2)}  ${(chg / open * 100).toFixed(2)}%` : "";
   chgEl.className = `rail-chg ${isNum(chg) ? (chg >= 0 ? "p" : "n") : ""}`;
-
-  $("#railSrc").textContent = S.spotMeta
-    ? `${S.spotMeta.source} · ${S.spotMeta.session}`
-    : (isNum(S.yyy.ok?.gex?.spot) ? "YYY CHAIN" : "");
+  $("#railSrc").textContent = S.spotMeta ? `${S.spotMeta.source} · ${S.spotMeta.session}` : (isNum(S.yyy.ok?.gex?.spot) ? "yyy chain" : "");
 
   if (bars?.length) spark($("#railSpark"), bars.slice(-78).map((b) => b.close));
 
-  const gx = S.yyy.ok?.gex, em = S.yyy.ok?.expected_move, atr = S.yyy.ok?.atr;
+  const gx = S.yyy.ok?.gex, em = S.yyy.ok?.expected_move, atr = S.yyy.ok?.atr, z = S.yyy.ok?.zero_dte;
   const chips = [];
-  if (gx?.gamma_env) chips.push(tag(`${gx.gamma_env} Γ`, gx.gamma_env === "POSITIVE" ? "cool" : "hot"));
-  if (isNum(gx?.net_gex_bn)) chips.push(tag(`GEX ${gx.net_gex_bn >= 0 ? "+" : "−"}${Math.abs(gx.net_gex_bn).toFixed(2)}B`, "mute"));
-  if (isNum(gx?.call_wall)) chips.push(tag(`CW ${gx.call_wall}`, "cool"));
-  if (isNum(gx?.put_wall)) chips.push(tag(`PW ${gx.put_wall}`, "hot"));
-  if (isNum(em?.atm_iv)) chips.push(tag(`IV ${em.atm_iv.toFixed(1)}%`, "mute"));
-  if (isNum(em?.moves?.["1d"]?.move_pts)) chips.push(tag(`EM ±${em.moves["1d"].move_pts.toFixed(2)}`, "mute"));
-  if (isNum(atr?.atr)) chips.push(tag(`ATR ${atr.atr.toFixed(2)}`, "mute"));
+  if (gx?.gamma_env) chips.push(chip("Γ", gx.gamma_env === "POSITIVE" ? "POS" : "NEG", gx.gamma_env === "POSITIVE" ? "cool" : "hot"));
+  if (isNum(gx?.net_gex_bn)) chips.push(chip("GEX", `${gx.net_gex_bn >= 0 ? "+" : "−"}${Math.abs(gx.net_gex_bn).toFixed(2)}B`, "", true));
+  if (isNum(gx?.call_wall)) chips.push(chip("CW", String(gx.call_wall), "cool"));
+  if (isNum(gx?.vol_trigger)) chips.push(chip("VT", String(gx.vol_trigger), "", true));
+  if (isNum(gx?.put_wall)) chips.push(chip("PW", String(gx.put_wall), "hot"));
+  if (isNum(z?.gamma_flip)) chips.push(chip("0DTE FLIP", String(z.gamma_flip), "", true));
+  if (isNum(em?.atm_iv)) chips.push(chip("IV", `${em.atm_iv.toFixed(1)}%`, "", true));
+  if (isNum(em?.moves?.["1d"]?.move_pts)) chips.push(chip("EM", `±${em.moves["1d"].move_pts.toFixed(2)}`, "", true));
+  if (isNum(atr?.atr)) chips.push(chip("ATR", atr.atr.toFixed(2), "", true));
   $("#railChips").replaceChildren(...chips);
 }
 
 function paintStatus() {
-  const dot = $("#statusDot"), txt = $("#statusText"), age = $("#statusAge");
+  const txt = $("#statusText"), age = $("#statusAge");
   const fresh = S.lastLive && Date.now() - S.lastLive < liveMs() * 2.5;
-  if (fresh) { dot.className = "dot is-live"; txt.textContent = isRth() ? "LIVE" : "OPEN"; age.textContent = agoText(S.lastLive); }
-  else if (S.pending.size && !S.lastLive) { dot.className = "dot is-load"; txt.textContent = S.snapAt ? "CACHED" : "SYNC"; age.textContent = S.snapAt ? agoText(S.snapAt) : ""; }
-  else if (S.lastLive) { dot.className = "dot is-warn"; txt.textContent = "STALE"; age.textContent = agoText(S.lastLive); }
-  else if (S.snapAt) { dot.className = "dot is-cache"; txt.textContent = "CACHED"; age.textContent = agoText(S.snapAt); }
-  else { dot.className = "dot is-err"; txt.textContent = S.lastErr ? "NO FEED" : "BOOT"; age.textContent = ""; }
+  txt.className = "";
+  if (fresh) { txt.textContent = isRth() ? "LIVE" : "OPEN"; txt.classList.add("live"); age.textContent = agoText(S.lastLive); }
+  else if (S.pending.size && !S.lastLive) { txt.textContent = S.snapAt ? "CACHED" : "SYNC"; age.textContent = S.snapAt ? agoText(S.snapAt) : "…"; }
+  else if (S.lastLive) { txt.textContent = "STALE"; age.textContent = agoText(S.lastLive); }
+  else if (S.snapAt) { txt.textContent = "CACHED"; age.textContent = agoText(S.snapAt); }
+  else { txt.textContent = S.lastErr ? "NO FEED" : "BOOT"; if (S.lastErr) txt.classList.add("err"); age.textContent = ""; }
 }
 
 /* ── render ──────────────────────────────────────────────────────────────── */
@@ -176,7 +185,6 @@ function paintView() {
   const ctx = {
     yyy: S.yyy,
     pending: S.pending,
-    /** A skeleton while `ep` is in flight and nothing is cached for it; null otherwise. */
     wait: (ep, kind = "rows", n) => (S.pending.has(ep) && S.yyy.ok[ep] === undefined ? skeleton(kind, n) : null),
     deskPending: S.deskPending,
     spot: currentSpot(),
@@ -187,15 +195,16 @@ function paintView() {
     macro: S.macro,
   };
 
-  // Reveal once per visit to a tab; repaints from arriving data should not re-run the entrance.
-  host.classList.toggle("no-reveal", !!S.painted[S.view]);
+  const first = !S.painted[S.view];
+  host.classList.toggle("no-reveal", !first);
   try { v.render(host, ctx); }
   catch (e) {
     console.error("[view]", S.view, e);
     host.replaceChildren(el("div.chart-empty", { text: `render error: ${e?.message ?? e}` }));
   }
-  if (!S.painted[S.view]) {
+  if (first) {
     Array.from(host.children).forEach((c, i) => c.style.setProperty("--i", String(i)));
+    decodeAll(host, 60);
     S.painted[S.view] = true;
   }
   paintRail();
@@ -204,8 +213,7 @@ function paintView() {
 
 /* ── data ────────────────────────────────────────────────────────────────── */
 
-let liveTimer = 0;
-let saveTimer = 0;
+let liveTimer = 0, saveTimer = 0;
 
 function mergePart(part) {
   const got = Object.keys(part.ok || {});
@@ -217,26 +225,16 @@ function mergePart(part) {
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => api.saveSnapshot(S.yyy.ok), 1500);
   }
-  for (const [k, msg] of Object.entries(part.err || {})) {
-    S.yyy.err[k] = msg;
-    S.lastErr = msg;
-  }
+  for (const [k, msg] of Object.entries(part.err || {})) { S.yyy.err[k] = msg; S.lastErr = msg; }
 }
 
-/**
- * Pull the current view's endpoints plus the core set. Batches are small and parallel, and
- * every batch that lands repaints immediately — the page assembles progressively instead of
- * waiting for the slowest upstream route.
- */
 async function pullLive(force = false) {
   const want = [...new Set([...CORE_EPS, ...(VIEW_BY_ID[S.view]?.EPS || [])])];
   const eps = force ? want : want.filter((e) => !S.pending.has(e));
   if (!eps.length) return;
-
   for (const e of eps) S.pending.add(e);
   paintStatus();
-  paintView();   // panels for freshly-pending endpoints switch to skeletons
-
+  paintView();
   try {
     await api.yyy(eps, {
       onPart: (part, chunk) => {
@@ -280,19 +278,19 @@ async function pullDesk() {
 
 async function copyLevels() {
   const btn = $("#copyLevels");
-  const levels = collectLevels({ yyy: S.yyy, desk: S.desk });
+  const levels = collectLevels({ yyy: S.yyy, desk: S.desk, spot: currentSpot() });
   if (!levels.length) { toast("no levels yet — still loading"); return; }
   const ok = await copyText(formatLevels(levels));
   if (!ok) { toast("clipboard blocked by the browser"); return; }
   btn.classList.add("done");
   setTimeout(() => btn.classList.remove("done"), 1100);
-  toast(`*${levels.length} levels* copied · paste into the converter's Batch Strikes`);
+  toast(`*${levels.length} levels* copied · paste into Batch Strikes`);
 }
 
 /* ── clock ───────────────────────────────────────────────────────────────── */
 
 function tickClock() {
-  $("#clock").textContent = `${etClock()} ET`;
+  $("#clock").textContent = etClock();
   paintStatus();
 }
 
@@ -306,9 +304,8 @@ function boot() {
   applyTheme(localStorage.getItem("theme") || "dark");
   bg = initBackground($("#bg"));
   buildChrome();
+  decode($("#wordmark"), 700);
 
-  // Instant first paint from the last frame this browser saw. Stamped CACHED until live
-  // parts replace it; anything older than six hours is not worth showing.
   const snap = api.loadSnapshot();
   if (snap) { S.yyy = { ok: snap.ok, err: {}, at: snap.at }; S.snapAt = snap.at; }
 

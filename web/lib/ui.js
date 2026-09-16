@@ -4,17 +4,19 @@
 import { el, append } from "./util.js";
 
 /**
- * The frame. `idx` is the small accent index at the left of the label, `jp` the kanji that
- * sinks into the card as a watermark. `tools` are controls that live in the label bar.
- * `cls: "half"` lets the panel take one column of the two-column grid on wide screens.
+ * The frame. `idx` is the small lit index at the left of the label, followed by the title,
+ * a dashed rule that takes the slack, then `tools`. `cls: "half"` lets the panel take one
+ * column of the two-column grid on wide screens. (`jp` is accepted and ignored — kept so the
+ * views did not all need touching when the kanji went.)
  */
-export function panel({ idx, title, jp, tools, body, note, cls = "", flush = false }) {
+export function panel({ idx, title, tools, body, note, cls = "", flush = false }) {
   const label = el("div.p-label", null, [
     el("span.p-label-l", null, [
       idx ? el("i.p-ix", { text: idx }) : null,
-      el("span.p-title", { text: title }),
+      el("span.p-title", { text: title, "data-decode": "" }),
     ]),
-    tools ? el("span.p-label-r", null, el("span.p-tools", null, tools)) : null,
+    el("i.p-line"),
+    tools ? el("span.p-tools", null, tools) : null,
   ]);
   const inner = el(`div.p-body${flush ? ".flush" : ""}`);
   if (body) append(inner, body);
@@ -22,16 +24,15 @@ export function panel({ idx, title, jp, tools, body, note, cls = "", flush = fal
     label,
     inner,
     note ? el("div.p-note", { text: note }) : null,
-    jp ? el("span.p-jp", { text: jp, "aria-hidden": "true" }) : null,
   ]);
 }
 
-/** Small chip. `tone` = "" | pos | neg | warn | cool | hot | mute. */
+/** Bracketed chip: [ TEXT ]. `tone` = "" | pos | neg | warn | cool | hot | mute. */
 export function tag(text, tone = "") {
   return el("span", { class: `tag ${tone}`, text });
 }
 
-/** Thin divider with an optional label. */
+/** Dashed divider with an optional label. */
 export function rule(label) {
   return el("div.rule", null, [
     el("i.rule-line"),
@@ -76,14 +77,14 @@ export function nodata(msg = "NO DATA") {
 }
 
 /**
- * Loading state. A panel whose endpoint is still in flight shows this instead of an error —
- * "NO DATA" on first paint was the single worst thing about the previous build.
+ * Loading state: strips of ░ with a light band sweeping across. Shown while a panel's
+ * endpoint is in flight — an error is only ever shown for an actual failure.
  * `kind`: "rows" (a ladder), "chart" (one tall block), "stats" (a row of cells).
  */
 export function skeleton(kind = "rows", n = 6) {
   if (kind === "chart") return el("div.sk-wrap", null, [el("i.sk.tall"), el("i.sk.w2")]);
   if (kind === "stats") return el("div.statgrid", null, Array.from({ length: n }, () =>
-    el("div.stat", null, [el("i.sk.w2"), el("i.sk.w1", { style: "height:18px" })])));
+    el("div.stat", null, [el("i.sk.w2"), el("i.sk.w1", { style: "height:16px;line-height:16px;font-size:16px" })])));
   return el("div.sk-wrap", null, Array.from({ length: n }, (_, i) =>
     el("div.sk-row", null, [el("i.sk"), el("i.sk", { class: `sk w${1 + ((i * 7) % 3)}` }), el("i.sk")])));
 }
@@ -91,12 +92,11 @@ export function skeleton(kind = "rows", n = 6) {
 /* ── toast ───────────────────────────────────────────────────────────────── */
 
 let toastEl = null, toastTimer = 0;
-/** One-line confirmation at the bottom of the screen. `html` may contain <b> for emphasis. */
+/** One-line confirmation at the bottom of the screen. *stars* mark emphasis. */
 export function toast(text, ms = 2200) {
   if (!toastEl) { toastEl = el("div.toast", { role: "status" }); document.body.append(toastEl); }
   toastEl.textContent = "";
-  const parts = String(text).split(/(\*[^*]+\*)/g);
-  for (const p of parts) {
+  for (const p of String(text).split(/(\*[^*]+\*)/g)) {
     if (p.startsWith("*") && p.endsWith("*")) toastEl.append(el("b", { text: p.slice(1, -1) }));
     else if (p) toastEl.append(p);
   }
@@ -105,25 +105,37 @@ export function toast(text, ms = 2200) {
   toastTimer = setTimeout(() => toastEl.classList.remove("on"), ms);
 }
 
-/* ── spotlight ───────────────────────────────────────────────────────────── */
+/* ── decode ──────────────────────────────────────────────────────────────── */
+
+const GLYPHS = "░▒▓█<>/\\|=-_+*#";
+const reduced = () => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
 /**
- * One delegated pointer listener drives the lit ring + fill on whichever panel the cursor is
- * over, via --mx/--my on that panel. Cheaper than a listener per card and survives re-renders.
+ * Resolve an element's text out of block noise, left to right. The one text animation in the
+ * terminal; run on panel titles the first time a tab reveals, and on the wordmark at boot.
+ * Reads the CURRENT text and restores it exactly; never runs twice on the same node at once.
  */
-export function initSpotlight(root) {
-  if (!root || !window.matchMedia?.("(hover: hover)").matches) return;
-  let raf = 0, last = null;
-  root.addEventListener("pointermove", (e) => {
-    const card = e.target.closest?.(".pnl");
-    if (!card) return;
-    last = { card, x: e.clientX, y: e.clientY };
-    if (raf) return;
-    raf = requestAnimationFrame(() => {
-      raf = 0;
-      const r = last.card.getBoundingClientRect();
-      last.card.style.setProperty("--mx", `${(last.x - r.left).toFixed(0)}px`);
-      last.card.style.setProperty("--my", `${(last.y - r.top).toFixed(0)}px`);
-    });
-  }, { passive: true });
+export function decode(node, dur = 420) {
+  if (!node || node._decoding || reduced()) return;
+  const orig = node.textContent;
+  if (!orig || orig.trim().length < 2) return;
+  node._decoding = true;
+  const t0 = performance.now();
+  const n = orig.length;
+  const step = (now) => {
+    const p = Math.min(1, (now - t0) / dur);
+    const keep = Math.floor(p * n);
+    let out = orig.slice(0, keep);
+    for (let i = keep; i < n; i++) out += orig[i] === " " ? " " : GLYPHS[(Math.random() * GLYPHS.length) | 0];
+    node.textContent = out;
+    if (p < 1) requestAnimationFrame(step);
+    else { node.textContent = orig; node._decoding = false; }
+  };
+  requestAnimationFrame(step);
+}
+
+/** Decode every `[data-decode]` under `root`, staggered so a column of panels ripples. */
+export function decodeAll(root, stagger = 45) {
+  if (!root || reduced()) return;
+  root.querySelectorAll("[data-decode]").forEach((n, i) => setTimeout(() => decode(n), i * stagger));
 }

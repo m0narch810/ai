@@ -8,8 +8,10 @@
 
 import { el, isNum, fmt, compactSigned, strikeLabel } from "../util.js";
 import { panel, tag, statGrid, nodata } from "../ui.js";
-import { smile, lineChart, bars, cone, matrix, stat, emptyPanel } from "../draw.js";
+import { smile, lineChart, bars, cone, matrix, stat, emptyPanel, ridgeline, heatSurface } from "../draw.js";
 import { smileCurves } from "../data.js";
+import { findIvAnomalies } from "../ivanom.js";
+import { asciiBar } from "../util.js";
 
 export const ID = "vol";
 export const LABEL = "VOL";
@@ -18,8 +20,11 @@ export const EPS = ["iv_surface", "net_iv", "expected_move", "probability", "vol
 
 export function render(host, ctx) {
   const { ok, err } = ctx.yyy;
+  const anom = findIvAnomalies({ net_iv: ok.net_iv, flow: ok.flow, spot: ctx.spot });
   host.replaceChildren(
     statePanel(ok, ctx),
+    anomalyPanel(anom, ctx),
+    surfacePanel(ok.iv_surface, anom, ctx),
     smilePanel(ok.iv_surface, err, ctx),
     termPanel(ok.net_iv),
     ivGridPanel(ok.net_iv, ctx.spot),
@@ -63,13 +68,89 @@ function statePanel(ok, ctx) {
   return panel({ idx: "V0", title: "VOL STATE", jp: JP, body: [statGrid(cells), sentiment, wings] });
 }
 
+/* ── V0a IV ANOMALIES ────────────────────────────────────────────────────── */
+
+/**
+ * The strikes the surface is kinked at, mapped onto a ladder. See ivanom.js for the three
+ * reads; here each strike shows its combined score as a glyph bar, its tilt (rich = the
+ * market is paying up there, cheap = it is being sold), and one chip per reason.
+ */
+function anomalyPanel(anom, ctx) {
+  const inflight = ctx.wait("net_iv", "rows", 8) || ctx.wait("flow", "rows", 8);
+  if (!anom.byStrike.length && inflight) {
+    return panel({ idx: "V0", title: "IV ANOMALIES", body: inflight });
+  }
+  const spot = ctx.spot;
+  const top = anom.byStrike.slice(0, 14).sort((a, b) => b.strike - a.strike);
+  const maxScore = Math.max(1, ...top.map((s) => s.score));
+
+  let railDone = false;
+  const rows = top.map((s) => {
+    const rail = !railDone && isNum(spot) && s.strike <= spot;
+    if (rail) railDone = true;
+    const chips = s.hits.slice(0, 4).map((h) => {
+      if (h.kind === "surface") return tag(`SURF ${h.dte}d ${h.z > 0 ? "+" : "−"}${Math.abs(h.z).toFixed(1)}σ ${(h.r * 100).toFixed(1)}vp`, h.z > 0 ? "cool" : "hot");
+      if (h.kind === "skew")    return tag(`SKEW ${h.dir === "call" ? "CALL BID" : "PUT BID"} ${Math.abs(h.z).toFixed(1)}σ`, h.dir === "call" ? "cool" : "hot");
+      return tag(`IVZ ${String(h.side || "").toUpperCase()} ${h.z > 0 ? "+" : "−"}${Math.abs(h.z).toFixed(1)}`, h.z > 0 ? "cool" : "hot");
+    });
+    return el(`div.anl-row${rail ? ".is-rail" : ""}`, null, [
+      el("span", { class: `anl-k ${s.dir}`, text: strikeLabel(s.strike) }),
+      el("span", { class: `anl-bar ${s.dir}`, text: asciiBar(s.score / maxScore, 8), title: `score ${s.score.toFixed(2)}` }),
+      el("span.anl-why", null, [tag(s.dir.toUpperCase(), s.dir === "rich" ? "cool" : s.dir === "cheap" ? "hot" : "mute"), ...chips]),
+    ]);
+  });
+
+  const c = anom.counts;
+  return panel({
+    idx: "V0", title: "IV ANOMALIES",
+    tools: [tag(`${c.surface} SURF`, "mute"), tag(`${c.skew} SKEW`, "mute"), tag(`${c.ivz} IVZ`, "mute")],
+    body: rows.length ? el("div.anl", null, rows) : el("div.anl-empty", { text: "surface is smooth — no strike is kinked past 2σ right now" }),
+    note: "rich = IV above the smile its neighbours draw (someone paying up there) · cheap = below it · surface residuals are per-expiry quadratic fits in log-moneyness, skew residuals per-expiry linear, IVZ is the feed's own z · strikes scoring ≥ 2 are added to LEVELS",
+  });
+}
+
+/* ── V0b IV SURFACE ──────────────────────────────────────────────────────── */
+
+function surfacePanel(ivSurface, anom, ctx) {
+  const s = smileCurves(ivSurface);
+  if (!s) {
+    return panel({ idx: "V1", title: "IV SURFACE", body: ctx.wait("iv_surface", "chart") || nodata("NO IV SURFACE") });
+  }
+  const spot = isNum(s.spot) ? s.spot : ctx.spot;
+  const curves = s.curves.map((c) => ({ ...c, dteIdx: c.rank }));
+  // Surface hits are keyed by net_iv's expiry index; map them onto the surface's dte list.
+  const dteToIdx = new Map(curves.map((c) => [c.dte, c.dteIdx]));
+  const marks = anom.surface
+    .filter((h) => dteToIdx.has(h.dte) && isNum(spot))
+    .map((h) => ({ dteIdx: dteToIdx.get(h.dte), m: h.strike / spot, iv: h.iv, cheap: h.dir === "cheap" }));
+
+  const ridgeHost = el("div.chart-host");
+  const heatHost = el("div.chart-host");
+  queueMicrotask(() => {
+    ridgeline(ridgeHost, { moneyness: s.moneyness, curves, marks });
+    heatSurface(heatHost, { moneyness: s.moneyness, curves, marks });
+  });
+
+  return panel({
+    idx: "V1", title: "IV SURFACE",
+    tools: [tag(isNum(s.atm) ? `ATM ${(s.atm * 100).toFixed(2)}%` : "", "mute"), tag(`${marks.length} MARKED`, marks.length ? "cool" : "mute")],
+    body: [
+      el("div.twin-lbl", { text: "RIDGE · nearest expiry front, furthest back" }),
+      ridgeHost,
+      el("div.twin-lbl", { text: "GRID · expiry × moneyness, lit by IV level" }),
+      heatHost,
+    ],
+    note: "boxed / dotted cells are surface anomalies (solid = rich, dashed = cheap) · a steep left shoulder that persists across rows is structural put demand; a lift that only exists in the top row is today's positioning",
+  });
+}
+
 /* ── V1 SMILE ────────────────────────────────────────────────────────────── */
 
 function smilePanel(ivSurface, err, ctx) {
   const s = smileCurves(ivSurface);
   if (!s) {
     return panel({
-      idx: "V1", title: "IV SMILE", jp: "スマイル", cls: "half",
+      idx: "V2", title: "IV SMILE", cls: "half",
       body: ctx.wait("iv_surface", "chart") || nodata(err?.iv_surface ? `iv_surface: ${err.iv_surface}` : "NO IV SURFACE"),
     });
   }
@@ -84,7 +165,7 @@ function smilePanel(ivSurface, err, ctx) {
   })));
 
   return panel({
-    idx: "V1", title: "IV SMILE", jp: "スマイル", cls: "half",
+    idx: "V2", title: "IV SMILE", cls: "half",
     tools: [tag(isNum(s.atm) ? `ATM ${(s.atm * 100).toFixed(2)}%` : "", "mute")],
     body: [host, legend],
     note: "one curve per expiry, nearest in solid · a steep left wing is paid downside protection; a lifted right wing is call demand",

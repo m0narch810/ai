@@ -10,6 +10,7 @@
 // pain AND the 0DTE gamma flip is one level with three reasons, not three levels.
 
 import { isNum } from "./util.js";
+import { findIvAnomalies } from "./ivanom.js";
 
 /**
  * @param {object} ctx  the same ctx the views get: { yyy:{ok}, spot, desk }
@@ -66,6 +67,14 @@ export function collectLevels(ctx) {
     }
     if (vv) add(pv / vv, "VWAP");
   }
+
+  // ── IV anomalies: strikes the surface is kinked at (score ≥ 2, top six) ──
+  try {
+    const anom = findIvAnomalies({ net_iv: ok.net_iv, flow: ok.flow, spot: ctx?.spot ?? ok.gex?.spot });
+    for (const s of anom.byStrike.filter((x) => x.score >= 2).slice(0, 6)) {
+      add(s.strike, `IV ${s.dir === "rich" ? "Rich" : s.dir === "cheap" ? "Cheap" : "Kink"} ${s.score.toFixed(1)}`);
+    }
+  } catch { /* the anomaly pass is best-effort */ }
 
   // ── desk board (AI / rule levels + IV walls) ────────────────────────────
   const b = ctx?.desk?.board;

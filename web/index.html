@@ -3,11 +3,11 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#050507" />
-  <title>TORII · QQQ OPTIONS FLOW</title>
+  <meta name="theme-color" content="#06060a" />
+  <title>TORII</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;600&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@300..700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
   <link rel="modulepreload" href="app.js" />
   <link rel="modulepreload" href="lib/util.js" />
@@ -25,36 +25,39 @@
 <main id="app">
 
   <header class="top">
-    <div class="brand">
-      <span class="brand-mark" aria-hidden="true">鳥居</span>
-      <span class="brand-text">
-        <b>TORII</b>
-        <i>QQQ OPTIONS FLOW &middot; YYY</i>
-      </span>
+    <div class="mark">
+      <pre class="wordmark" id="wordmark" aria-label="TORII">▀▀█▀▀ █▀▀█ █▀▀█ ▀█▀ ▀█▀
+  █   █  █ █▄▄▀  █   █
+  ▀   ▀▀▀▀ ▀  ▀ ▀▀▀ ▀▀▀</pre>
+      <div class="sysline">
+        <span>SYS</span><span class="sep">│</span>
+        <b id="statusText">BOOT</b>
+        <span id="statusAge"></span><span class="sep">│</span>
+        <span id="clock">--:--:--</span><span>ET</span>
+        <i class="cur" aria-hidden="true"></i>
+      </div>
     </div>
 
     <div class="top-right">
-      <span class="status">
-        <i class="dot" id="statusDot"></i>
-        <span id="statusText">BOOT</span>
-        <em id="statusAge"></em>
-      </span>
-      <span class="clock" id="clock">--:--:-- ET</span>
-      <button class="ibtn acc" id="copyLevels" type="button" title="Copy every level as strike + label lines for the Pine converter">⧉ LEVELS</button>
-      <button class="ibtn" id="themeToggle" type="button" aria-label="Toggle theme">☀</button>
-      <button class="ibtn" id="refresh" type="button" aria-label="Refresh" title="Refresh">↻</button>
-      <span class="who"><span id="accountUser"></span><button class="ibtn" id="signout" type="button" title="Sign out" aria-label="Sign out">⏻</button></span>
+      <button class="kbtn acc" id="copyLevels" type="button" title="Copy every level as strike + label lines for the Pine converter">levels</button>
+      <button class="kbtn" id="themeToggle" type="button" aria-label="Toggle theme">light</button>
+      <button class="kbtn" id="refresh" type="button" title="Refresh">sync</button>
+      <span class="who" id="accountUser"></span>
+      <button class="kbtn" id="signout" type="button" title="Sign out">exit</button>
     </div>
   </header>
 
-  <!-- hero: the live print, its session, and the structure it sits in -->
-  <section class="rail" aria-label="Spot">
+  <div class="rail-sentinel" id="railSentinel" aria-hidden="true"></div>
+
+  <!-- the live print and its session; sticks to the top and compacts on scroll -->
+  <section class="rail" id="rail" aria-label="Spot">
     <div class="rail-price">
+      <div class="rail-tick">QQQ <i class="cur" aria-hidden="true"></i></div>
       <span class="rail-spot" id="railSpot">—</span>
-      <span class="rail-meta">
+      <div class="rail-meta">
         <span class="rail-chg" id="railChg"></span>
         <span class="rail-src" id="railSrc"></span>
-      </span>
+      </div>
     </div>
     <div class="rail-spark" id="railSpark" aria-hidden="true"></div>
     <div class="rail-chips" id="railChips"></div>
@@ -65,13 +68,13 @@
   <div id="viewRoot" class="views"></div>
 
   <footer class="foot">
-    <span>TORII</span>
+    <span>torii</span>
     <span class="foot-sep">│</span>
-    <span>live: YYY</span>
+    <span>live: yyy</span>
     <span class="foot-sep">│</span>
     <span>desk: local scorer, age-stamped</span>
     <span class="foot-sep">│</span>
-    <span>bars: Yahoo</span>
+    <span>bars: yahoo</span>
   </footer>
 
 </main>

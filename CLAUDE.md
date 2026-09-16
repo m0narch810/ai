@@ -272,7 +272,35 @@ Always route price-dependent logic through `effectiveSpot`/`fetchSessionBars` �
 - **`watchdog.mjs`** — scheduled `*/15 * * * *`, 09:50–16:00 ET Mon–Fri. Alerts via ntfy if board
   stale > `WATCHDOG_STALE_MIN` (35). Fires once on stall + once on recovery (Blobs state).
 
-## Front end (rebuilt 2026-09-15, restyled + load path fixed 2026-09-16)
+## Front end (rebuilt 2026-09-15 · v2 2026-09-16 · v3 2026-09-16)
+
+**v3 — user verdict on v2: "looks vibecoded… kept the same font and logo… 'TORII · QQQ
+optionsflow with YYY' is incredibly corny… forget all my old design requirements… monochrome
+sleek futuristic Bloomberg terminal, ASCII designs throughout, not the ugly green".**
+- **Identity.** Kanji, tagline and the 鳥居 mark are GONE. The brand is a three-line block-glyph
+  wordmark (`<pre class="wordmark">`, in index.html + login.html) that decodes out of ░▒▓ noise
+  at boot (`ui.decode`). Face is **Geist Mono** (Google Fonts), one weight axis. Controls are
+  bracketed text `[ levels ]` (`.kbtn`), not buttons. A blinking `.cur` block marks "alive".
+- **Frame.** Panels are bracketed boxes: 1px edge + four corner ticks drawn as background
+  gradients (no extra elements), title set into a dashed rule (`.p-line`) with a lit `▮ NN`
+  index. Every meter is glyph-based (`repeating-linear-gradient` tick bars, `asciiBar`).
+  Skeletons are strips of `░` with a light band sweeping across. Reveal is a top-down `wipe`
+  with a 1px accent scan line, once per tab visit; panel titles decode on first reveal.
+  No radius, no glass blur, no cursor spotlight — those were the "vibecoded" tells.
+- **Sticky rail.** `.rail` is `position: sticky; top: 0`; an IntersectionObserver on
+  `#railSentinel` adds `.compact` once the header scrolls away (numeral 40→24px, spark
+  60→34px, `.chip.opt` chips hidden). The spark now prints session hi/lo at its right edge.
+- **IV SURFACE + IV ANOMALIES** (VOL tab, panels V0/V1). `draw.ridgeline()` stacks the eight
+  expiry smiles back-to-front as terrain (0DTE front, lit); `draw.heatSurface()` is the same
+  grid lit by IV level. `lib/ivanom.js` finds kinked strikes three ways — per-expiry quadratic
+  smile residual in log-moneyness (|z|≥2, ≥0.8 vp, ±6% window), per-expiry linear skew residual
+  on `flow.skew_data` (|z|≥2, ≥1.5 vp), and YYY's own `flow.sentiment_data.iv_zscore` (|z|≥2.5
+  with OI/volume) — merges per strike with 0DTE weighted 1.25×, and scales by proximity to spot
+  (1 at ATM → 0.35 at the ±6% edge) so the ladder ranks what is reachable. Rich = above the
+  curve (paid up), cheap = below. Strikes scoring ≥2 (top six) are added to LEVELS as
+  `IV Rich 3.2` / `IV Cheap 2.7`. `net_iv` and `flow` joined `CORE_EPS` for this.
+- Views still pass `jp:` to `panel()`; it is accepted and ignored.
+
 
 **v2 (2026-09-16) — user verdict on v1 was "very very bland… same vibe, things just moved around".**
 Three changes, all in `web/`:
@@ -358,6 +386,7 @@ vomma is near 1e-3, and a shared scale would blank eight columns and imply theta
 **CSS contract** (`web/styles.css`): one typeface (JetBrains Mono + Noto Sans JP for kanji),
 hairlines, zero radius, no shadow, no glow. Exactly three data colours — `--cool` positive,
 `--hot` negative, muted zero — with `--red` reserved for the brand mark and real alarms.
+**v3 tokens:** `--edge/-2/-3` (hairlines), `--acc` ice, `--neg`/`--neg-2` graphite, `--red` alarm.
 **The panel class is `.pnl`, NOT `.p`** — `.p` is the positive-value class and a bare `.p` rule
 would put a border and background on every positive number on the page.
 **Data colour classes:** `.p`/`.cool`/`.pos` → `--acc`; `.n`/`.hot` → `--neg-2` graphite; `.neg` →

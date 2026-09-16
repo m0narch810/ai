@@ -1,11 +1,11 @@
 {
-  "as_of": "2026-09-15T21:30:00",
-  "scored_at": 1789522211064,
-  "generated_at": "2026-09-16T01:33:18.535Z",
+  "as_of": "2026-09-15T22:00:00",
+  "scored_at": 1789524013512,
+  "generated_at": "2026-09-16T02:00:13.544Z",
   "session": "Asia",
-  "spot": 705.189317552376,
+  "spot": 704.599155614219,
   "regime": "negative",
-  "read": "Rule-based alignment read: resistance $709.00 (aligned significant), support $700.00 (mixed dominant). Negative gamma — bar raised to aligned dominant structure. VIX settlement tomorrow — vol unwind chop likely.",
+  "read": "Rule-based alignment read: resistance $710.00 (aligned significant), support $701.00 (aligned significant). Negative gamma — bar raised to aligned dominant structure. VIX settlement tomorrow — vol unwind chop likely.",
   "hard_stop_pts": 0.9828009828009827,
   "clean_reversal_pts": 0.1,
   "iv": {
@@ -15,6 +15,10 @@
   "expected_move": 12.45,
   "scoring_method": "rule",
   "gex_profile": [
+    {
+      "strike": 698,
+      "gex_m": -34.5
+    },
     {
       "strike": 699,
       "gex_m": -34.8
@@ -66,13 +70,24 @@
     {
       "strike": 711,
       "gex_m": -14.4
-    },
-    {
-      "strike": 712,
-      "gex_m": -53.4
     }
   ],
   "term_profile": [
+    {
+      "strike": 698,
+      "gex": [
+        -12.3,
+        -19.7,
+        -2.5,
+        0
+      ],
+      "charm": [
+        2484.3,
+        11747.2,
+        54.1,
+        0
+      ]
+    },
     {
       "strike": 699,
       "gex": [
@@ -267,31 +282,9 @@
         -530.7,
         0
       ]
-    },
-    {
-      "strike": 712,
-      "gex": [
-        7.7,
-        -59.4,
-        -1.7,
-        0
-      ],
-      "charm": [
-        -11188.4,
-        -35369.7,
-        -212.7,
-        0
-      ]
     }
   ],
   "coverage": [
-    {
-      "strike": 712,
-      "side": "resistance",
-      "reaction": "mixed",
-      "tags": [],
-      "prob": 10
-    },
     {
       "strike": 711,
       "side": "resistance",
@@ -360,7 +353,7 @@
     },
     {
       "strike": 705,
-      "side": "support",
+      "side": "resistance",
       "reaction": "chop",
       "tags": [
         "Broke Put Wall",
@@ -433,6 +426,13 @@
         "Front-OI Thin"
       ],
       "prob": 16
+    },
+    {
+      "strike": 698,
+      "side": "support",
+      "reaction": "mixed",
+      "tags": [],
+      "prob": 10
     }
   ],
   "zero_gamma": 704.54,
@@ -474,42 +474,41 @@
   },
   "levels": [
     {
-      "strike": 709,
+      "strike": 701,
       "reversal_prob": 56,
-      "side": "resistance",
+      "side": "support",
       "reaction": "clean",
       "tags": [
         "Aligned",
         "Battleground"
       ],
-      "why": "significant node; aligned: charm− drift, 0DTE charm confirms; battleground vol/OI; durable across tenors",
+      "why": "significant node; aligned: put-side gamma, 0DTE charm confirms; battleground vol/OI; durable across tenors",
       "outcome": "untouched",
       "touched": false
     },
     {
-      "strike": 700,
-      "reversal_prob": 40,
+      "strike": 703,
+      "reversal_prob": 56,
       "side": "support",
-      "reaction": "chop",
+      "reaction": "clean",
       "tags": [
-        "Major Wall",
-        "Max Pain",
-        "Mixed Greeks"
-      ],
-      "why": "dominant node (major wall); mixed: put-side gamma, charm+ drift, 0DTE charm confirms; against: dex− vulnerable; durable across tenors",
-      "outcome": "untouched",
-      "touched": false
-    },
-    {
-      "strike": 704,
-      "reversal_prob": 36,
-      "side": "support",
-      "reaction": "chop",
-      "tags": [
-        "Mixed Greeks",
+        "Aligned",
         "Battleground"
       ],
-      "why": "significant node; mixed: put-side gamma, 0DTE charm confirms; against: dex− vulnerable; battleground vol/OI; durable across tenors",
+      "why": "significant node; aligned: put-side gamma, 0DTE charm confirms; battleground vol/OI; durable across tenors",
+      "outcome": "untouched",
+      "touched": false
+    },
+    {
+      "strike": 710,
+      "reversal_prob": 48,
+      "side": "resistance",
+      "reaction": "clean",
+      "tags": [
+        "Call Wall",
+        "Aligned"
+      ],
+      "why": "significant node (call wall); aligned: charm− drift, 0DTE charm confirms",
       "outcome": "untouched",
       "touched": false
     }
