@@ -508,7 +508,7 @@ page in memory from `scripts/`, so nothing preview-related is ever deployed.
 ## IV SCREEN + FROZEN IV WALLS (v3.9, 2026-09-16) — what the studies changed on the board
 
 Three studies on the ThetaData-derived 1-min 0DTE chains (2022-24) plus a 2025 forward test on
-Databento OPRA quotes (`data/study/`, `pdfs/IV Dynamics at Intraday Reversals*.pdf`) settled this:
+Databento OPRA quotes (`data/study/`, `pdfs/IV Dynamics, Dealer Positioning and Intraday Reversals - QQQ 0DTE 2022-2025 (Aarav).pdf`) settled this:
 positioning at a strike (OI, gamma, vega, charm, vanna) is the SAME at holds and breaks; the only
 thing that separated them was the 0DTE ATM-IV tape INTO the level, and as a rule on every strike
 approach it is a SCREEN (rising 35.6% vs falling 30.7% on 40/80), with one strong avoid rule:
