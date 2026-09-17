@@ -12,6 +12,7 @@ import { greek, levelMarks, boardMarks, frontExpiryIndex } from "../data.js";
 import { liveIvWalls, wallZones } from "../ivwalls.js";
 import { buildSurfacePanel } from "./vol.js";
 import { candidates, TARGET_MNQ, STOP_MNQ } from "../levelsignal.js";
+import { flowState, holdCall } from "../flowexit.js";
 import { etNow } from "../util.js";
 
 export const ID = "board";
@@ -41,6 +42,7 @@ export function render(host, ctx) {
   // structure + walls, the desk read, the gamma ladder, the surface, expected move, 0DTE, price last.
   host.replaceChildren(...[
     signalPanel(ctx),
+    flowExitPanel(ctx),
     structurePanel(ok, spot, lv, ctx),
     ivWallsPanel(ok.net_iv, ctx.desk?.board?.iv_walls, spot, ctx),
     ivStatePanel(ctx),
@@ -86,6 +88,46 @@ function signalPanel(ctx) {
   return panel({
     idx: "00", title: "SIGNAL", tools: [tag(gate.verdict, tone)], body: [head, body],
     note: `${gate.why} · skips: a support reached on falling IV (replicated five times) and a wall sitting in heavily traded price (worst cell in both halves) · walls before 11:30 are a tilt against, the afternoon is the better wall window · everything else tested — greeks at the strike, named walls, OI, retests, session extremes, round numbers, volume climax, gaps — came back null`,
+  });
+}
+
+/* ── 00b FLOW EXIT: hold or bail on a runner ─────────────────────────────── */
+
+/**
+ * The one flow rule that passed (docs/studies/flow_exit_report.md): once you are IN a fade, hold while
+ * cumulative traded delta keeps making new extremes for the runner, exit when it stalls 2 bars. This panel is
+ * EXIT MANAGEMENT — it does not pick entries. Real traded flow from /dealer_anomalies (better than the backtest's
+ * OHLCV proxy). Flow does NOT veto entries: the veto failed five ways, absorption trades travel far.
+ */
+function flowExitPanel(ctx) {
+  const st = flowState(ctx?.yyy?.ok?.dealer_anomalies);
+  if (st.status !== "ok") {
+    return panel({ idx: "00b", title: "FLOW EXIT", cls: "half", body: nodata("NO LIVE FLOW TAPE"),
+      note: "needs /dealer_anomalies in the cash session — the hold/exit rule for a runner, once you're in" });
+  }
+  const up = holdCall(st, "support"), dn = holdCall(st, "resistance");
+  const toneOf = (c) => (c.call === "HOLD" ? "cool" : c.call === "EXIT" ? "neg" : "mute");
+  const cells = statGrid([
+    stat("SESSION CVD", `${st.cvd >= 0 ? "+" : "−"}${Math.abs(st.cvd).toFixed(1)}`, { tone: st.cvd >= 0 ? "cool" : "hot", sub: `${st.dir} now (Δ3 ${st.d3 >= 0 ? "+" : "−"}${Math.abs(st.d3).toFixed(1)})` }),
+    stat("IMBALANCE", st.imbalance || "—", { sub: isNum(st.buy) ? `${st.buy} buy / ${st.sell} sell bars` : null }),
+    stat("STALL", `${st.barsSinceHigh}↑ / ${st.barsSinceLow}↓`, { sub: "bars since CVD new hi / lo" }),
+  ]);
+  const rows = el("div.ladder", null, [
+    el("div.ladder-row.plain.is-sup", { "data-tip": `LONG runner (bought a support)
+${up.why}` }, [
+      el("span.lr-name", { text: "IN A LONG" }), el("span.lr-price", { text: "runner ↑" }),
+      el("span.lr-bar", null, el("span.lr-desk", { text: up.why.split(" — ")[0].split(" (")[0] })), el("span.lr-dist", null, tag(up.call, toneOf(up))),
+    ]),
+    el("div.ladder-row.plain.is-res", { "data-tip": `SHORT runner (sold a resistance)
+${dn.why}` }, [
+      el("span.lr-name", { text: "IN A SHORT" }), el("span.lr-price", { text: "runner ↓" }),
+      el("span.lr-bar", null, el("span.lr-desk", { text: dn.why.split(" — ")[0].split(" (")[0] })), el("span.lr-dist", null, tag(dn.call, toneOf(dn))),
+    ]),
+  ]);
+  return panel({
+    idx: "00b", title: "FLOW EXIT", cls: "half", tools: [tag(st.dir.toUpperCase(), st.dir === "buying" ? "cool" : st.dir === "selling" ? "hot" : "mute")],
+    body: [cells, rows],
+    note: "EXIT management only: once in a fade, HOLD while cumulative traded delta keeps making new extremes for the runner, EXIT on a 2-bar flow stall — beat both a fixed +40 and holding to the close in all four test periods. Flow does NOT pick or veto entries (the veto failed five ways; absorption trades travel far). Real traded flow from /dealer_anomalies.",
   });
 }
 

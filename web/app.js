@@ -31,7 +31,7 @@ const VIEW_BY_ID = Object.fromEntries(VIEWS.map((v) => [v.ID, v]));
  * Always fetched, whatever tab is open — feeds the rail and the LEVELS button. net_iv, flow,
  * vanna and charm are here because LEVELS (IV walls, vanna/charm walls) needs them from any tab.
  */
-const CORE_EPS = ["gex", "chart", "atr", "expected_move", "levels", "zero_dte", "dealer_delta", "net_iv", "flow", "vanna", "charm", "ivtape"];
+const CORE_EPS = ["gex", "chart", "atr", "expected_move", "levels", "zero_dte", "dealer_delta", "net_iv", "flow", "vanna", "charm", "ivtape", "dealer_anomalies"];
 
 /* ── cadence ─────────────────────────────────────────────────────────────── */
 

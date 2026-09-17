@@ -534,6 +534,21 @@ fixed bracket (15 stop / +40 target; +80 tested near zero, holding to the close 
 OI, "already traded today", session extremes, volume climax, round numbers, stretch from VWAP/open, gap zones,
 LVN-with-a-wall. Don't re-add one without a study that clears the same both-halves bar.
 
+## FLOW EXIT (v3.9.4, 2026-09-17) — hold/bail a runner on traded flow
+
+`web/lib/flowexit.js` + BOARD panel 00b "FLOW EXIT" (after SIGNAL). The one flow rule that passed the both-halves+
+history bar (`docs/studies/flow_exit_report.md`, `scripts/study_flow_exit.py`): once IN a fade, HOLD while cumulative
+traded delta keeps making new extremes for the runner, EXIT on a 2-bar CVD stall — beat BOTH a fixed +40 target and
+holding-to-the-close in all four periods (live +5.3/+3.7 vs fixed −3.6/−1.4, hold −0.7/−5.7; history −4.8/−6.3 vs
+−7.7/−8.2). Fed by REAL traded flow: `/dealer_anomalies` bar_deltas, now added to `CORE_EPS` and snapshotted per day
+by `yyy-warm.mjs` into the `flow` Blobs store. It is EXIT MANAGEMENT ONLY:
+- Flow does NOT pick entries and does NOT veto them. The entry veto ("don't fade into momentum") was tested FIVE ways
+  (`study_flow_veto.py` → `flow_veto_report.md`) and ALL failed — absorption trades (flow hard into a level that holds)
+  travel far, so vetoing momentum wrongly skips the best trades.
+- Flow as BIAS is momentum (predicts continuation, strong in 2022-23 trends +173 MNQ spread, ~0 in 2026 chop) — the
+  OPPOSITE of a fade system; don't align fades with flow bias (that was worse).
+Entry selection stays the SIGNAL panel (day gate + IV screen). See [[flow-managed-exit]], [[net-flow-cvd-proxy]].
+
 ## IV SCREEN + FROZEN IV WALLS (v3.9, 2026-09-16) — what the studies changed on the board
 
 Three studies on the ThetaData-derived 1-min 0DTE chains (2022-24) plus a 2025 forward test on
