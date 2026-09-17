@@ -1,518 +1,533 @@
 {
-  "as_of": "2026-09-17T00:30:00",
-  "scored_at": 1789619413921,
-  "generated_at": "2026-09-17T04:39:03.693Z",
-  "session": "Asia",
-  "spot": 709.4639474809906,
-  "regime": "negative",
-  "read": "Rule-based alignment read: resistance $713.00 (aligned significant); no qualifying support in band. Negative gamma — bar raised to aligned dominant structure.",
+  "as_of": "2026-09-17T15:00:00",
+  "scored_at": 1789671755694,
+  "generated_at": "2026-09-17T19:09:37.756Z",
+  "session": "US",
+  "spot": 716.22,
+  "regime": "positive",
+  "read": "Trapped between 720 call-wall resistance and 715 vol-trigger support; 60 min to close, positive-gamma chop into OPEX. Reachable both ways within the bracket.",
+  "tape": {
+    "now": "716.22, 60 min to close. Locked in 3-pt chop band 716.17–716.32 (ranges contracting). VWAP 715.81 sits 0.41 pts below. Momentum spent, no seller/buyer engine driving the move. Grinding toward mechanical floor.",
+    "direction": "ranging",
+    "path": [
+      {
+        "strike": 715,
+        "expect": "reversal",
+        "why": "Vol-trigger + 858M 0DTE GEX (dominant node) + 41.5k bullish 0DTE charm force mechanical floor. Retested once 14:45 with weak 30% run (1.03 pt overshoot, came back). Grind reaction into close; charm harvest intensifies in final hour. Dealers BUY into dips (short gamma on calls, need to hedge puts ITM)."
+      },
+      {
+        "strike": 717,
+        "expect": "speed_bump",
+        "why": "Bounce-then-break at 14:30 (0.16 pt CLEAN tick, then failed to continue downside). Bullish vanna (+198.4) + system charm drift canceled the seller push. Level is compromised; only oscillates through on any rally attempt. Pass-through, not an entry."
+      },
+      {
+        "strike": 720,
+        "expect": "accelerate",
+        "why": "Terminal call wall: 792M 0DTE GEX + −143.5k bearish charm (strongest seller concentration). If 715 breaks decisively upside, dealer selling at 720 accelerates rejection. OPEX tomorrow = pin gravity + theta harvest pin at 720. Requires 3.78 pt rally; only hit on a break-higher sequence."
+      }
+    ],
+    "trade": {
+      "side": "long",
+      "entry": 715,
+      "why": "Mechanical floor (858M 0DTE GEX + 41.5k bullish charm + vol-trigger nominal) + VWAP 0.41 pts below + already retested holding (weak but real) = high probability of touch within 10 min. Grind entry fills on dip. Stop loss sits at 714.02 (0.98 QQQ pts adverse), target 716.97 (+1.97 pts), execution window 60 min into close."
+    },
+    "narrative": "The 14:30 test of 717 PRINTED the bounce-then-break archetype exactly: a 0.16 pt precision tick (mechanical defense showed up) followed by ZERO follow-through downside, then a recovery spike. This killed the short setup. Price then rode 716 (which broke clean on 1.15 pt overshoot, no hesitation) and retested 715 on a 1.03 pt dip. The 715 retest held weakly (30% run before reversal), then oscillated back up. This is the POSITIVE GAMMA SIGNATURE: dealers fade both ways lightly, but 715's structure is the cleanest anchor because of its dominant 0DTE gamma (858M, highest in band) + the bullish charm concentration (+41.5k, strongest in band for support). The charm is a SAME-DAY ONLY driver (front-loaded 0DTE, next-week is only +1.8k); this is pure time-decay pin into today's 16:00 close, OPEX tomorrow amps the pin gravity. Price will oscillate down into VWAP 715.81 (high probability, 10–15 min window), and when 715 prints, the mechanical snap-back (dealers forced to BUY to hedge short puts + time-decay accelerating late) runs 715 → 716 → 717 boundary chop into the final 20 min. The 720 call wall is the terminal reject, not a target for today. **PRIMARY TRADE: LONG 715 on the dip, CHOP reaction (not SNAP), grind-into-close structure.**"
+  },
   "hard_stop_pts": 0.9828009828009827,
   "clean_reversal_pts": 0.1,
   "iv": {
-    "current": 18.91,
+    "current": 14.99,
     "direction": "STABLE"
   },
-  "expected_move": 11.98,
-  "scoring_method": "rule",
+  "expected_move": 4.31,
+  "scoring_method": "ai",
   "gex_profile": [
     {
-      "strike": 703,
-      "gex_m": -63.3
-    },
-    {
-      "strike": 704,
-      "gex_m": -69.2
-    },
-    {
-      "strike": 705,
-      "gex_m": -204.1
-    },
-    {
-      "strike": 706,
-      "gex_m": -62.2
-    },
-    {
-      "strike": 707,
-      "gex_m": 12.6
-    },
-    {
-      "strike": 708,
-      "gex_m": -22.5
-    },
-    {
-      "strike": 709,
-      "gex_m": -10.5
-    },
-    {
       "strike": 710,
-      "gex_m": 124.5
+      "gex_m": 113.7
     },
     {
       "strike": 711,
-      "gex_m": -14.4
+      "gex_m": -13.8
     },
     {
       "strike": 712,
-      "gex_m": 6.9
+      "gex_m": 93.8
     },
     {
       "strike": 713,
-      "gex_m": 12.6
+      "gex_m": 137.2
     },
     {
       "strike": 714,
-      "gex_m": 12.7
+      "gex_m": 274.3
     },
     {
       "strike": 715,
-      "gex_m": -4.5
+      "gex_m": 752.1
     },
     {
       "strike": 716,
-      "gex_m": 14.9
+      "gex_m": 809.4
+    },
+    {
+      "strike": 717,
+      "gex_m": 529.3
+    },
+    {
+      "strike": 718,
+      "gex_m": 285.6
+    },
+    {
+      "strike": 719,
+      "gex_m": 177.3
+    },
+    {
+      "strike": 720,
+      "gex_m": 895.8
+    },
+    {
+      "strike": 721,
+      "gex_m": 163.7
+    },
+    {
+      "strike": 722,
+      "gex_m": 118.5
+    },
+    {
+      "strike": 723,
+      "gex_m": 138.3
     }
   ],
   "term_profile": [
     {
-      "strike": 703,
-      "gex": [
-        -57.1,
-        -5.8,
-        -0.4,
-        0
-      ],
-      "charm": [
-        5413.6,
-        110.4,
-        0.7,
-        0
-      ]
-    },
-    {
-      "strike": 704,
-      "gex": [
-        -44.4,
-        -24.9,
-        0.1,
-        0
-      ],
-      "charm": [
-        2265.8,
-        32.9,
-        -0.8,
-        0
-      ]
-    },
-    {
-      "strike": 705,
-      "gex": [
-        -184.4,
-        -18.5,
-        -1.1,
-        0
-      ],
-      "charm": [
-        -13108.6,
-        -437.4,
-        -19.3,
-        0
-      ]
-    },
-    {
-      "strike": 706,
-      "gex": [
-        -60.2,
-        -2.2,
-        0.2,
-        0
-      ],
-      "charm": [
-        -9078.3,
-        -501.4,
-        -2.7,
-        0
-      ]
-    },
-    {
-      "strike": 707,
-      "gex": [
-        7.3,
-        5.3,
-        0,
-        0
-      ],
-      "charm": [
-        -11552.1,
-        -497.6,
-        -2.3,
-        0
-      ]
-    },
-    {
-      "strike": 708,
-      "gex": [
-        -21.2,
-        -1.2,
-        -0.1,
-        0
-      ],
-      "charm": [
-        -19522.9,
-        -724.8,
-        -4.2,
-        0
-      ]
-    },
-    {
-      "strike": 709,
-      "gex": [
-        -4.6,
-        -6,
-        0.1,
-        0
-      ],
-      "charm": [
-        -16445.3,
-        -701,
-        -1.6,
-        0
-      ]
-    },
-    {
       "strike": 710,
       "gex": [
-        128.7,
-        -2.2,
-        -2,
+        117.1,
+        0,
+        -3.4,
         0
       ],
       "charm": [
-        -228112.3,
-        -3304.5,
-        -78.4,
+        279124.8,
+        5265.8,
+        109,
         0
       ]
     },
     {
       "strike": 711,
       "gex": [
-        -22.7,
-        8.3,
-        0,
+        -26.4,
+        12.5,
+        0.1,
         0
       ],
       "charm": [
-        -22838.8,
-        -1314.4,
-        -2.1,
+        27335,
+        1864.9,
+        6.1,
         0
       ]
     },
     {
       "strike": 712,
       "gex": [
-        6.4,
-        0.6,
-        -0.1,
+        85.3,
+        9.1,
+        -0.6,
         0
       ],
       "charm": [
-        -48363.2,
-        -1441.3,
-        -11.8,
+        50617.2,
+        1077.9,
+        8.6,
         0
       ]
     },
     {
       "strike": 713,
       "gex": [
-        9.4,
-        3,
-        0.1,
+        123.2,
+        13.7,
+        0.3,
         0
       ],
       "charm": [
-        -21193.8,
-        -1376.4,
-        -4,
+        22980.6,
+        792,
+        2,
         0
       ]
     },
     {
       "strike": 714,
       "gex": [
-        9.1,
-        3.5,
-        0.1,
+        262,
+        11.9,
+        0.5,
         0
       ],
       "charm": [
-        -23414.2,
-        -1199.1,
-        -2.3,
+        18927.8,
+        420.9,
+        1.1,
         0
       ]
     },
     {
       "strike": 715,
       "gex": [
-        46.5,
-        -57.3,
-        6.4,
+        858,
+        -116.3,
+        10.5,
         0
       ],
       "charm": [
-        -106988.1,
-        -12393.6,
-        -221.1,
+        41484.9,
+        1838.2,
+        -0.5,
         0
       ]
     },
     {
       "strike": 716,
       "gex": [
-        16.2,
-        -1.3,
-        0,
+        796.1,
+        13,
+        0.3,
         0
       ],
       "charm": [
-        -16711.6,
-        -1476.5,
-        -2.8,
+        1201.8,
+        -89.5,
+        -1,
+        0
+      ]
+    },
+    {
+      "strike": 717,
+      "gex": [
+        507,
+        20.2,
+        2.1,
+        0
+      ],
+      "charm": [
+        -9671.4,
+        -431.5,
+        -11,
+        0
+      ]
+    },
+    {
+      "strike": 718,
+      "gex": [
+        401.6,
+        -116.2,
+        0.2,
+        0
+      ],
+      "charm": [
+        -22387.8,
+        -2224,
+        -1.8,
+        0
+      ]
+    },
+    {
+      "strike": 719,
+      "gex": [
+        141.2,
+        35.8,
+        0.3,
+        0
+      ],
+      "charm": [
+        -21037.5,
+        -938.5,
+        -3.5,
+        0
+      ]
+    },
+    {
+      "strike": 720,
+      "gex": [
+        792.1,
+        95.8,
+        7.9,
+        0
+      ],
+      "charm": [
+        -143543.1,
+        -5934.1,
+        -110.3,
+        0
+      ]
+    },
+    {
+      "strike": 721,
+      "gex": [
+        138.6,
+        24.2,
+        0.9,
+        0
+      ],
+      "charm": [
+        -26204.3,
+        -1449.7,
+        -28.2,
+        0
+      ]
+    },
+    {
+      "strike": 722,
+      "gex": [
+        90,
+        27.1,
+        1.3,
+        0
+      ],
+      "charm": [
+        -21825.8,
+        -1819.8,
+        -25.1,
+        0
+      ]
+    },
+    {
+      "strike": 723,
+      "gex": [
+        99.3,
+        37.4,
+        1.6,
+        0
+      ],
+      "charm": [
+        -50728.7,
+        -2995.6,
+        -34.5,
         0
       ]
     }
   ],
   "coverage": [
     {
-      "strike": 716,
+      "strike": 723,
       "side": "resistance",
-      "reaction": "mixed",
+      "reaction": "chop",
       "tags": [
-        "Aligned",
-        "0DTE Pin"
+        "Secondary"
       ],
-      "prob": 33
+      "prob": 12
     },
     {
-      "strike": 715,
+      "strike": 722,
       "side": "resistance",
-      "reaction": "clean",
+      "reaction": "chop",
       "tags": [
-        "Aligned"
-      ],
-      "prob": 48
-    },
-    {
-      "strike": 714,
-      "side": "resistance",
-      "reaction": "mixed",
-      "tags": [
-        "Aligned",
-        "0DTE Pin"
+        "Secondary"
       ],
       "prob": 18
     },
     {
-      "strike": 713,
+      "strike": 721,
       "side": "resistance",
-      "reaction": "clean",
+      "reaction": "chop",
       "tags": [
-        "Aligned",
-        "Battleground",
-        "0DTE Pin"
+        "Charm Wall"
       ],
-      "prob": 56
+      "prob": 28
     },
     {
-      "strike": 712,
+      "strike": 720,
       "side": "resistance",
-      "reaction": "clean",
-      "tags": [
-        "Aligned",
-        "Battleground",
-        "0DTE Pin"
-      ],
-      "prob": 56
-    },
-    {
-      "strike": 711,
-      "side": "resistance",
-      "reaction": "clean",
-      "tags": [
-        "Aligned",
-        "Battleground",
-        "0DTE Pin"
-      ],
-      "prob": 56
-    },
-    {
-      "strike": 710,
-      "side": "resistance",
-      "reaction": "clean",
+      "reaction": "mixed",
       "tags": [
         "Call Wall",
-        "Aligned",
-        "Battleground",
-        "0DTE Pin"
+        "Max Pain"
       ],
-      "prob": 58
+      "prob": 42
     },
     {
-      "strike": 709,
-      "side": "support",
+      "strike": 719,
+      "side": "resistance",
       "reaction": "chop",
       "tags": [
-        "Mixed Greeks",
-        "Battleground"
+        "Charm Wall",
+        "Battleground Vol"
       ],
-      "prob": 36
+      "prob": 30
     },
     {
-      "strike": 708,
-      "side": "support",
+      "strike": 718,
+      "side": "resistance",
       "reaction": "chop",
       "tags": [
-        "Opposed",
-        "Battleground",
-        "0DTE Pin"
-      ],
-      "prob": 18
-    },
-    {
-      "strike": 707,
-      "side": "support",
-      "reaction": "chop",
-      "tags": [
-        "Mixed Greeks",
-        "Battleground"
-      ],
-      "prob": 36
-    },
-    {
-      "strike": 706,
-      "side": "support",
-      "reaction": "chop",
-      "tags": [
-        "Mixed Greeks",
-        "Battleground",
-        "0DTE Pin"
-      ],
-      "prob": 36
-    },
-    {
-      "strike": 705,
-      "side": "support",
-      "reaction": "chop",
-      "tags": [
-        "Opposed",
-        "0DTE Flip",
-        "0DTE Pin"
+        "Charm Wall",
+        "Negative Charm"
       ],
       "prob": 25
     },
     {
-      "strike": 704,
-      "side": "support",
-      "reaction": "mixed",
+      "strike": 717,
+      "side": "resistance",
+      "reaction": "chop",
       "tags": [
-        "Aligned",
-        "0DTE Pin"
+        "Bounce-then-Break",
+        "Battleground Vol"
       ],
-      "prob": 33
+      "prob": 8
     },
     {
-      "strike": 703,
+      "strike": 716,
+      "side": "support",
+      "reaction": "chop",
+      "tags": [
+        "Broke",
+        "Ghost"
+      ],
+      "prob": 5
+    },
+    {
+      "strike": 715,
+      "side": "support",
+      "reaction": "chop",
+      "tags": [
+        "Vol Trigger",
+        "0DTE Gamma",
+        "Charm"
+      ],
+      "prob": 52
+    },
+    {
+      "strike": 714,
+      "side": "support",
+      "reaction": "chop",
+      "tags": [
+        "0DTE Gamma",
+        "Secondary"
+      ],
+      "prob": 38
+    },
+    {
+      "strike": 713,
+      "side": "support",
+      "reaction": "chop",
+      "tags": [
+        "0DTE Gamma",
+        "Battleground Vol"
+      ],
+      "prob": 35
+    },
+    {
+      "strike": 712,
+      "side": "support",
+      "reaction": "chop",
+      "tags": [
+        "0DTE Gamma"
+      ],
+      "prob": 28
+    },
+    {
+      "strike": 711,
       "side": "support",
       "reaction": "mixed",
       "tags": [
-        "Aligned",
-        "0DTE Pin"
+        "Negative GEX",
+        "Ghost"
       ],
-      "prob": 33
+      "prob": 18
+    },
+    {
+      "strike": 710,
+      "side": "support",
+      "reaction": "chop",
+      "tags": [
+        "Put Wall",
+        "Charm",
+        "Backstop"
+      ],
+      "prob": 52
     }
   ],
-  "zero_gamma": 704.72,
-  "vol_trigger": 704.72,
-  "net_gex": -3523300000,
-  "pc_ratio": 1.26,
-  "gex_0dte_ratio": 0.77,
-  "entropy_state": "CRITICAL",
-  "entropy_ratio": 2.04,
+  "zero_gamma": 715,
+  "vol_trigger": 715,
+  "net_gex": 4704740000,
+  "pc_ratio": 1.27,
+  "gex_0dte_ratio": 0.88,
+  "entropy_state": "NORMAL",
+  "entropy_ratio": 0.23,
   "day_gate": {
     "verdict": "SELECTIVE",
     "majors": 1,
-    "minors": 2,
+    "minors": 0,
     "reasons": [
       {
         "severity": "major",
-        "label": "Flow entropy CRITICAL (ρ=2.04) — positioning is disordered, walls unreliable"
-      },
-      {
-        "severity": "minor",
-        "label": "Negative net gamma — dealers amplify moves, non-dominant levels get blown through"
-      },
-      {
-        "severity": "minor",
-        "label": "Strongly trending tape (Hurst 0.92) — only the terminal wall is a fade, intermediates are targets"
+        "label": "Negative VRP (realized 20.0 > implied 15.0) — under-hedged tape, continuation over reversal"
       }
     ]
   },
   "iv_walls": {
-    "u_inner": 710.41,
-    "u_outer": 711.88,
-    "l_inner": 697.68,
-    "l_outer": 696,
-    "spot_at_calc": 704.54,
-    "sigma_atm_pct": 24.7,
+    "u_inner": 708.6,
+    "u_outer": 710.07,
+    "l_inner": 700.34,
+    "l_outer": 698.66,
+    "spot_at_calc": 704.72,
+    "sigma_atm_pct": 23.56,
     "delta": 0.1925,
-    "computed_at": "2026-09-16T00:15:00",
+    "computed_at": "2026-09-17T08:59:49",
     "dte": 0
   },
   "levels": [
     {
-      "strike": 713,
-      "reversal_prob": 56,
-      "side": "resistance",
-      "reaction": "clean",
-      "tags": [
-        "Aligned",
-        "Battleground",
-        "0DTE Pin"
-      ],
-      "why": "significant node; aligned: charm− drift, 0DTE charm confirms; battleground vol/OI; 0DTE-heavy, today-only",
-      "outcome": "untouched",
-      "touched": false
-    },
-    {
       "strike": 715,
-      "reversal_prob": 48,
-      "side": "resistance",
-      "reaction": "clean",
+      "reversal_prob": 52,
+      "side": "support",
+      "reaction": "chop",
       "tags": [
-        "Aligned"
+        "Vol Trigger",
+        "0DTE Gamma",
+        "0DTE Charm",
+        "Put Wall"
       ],
-      "why": "significant node; aligned: charm− drift, 0DTE charm confirms",
-      "outcome": "untouched",
-      "touched": false
+      "why": "858M 0DTE GEX (highest in band) + 41.5k 0DTE charm (bullish) + high-touch probability below VWAP. Retested once, held weakly (1.03 pt overshoot, 30% run). Same-day pin only (tenor structure front-loaded, evaporates at close). Grind reaction expected, not tick-snap.",
+      "outcome": "retested",
+      "touched": true,
+      "touchedAt": "2026-09-17T09:31:00",
+      "retestAt": "2026-09-17T09:55:00",
+      "overshoot": 1.03,
+      "clean": false
     },
     {
-      "strike": 710,
-      "reversal_prob": 30,
+      "strike": 720,
+      "reversal_prob": 42,
       "side": "resistance",
-      "reaction": "clean",
+      "reaction": "mixed",
       "tags": [
         "Call Wall",
-        "Aligned",
-        "Battleground",
-        "0DTE Pin"
+        "Max Pain",
+        "Negative Charm"
       ],
-      "why": "dominant node (call wall); aligned: call-side gamma, charm− drift, 0DTE charm confirms; battleground vol/OI; 0DTE-heavy, today-only; counter-node $709 inside the bracket — bounce-then-break risk",
-      "outcome": "pending",
+      "why": "792M 0DTE GEX + −143.5k bearish charm (strongest sellers in band) BUT +3629 bullish vanna (mechanical squeeze fuel). Charm and vanna opposed → mixed conviction. Terminal wall, requires 3.78 pt rally. Only reached on a decisive break-higher sequence.",
+      "outcome": "untouched",
+      "touched": false
+    },
+    {
+      "strike": 714,
+      "reversal_prob": 38,
+      "side": "support",
+      "reaction": "chop",
+      "tags": [
+        "0DTE Gamma",
+        "Secondary Node"
+      ],
+      "why": "262M 0DTE GEX + 18.9k bullish charm, secondary to 715's stack. Hit on the oscillation after 716 broke. Weak but real (0.68 pt overshoot, 44% run). Backstop behind 715.",
+      "outcome": "reversed",
       "touched": true,
-      "touchedAt": "2026-09-16T20:33:00",
-      "overshoot": 0.11,
+      "touchedAt": "2026-09-17T09:34:00",
+      "overshoot": 0.68,
       "clean": false
     }
   ]

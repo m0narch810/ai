@@ -11,8 +11,10 @@
 //     (−10 MNQ/fill), lower IV walls 21% (−10 to −15). That is the pass-through signature.
 //   * "IV already rolled over" did NOT time entries (32.5% vs 37.0%). Not encoded.
 // So this module produces a STATE (rising / falling / flat over the prior 30 min, plus how far
-// off its 60-min peak) and a SCREEN per side. No probabilities are printed — the screen is a
-// filter on what to skip, and the win rates in the tooltips are the study's, not a forecast.
+// off its 60-min peak) and a SCREEN per side. v3.9.2 (2026-09-17) added `studyRate`: the study's
+// own conditional win rate for the cell a level sits in (side × IV state, wall or not), printed
+// on every level as the realistic number — the STUDY'S rate for that cell, not a forecast for
+// the trade, and the unconditional base (33%, = break-even on 40/80) until the tape is live.
 //
 // The tape is fed two ways: the cloud warmer (yyy-warm.mjs) samples every 5 min from 09:31 and
 // serves the day via the `ivtape` proxy name, so a page opened at 13:00 has the morning; the
@@ -130,6 +132,73 @@ export function screen(st, side) {
 }
 
 export const fmtDelta = (d) => (isNum(d) ? `${d >= 0 ? "+" : "−"}${(Math.abs(d) * 100).toFixed(1)}` : "—");
+
+/* ── STUDY RATES: the realistic number for a level (v3.9.2, 2026-09-17) ──────────────────────
+ * Win rate on the 40/80 bracket (win | resolved), 95% CI, n, expected MNQ per fill — transcribed
+ * from docs/studies/forward_2025_report.md (2025 forward test, 2,886 first approaches, IV state
+ * decided one minute BEFORE contact) and the 2022-24 wall tests. These are the STUDY'S conditional
+ * rates for the cell a level sits in; they are printed as the honest prior for that cell, not as
+ * a forecast for the trade. Break-even on 40/80 is 33.3% before costs, so ~33% = a coin flip.
+ * Do not tune these; re-transcribe only from a re-run report. */
+export const BREAK_EVEN = 33.3;
+const R = (win, lo, hi, n, mnq, basis) => ({ win, lo, hi, n, mnq, basis });
+const RATES = {
+  base: R(33.0, 31, 35, 2886, 0.7, "2025 forward test, every approach, no IV screen"),
+  support: {
+    rising:  R(34.4, 30, 39, 527,  2.2, "support reached on RISING IV, 2025"),
+    flat:    R(29.2, 24, 35, 353, -2.5, "support reached on FLAT IV, 2025"),
+    falling: R(32.4, 28, 37, 579, -0.1, "support reached on FALLING IV, 2025 (all strikes)"),
+  },
+  resistance: {
+    rising:  R(36.8, 32, 41, 514,  4.6, "resistance reached on RISING IV, 2025"),
+    flat:    R(36.8, 31, 43, 345,  4.9, "resistance reached on FLAT IV, 2025"),
+    falling: R(29.0, 25, 33, 568, -3.7, "resistance reached on FALLING IV, 2025"),
+  },
+  // the one strong rule, measured three ways (heavy put strikes 2022-24, lower IV walls 2022-24)
+  wallSupportFalling: R(23.8, 18, 30, null, -10, "HEAVY put-side strike / lower IV wall reached on FALLING IV, 2022-24 — the pass-through signature"),
+};
+
+/**
+ * The realistic rate for a level. `wall` = a named heavy put/call wall or IV wall (the strong
+ * put-side rule applies only to those). Unscreened (tape not ok) → the unconditional base.
+ * @returns {{win, lo, hi, n, mnq, basis, screened:boolean}}
+ */
+export function studyRate(st, side, { wall = false } = {}) {
+  if (!st || st.status !== "ok" || !st.cls) return { ...RATES.base, screened: false };
+  const sup = side === "support";
+  if (sup && wall && st.cls === "falling") return { ...RATES.wallSupportFalling, screened: true };
+  const t = (sup ? RATES.support : RATES.resistance)[st.cls] || RATES.base;
+  return { ...t, screened: true };
+}
+
+/** `34% · +2 MNQ` — the rate as the board prints it. */
+export const fmtRate = (r) => (r ? `${r.win.toFixed(0)}%${isNum(r.mnq) ? ` · ${r.mnq >= 0 ? "+" : "−"}${Math.abs(r.mnq).toFixed(1)} MNQ` : ""}` : "—");
+
+/** One line for a tooltip: `34.4% win on 40/80 [30-39, n=527] · +2.2 MNQ/fill · <basis>`. */
+export const rateLine = (r) => (r
+  ? `${r.win.toFixed(1)}% win on 40/80${isNum(r.lo) ? ` [${r.lo}-${r.hi}${r.n ? `, n=${r.n}` : ""}]` : ""} · ${r.mnq >= 0 ? "+" : "−"}${Math.abs(r.mnq).toFixed(1)} MNQ/fill · ${r.basis}${r.screened ? "" : " · UNSCREENED (tape not live)"}`
+  : "");
+
+/**
+ * When the screen goes live: the state needs a 30-min reference sample, which `state()` accepts
+ * once the tape spans 25 min. Null with no tape. With the cloud sampling from 09:31 that is ~09:56.
+ */
+export function screenEta(tape) {
+  if (!tape?.length) return null;
+  return tape[0].t + (WIN_MIN - 5) * 60_000;
+}
+
+/**
+ * The close→open IV gap: today's first sample against the prior session's last one (the warmer
+ * stores it as `prev_close` on the day's blob). Available from the first sample at 09:31, i.e.
+ * ~25 min before the screen — but it is UNTESTED: none of the studies conditioned on it, so it
+ * is printed as information, never as a screen. Null without both ends.
+ */
+export function openGap(cloud, tape) {
+  const pc = cloud?.prev_close;
+  if (!pc || !isNum(pc.atm) || !tape?.length || !isNum(tape[0].atm)) return null;
+  return { d: tape[0].atm - pc.atm, prevAtm: pc.atm, prevDate: pc.date, openAtm: tape[0].atm, openAt: tape[0].t };
+}
 
 
 /* ── DAY READ: open-drive bias + wall targets (2022-24 breakout study, data/study/breaks_2224_report.md) ── */

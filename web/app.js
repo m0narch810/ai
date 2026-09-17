@@ -537,7 +537,7 @@ async function pullDesk() {
 
 async function copyLevels() {
   const btn = $("#copyLevels");
-  const levels = collectLevels({ yyy: S.yyy, desk: S.desk, spot: currentSpot() });
+  const levels = collectLevels({ yyy: S.yyy, desk: S.desk, spot: currentSpot(), ivstate: ivTape().state });
   if (!levels.length) { toast("no levels yet — still loading"); return; }
   const ok = await copyText(formatLevels(levels));
   if (!ok) { toast("clipboard blocked by the browser"); return; }

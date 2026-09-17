@@ -18,6 +18,8 @@
 import { isNum, etNow } from "./util.js";
 import { liveIvWalls } from "./ivwalls.js";
 import { greek, frontExpiryIndex } from "./data.js";
+import { studyRate } from "./ivtape.js";
+import { judgeLevel, dayGate, heavyStrikes, volumeProfile } from "./levelsignal.js";
 
 const REACH_PCT = 2.5;
 
@@ -41,7 +43,7 @@ function greekWalls(raw, spot, { perSign = 2, share = 0.3, expIdx = null } = {})
 }
 
 /**
- * @param {object} ctx  the same ctx the views get: { yyy:{ok}, spot, desk }
+ * @param {object} ctx  the same ctx the views get: { yyy:{ok}, spot, desk, ivstate }
  * @returns {{price:number, labels:string[]}[]} descending by price
  */
 export function collectLevels(ctx) {
@@ -101,23 +103,19 @@ export function collectLevels(ctx) {
   for (const r of ok.levels?.hod || []) add(r?.price, `HOD ${r?.confluence ?? ""}x`.trim());
   for (const r of ok.levels?.lod || []) add(r?.price, `LOD ${r?.confluence ?? ""}x`.trim());
 
-  // ── session VWAP from the bars ──────────────────────────────────────────
-  const bars = ok.chart?.candles;
-  if (Array.isArray(bars) && bars.length) {
-    let pv = 0, vv = 0;
-    for (const b of bars) {
-      const tp = ((b.high ?? b.h) + (b.low ?? b.l) + (b.close ?? b.c)) / 3;
-      const v = b.volume ?? b.v ?? 1;
-      if (isNum(tp)) { pv += tp * v; vv += v; }
-    }
-    if (vv) add(pv / vv, "VWAP");
-  }
+  // (session VWAP was exported here until 2026-09-17 — removed at the user's request: it moves
+  //  with every bar and is not a strike.)
 
   // ── desk board (AI / rule levels + IV walls) ────────────────────────────
   const b = ctx?.desk?.board;
+  // The number on a desk level is the STUDY rate for its cell (side × IV state), not the AI's
+  // reversal_prob — 33% base until the IV screen is live (v3.9.2).
   for (const l of b?.levels || []) {
     const side = l.side === "support" ? "Sup" : "Res";
-    add(l.strike, isNum(l.reversal_prob) ? `Desk ${side} ${l.reversal_prob}%` : `Desk ${side}`);
+    const st = ctx?.ivstate;
+    const r = studyRate(st, l.side === "support" ? "support" : "resistance", { wall: /wall/i.test((l.tags || []).join(" ")) });
+    const arrow = st?.cls === "rising" ? "↑" : st?.cls === "falling" ? "↓" : "→";
+    add(l.strike, `Desk ${side} ${r.win.toFixed(0)}%${r.screened ? ` IV${arrow}` : " unscreened"}`);
   }
   // IV walls: the FROZEN bracket (cloud open-frozen today → desk file → live as a last resort).
   // The live one shrinks ~4x through the day and filled at half the frozen rate in the study.
@@ -129,6 +127,17 @@ export function collectLevels(ctx) {
   add(w?.u_inner, `${src} Upper Inner`);
   add(w?.l_inner, `${src} Lower Inner`);
   add(w?.l_outer, `${src} Lower Outer`);
+
+  // SIGNAL tag (2026-09-17): the same take/skip rules the board's SIGNAL panel uses, so a pasted level
+  // carries its verdict. Whole strikes only — the rules were measured on whole-strike touches.
+  try {
+    const gate = dayGate(ctx), heavy = heavyStrikes(ok.gex, spot), profile = volumeProfile(ok.chart?.candles, spot);
+    for (const e of out.values()) {
+      if (!isNum(spot) || Math.abs(e.price - Math.round(e.price)) > 0.01) continue;
+      const j = judgeLevel(ctx, Math.round(e.price), e.price < spot ? "support" : "resistance", { gate, heavy, profile });
+      if (j.verdict !== "WATCH") e.labels.push(j.verdict === "SKIP" ? `SKIP: ${(j.skip[0]?.tag) || "day gate"}` : "TAKE");
+    }
+  } catch { /* the export must never fail on the signal layer */ }
 
   return [...out.values()].sort((a, b2) => b2.price - a.price);
 }

@@ -42,3 +42,6 @@ dist/
 # offline study outputs: keep the markdown reports (copied to docs/studies/), not the event tables
 data/study/
 __pycache__/
+
+# large local market-data files supplied for offline studies (IEX-only 1-min QQQ, 50MB)
+data/*.parquet

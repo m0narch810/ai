@@ -7,10 +7,11 @@
 import { el, isNum, fmt, pct, compact, compactSigned, strikeLabel, agoText, clamp, asciiBar } from "../util.js";
 import { panel, tag, segmented, statGrid, nodata, rule, skeleton } from "../ui.js";
 import { spine, candles, stat, emptyPanel, lineChart } from "../draw.js";
-import { screen, fmtDelta, inSession, openDrive, wallTargets } from "../ivtape.js";
+import { screen, fmtDelta, inSession, openDrive, wallTargets, studyRate, fmtRate, rateLine, screenEta, openGap, BREAK_EVEN } from "../ivtape.js";
 import { greek, levelMarks, boardMarks, frontExpiryIndex } from "../data.js";
 import { liveIvWalls, wallZones } from "../ivwalls.js";
 import { buildSurfacePanel } from "./vol.js";
+import { candidates, TARGET_MNQ, STOP_MNQ } from "../levelsignal.js";
 import { etNow } from "../util.js";
 
 export const ID = "board";
@@ -39,6 +40,7 @@ export function render(host, ctx) {
   // Default order (the user can rearrange any of it — app.js applyLayout runs after this):
   // structure + walls, the desk read, the gamma ladder, the surface, expected move, 0DTE, price last.
   host.replaceChildren(...[
+    signalPanel(ctx),
     structurePanel(ok, spot, lv, ctx),
     ivWallsPanel(ok.net_iv, ctx.desk?.board?.iv_walls, spot, ctx),
     ivStatePanel(ctx),
@@ -52,16 +54,51 @@ export function render(host, ctx) {
   ].filter(Boolean));
 }
 
+/* ── 00 SIGNAL: which level to take ──────────────────────────────────────── */
+
+/**
+ * The take list. Only the rules that survived the 2026-09-17 studies (see web/lib/levelsignal.js for each
+ * rule's evidence): a day gate on the expected move left, two hard skips (support on falling IV; a wall in
+ * heavily traded price), one tilt (walls before 11:30) and the pluses. Hover any row for the reasoning.
+ */
+function signalPanel(ctx) {
+  const { gate, rows } = candidates(ctx);
+  const tone = gate.verdict === "TAKE" ? "cool" : gate.verdict === "STAND DOWN" ? "neg" : "mute";
+  const head = statGrid([
+    stat("DAY", gate.verdict, { tone, sub: isNum(gate.room) ? `${gate.room.toFixed(0)} MNQ of move left (need 120)` : "RTH only" }),
+    stat("ATM IV", isNum(gate.iv) ? `${gate.iv.toFixed(1)}%` : "—", { sub: ctx.ivstate?.status === "ok" ? `${ctx.ivstate.cls} 30m` : "tape warming" }),
+    stat("BRACKET", `${STOP_MNQ} / +${TARGET_MNQ}`, { sub: "MNQ stop / target" }),
+  ]);
+  const body = rows.length
+    ? el("div.ladder", null, rows.map((r) => {
+        const t = r.verdict === "TAKE" ? "cool" : r.verdict === "SKIP" ? "neg" : "mute";
+        const reasons = [...r.skip, ...r.minus, ...r.plus];
+        const lines = [`${r.K} ${r.side.toUpperCase()} — ${r.verdict}`, ...reasons.map((x) => `${x.tag}: ${x.why}`), r.note];
+        const tip = lines.join(String.fromCharCode(10));
+        return el(`div.ladder-row.plain.is-${r.side === "support" ? "sup" : "res"}`, { "data-tip": tip }, [
+          el("span.lr-name", { text: r.side === "support" ? "BUY" : "SELL" }),
+          el("span.lr-price", { text: strikeLabel(r.K) }),
+          el("span.lr-bar", null, el("span.lr-desk", { text: reasons.map((x) => x.tag).join(" · ") || "nothing for or against" })),
+          el("span.lr-dist", null, tag(r.verdict, t)),
+        ]);
+      }))
+    : nodata(gate.verdict === "OFF" ? "RTH ONLY" : "NO CANDIDATES IN REACH");
+  return panel({
+    idx: "00", title: "SIGNAL", tools: [tag(gate.verdict, tone)], body: [head, body],
+    note: `${gate.why} · skips: a support reached on falling IV (replicated five times) and a wall sitting in heavily traded price (worst cell in both halves) · walls before 11:30 are a tilt against, the afternoon is the better wall window · everything else tested — greeks at the strike, named walls, OI, retests, session extremes, round numbers, volume climax, gaps — came back null`,
+  });
+}
+
 /* ── 01 STRUCTURE: the wall ladder ───────────────────────────────────────── */
 
 function structurePanel(ok, spot, lv, ctx) {
   const rows = [
-    { k: "call_wall_2", label: "CALL WALL 2", role: "res" },
-    { k: "call_wall",   label: "CALL WALL",   role: "res", strong: true },
+    { k: "call_wall_2", label: "CALL WALL 2", role: "res", wall: true },
+    { k: "call_wall",   label: "CALL WALL",   role: "res", wall: true, strong: true },
     { k: "max_pain",    label: "MAX PAIN",    role: "pin" },
     { k: "vol_trigger", label: "VOL TRIGGER", role: "pin", strong: true },
-    { k: "put_wall",    label: "PUT WALL",    role: "sup", strong: true },
-    { k: "put_wall_2",  label: "PUT WALL 2",  role: "sup" },
+    { k: "put_wall",    label: "PUT WALL",    role: "sup", wall: true, strong: true },
+    { k: "put_wall_2",  label: "PUT WALL 2",  role: "sup", wall: true },
   ]
     .map((r) => ({ ...r, price: lv[r.k] }))
     .filter((r) => isNum(r.price));
@@ -99,12 +136,13 @@ function structurePanel(ok, spot, lv, ctx) {
       el("span.lr-price", { text: strikeLabel(r.price) }),
       el("span.lr-bar", null, el("i.lr-fill", { style: `width:${(frac * 100).toFixed(1)}%` })),
       el("span", { class: `lr-dist ${d >= 0 ? "p" : "n"}`, text: isNum(d) ? `${d >= 0 ? "+" : "−"}${Math.abs(d).toFixed(2)}  ${(Math.abs(d) / spot * 100).toFixed(2)}%` : "—" }),
-      screenChip(ctx.ivstate, side),
+      screenChip(ctx.ivstate, side, !!r.wall),
     ]);
   }));
 
   const env = lv.gamma_env || (lv.positive_gamma ? "POSITIVE" : "NEGATIVE");
   const tools = [
+    screenTag(ctx),
     tag(`${env} GAMMA`, env === "POSITIVE" ? "cool" : "neg"),
     tag(lv.above_vol_trigger ? "ABOVE VT" : "BELOW VT", lv.above_vol_trigger ? "cool" : "warn"),
   ];
@@ -113,14 +151,43 @@ function structurePanel(ok, spot, lv, ctx) {
     idx: "01", title: "STRUCTURE", jp: "構造", cls: "half", tools, body,
     note: (isNum(lv.net_gex_bn)
       ? `net gamma ${compactSigned(lv.net_gex_bn, 3)}Bn · ${lv.positive_gamma ? "dealer hedging suppresses moves" : "dealer hedging amplifies moves"} · `
-      : "") + "walls are MAGNETS, not turns: turns print ~1 strike in front, and light-OI strikes out-held heavy ones in every IV state (2022-25) · the chip is the IV screen",
+      : "") + "walls are MAGNETS, not turns: turns print ~1 strike in front, and light-OI strikes out-held heavy ones in every IV state (2022-25) · the chip is the IV screen and the % is the STUDY'S win rate on 40/80 for that cell (33% = break-even); 33% base until the tape is live",
   });
 }
 
-/** The IV-screen chip for one level. Hover carries the study numbers. */
-function screenChip(ivstate, side) {
+/**
+ * The IV-screen chip for one level: the screen label plus the STUDY'S win rate for the cell the
+ * level sits in (side × IV state; `wall` = a named heavy wall / IV wall, where the strong
+ * put-side rule applies). Until the tape is live it prints the 33% base. Hover has the numbers.
+ */
+function screenChip(ivstate, side, wall = false) {
   const sc = screen(ivstate, side);
-  return el("span.lr-scr", null, el("span", { class: `tag ${sc.tone}`, text: sc.label, "data-tip": `${side.toUpperCase()} · ${sc.label}\n${sc.why}` }));
+  const r = studyRate(ivstate, side, { wall });
+  const pct = `${r.win.toFixed(0)}%`;
+  const tone = r.screened ? (r.win >= BREAK_EVEN + 2 ? "cool" : r.win <= BREAK_EVEN - 5 ? "neg" : sc.tone) : "mute";
+  return el("span.lr-scr", null, [
+    el("span", { class: `tag ${sc.tone}`, text: sc.label, "data-tip": `${side.toUpperCase()} · ${sc.label}\n${sc.why}` }),
+    " ",
+    el("span", { class: `tag ${tone}`, text: r.screened ? pct : `${pct} base`, "data-tip": `${side.toUpperCase()}${wall ? " · WALL" : ""}\n${rateLine(r)}\nbreak-even on 40/80: ${BREAK_EVEN}% before costs` }),
+  ]);
+}
+
+const etHHMM = (ms) => new Date(ms).toLocaleTimeString("en-US", { timeZone: "America/New_York", hour: "2-digit", minute: "2-digit", hour12: false });
+
+/**
+ * SCREENED / UNSCREENED status for a panel's tool strip. Until the IV tape has 25 min of session
+ * the board is the unconditional (base-rate) version; the tag says when the screen goes live.
+ */
+function screenTag(ctx) {
+  const st = ctx.ivstate;
+  if (st?.status === "ok") {
+    const arrow = st.cls === "rising" ? "↑" : st.cls === "falling" ? "↓" : "→";
+    return tag(`SCREENED · IV${arrow}`, st.cls === "rising" ? "cool" : st.cls === "falling" ? "warn" : "mute");
+  }
+  const eta = screenEta(ctx.ivtape);
+  if (st?.status === "stale") return tag("UNSCREENED · TAPE STALE", "warn");
+  if (eta && inSession()) return tag(`UNSCREENED · LIVE ~${etHHMM(eta)}`, "warn");
+  return tag(inSession() ? "UNSCREENED · NO TAPE" : "UNSCREENED · OFF-SESSION", "mute");
 }
 
 /** The fixed bracket: the cloud's open-frozen walls (today) → the desk's frozen file → null. */
@@ -140,6 +207,8 @@ function frozenWalls(ctx) {
 function ivStatePanel(ctx) {
   const st = ctx.ivstate, tape = ctx.ivtape || [];
   const sup = screen(st, "support"), res = screen(st, "resistance");
+  const gap = openGap(ctx.ivcloud, tape), eta = screenEta(tape);
+  const rSup = studyRate(st, "support"), rRes = studyRate(st, "resistance");
   const cells = [
     stat("0DTE ATM IV", st?.atm != null ? `${(100 * st.atm).toFixed(1)}%` : "—", { sub: st?.status === "ok" ? `${st.n} samples · ${Math.round(st.spanMin)} min` : st?.status === "warming" ? "warming — needs 30 min" : st?.status === "stale" ? "stale" : inSession() ? "no tape yet" : "outside the cash session" }),
     stat("30 MIN", st?.status === "ok" ? fmtDelta(st.d30) : "—", { tone: st?.cls === "rising" ? "cool" : st?.cls === "falling" ? "hot" : "", sub: st?.status === "ok" ? st.cls.toUpperCase() : null }),
@@ -147,6 +216,8 @@ function ivStatePanel(ctx) {
     stat("OFF 60M PEAK", st?.status === "ok" ? `−${(100 * st.offPeak).toFixed(1)}` : "—", { sub: st?.status === "ok" && st.rolled ? "rolled over" : "at/near peak" }),
     stat("WING − ATM", st?.status === "ok" && isNum(st.wingRel) ? fmtDelta(st.wingRel) : "—", { sub: "30-min drift, spot−2..−5" }),
     stat("SPOT", st?.spot != null ? fmt(st.spot, 2) : "—", { sub: "at last sample" }),
+    stat("OPEN vs CLOSE", gap ? fmtDelta(gap.d) : "—", { tone: gap ? (gap.d > 0.01 ? "cool" : gap.d < -0.01 ? "hot" : "") : "", sub: gap ? `09:31 ${(100 * gap.openAtm).toFixed(1)} vs ${gap.prevDate.slice(5)} close ${(100 * gap.prevAtm).toFixed(1)} · UNTESTED` : "needs the prior close (cloud)" }),
+    stat("SCREEN", st?.status === "ok" ? "LIVE" : eta && inSession() ? `~${etHHMM(eta)}` : "—", { tone: st?.status === "ok" ? "cool" : "", sub: st?.status === "ok" ? `since ~${etHHMM(eta)}` : eta ? "needs 25 min of tape" : inSession() ? "first sample at 09:31" : "cash session only" }),
   ];
   const host = el("div.chart-host");
   if (tape.length >= 2) queueMicrotask(() => lineChart(host, {
@@ -156,14 +227,14 @@ function ivStatePanel(ctx) {
     fmtY: (n) => `${n.toFixed(1)}%`, height: 120, labelWidth: 46,
   }));
   const rows = el("div.ladder", null, [
-    el("div.ladder-row.plain.is-sup", { "data-tip": `SUPPORTS · ${sup.label}\n${sup.why}` }, [el("span.lr-name", { text: "PUT-SIDE LEVELS" }), el("span.lr-price", null, el("span", { class: `tag ${sup.tone}`, text: sup.label })), el("span.lr-bar", null, el("span.lr-desk", { text: sup.why.split(":")[0] })), el("span.lr-dist", { text: "" })]),
-    el("div.ladder-row.plain.is-res", { "data-tip": `RESISTANCES · ${res.label}\n${res.why}` }, [el("span.lr-name", { text: "CALL-SIDE LEVELS" }), el("span.lr-price", null, el("span", { class: `tag ${res.tone}`, text: res.label })), el("span.lr-bar", null, el("span.lr-desk", { text: res.why.split(":")[0] })), el("span.lr-dist", { text: "" })]),
+    el("div.ladder-row.plain.is-sup", { "data-tip": `SUPPORTS · ${sup.label}\n${sup.why}\n${rateLine(rSup)}` }, [el("span.lr-name", { text: "PUT-SIDE LEVELS" }), el("span.lr-price", null, el("span", { class: `tag ${sup.tone}`, text: sup.label })), el("span.lr-bar", null, el("span.lr-desk", { text: sup.why.split(":")[0] })), el("span.lr-dist", { text: fmtRate(rSup) + (rSup.screened ? "" : " base") })]),
+    el("div.ladder-row.plain.is-res", { "data-tip": `RESISTANCES · ${res.label}\n${res.why}\n${rateLine(rRes)}` }, [el("span.lr-name", { text: "CALL-SIDE LEVELS" }), el("span.lr-price", null, el("span", { class: `tag ${res.tone}`, text: res.label })), el("span.lr-bar", null, el("span.lr-desk", { text: res.why.split(":")[0] })), el("span.lr-dist", { text: fmtRate(rRes) + (rRes.screened ? "" : " base") })]),
   ]);
   return panel({
     idx: "01c", title: "IV INTO LEVEL", cls: "half",
-    tools: [tag(st?.status === "ok" ? st.cls.toUpperCase() : (st?.status || "EMPTY").toUpperCase(), st?.cls === "rising" ? "cool" : st?.cls === "falling" ? "hot" : "mute")],
+    tools: [screenTag(ctx), tag(st?.status === "ok" ? st.cls.toUpperCase() : (st?.status || "EMPTY").toUpperCase(), st?.cls === "rising" ? "cool" : st?.cls === "falling" ? "hot" : "mute")],
     body: [statGrid(cells), host, rows],
-    note: "a screen, not a signal (2022-25, 9,358 strike approaches): skip put-side levels reached on FALLING IV (21-24% held, −10 MNQ/fill); rising IV into a level is modestly positive (35-40%); 'rolled over' did not time entries · cloud samples every 5 min from 09:31, this browser every 60 s",
+    note: "a screen, not a signal (2022-25, 9,358 strike approaches): skip put-side levels reached on FALLING IV (21-24% held, −10 MNQ/fill); rising IV into a level is modestly positive (35-40%); 'rolled over' did not time entries · the % on every level is the STUDY'S rate for its cell, 33% base (= break-even on 40/80) until the tape is live · options do not trade pre-market, so there is no 0DTE tape before 09:31 and the screen cannot exist before ~09:56; OPEN vs CLOSE is the one earlier read and it is UNTESTED · cloud samples every 5 min from 09:31, this browser every 60 s",
   });
 }
 
@@ -200,7 +271,7 @@ function ivWallsPanel(netIv, deskWalls0, spot, ctx) {
       el("span.lr-price", { text: fmt(v, 2) }),
       el("span.lr-bar", null, isNum(lv) && deskWalls ? el("span.lr-desk.is-live", { text: fmt(lv, 2) }) : null),
       el("span", { class: `lr-dist ${d >= 0 ? "p" : "n"}`, text: isNum(d) ? `${d >= 0 ? "+" : "\u2212"}${Math.abs(d).toFixed(2)}  ${(Math.abs(d) / spot * 100).toFixed(2)}%` : "\u2014" }),
-      screenChip(ctx.ivstate, r.role === "res" ? "resistance" : "support"),
+      screenChip(ctx.ivstate, r.role === "res" ? "resistance" : "support", true),
     ]);
   }));
   const src = deskWalls || live;
@@ -268,7 +339,9 @@ function pricePanel(ok, spot, lv, deskBoard, ctx) {
   add(lv.put_wall, "PUT WALL", "sup");
   add(lv.vol_trigger, "VOL TRIG", "pin");
   for (const l of deskBoard?.levels || []) {
-    if (isNum(l.strike)) levels.push({ price: l.strike, label: `${l.reversal_prob ?? ""}% ${strikeLabel(l.strike)}`, tone: "desk" });
+    if (!isNum(l.strike)) continue;
+    const r = studyRate(ctx.ivstate, l.side === "support" ? "support" : "resistance", { wall: /wall/i.test((l.tags || []).join(" ")) });
+    levels.push({ price: l.strike, label: `${r.win.toFixed(0)}% ${strikeLabel(l.strike)}`, tone: "desk" });
   }
 
   const body = [host];
@@ -449,21 +522,26 @@ function deskPanel(desk, spot, ctx) {
     tag(desk.source === "cloud" ? "CLOUD" : desk.source === "static" ? "LAN FILE" : "DESK", "mute"),
     tag(agoText(desk.at).toUpperCase(), old ? "warn" : "pos"),
     b.session ? tag(String(b.session).toUpperCase(), "mute") : null,
+    screenTag(ctx),
   ]);
 
   const levels = (b.levels || []).filter((l) => isNum(l.strike)).sort((a, b2) => b2.strike - a.strike);
   const list = levels.length
     ? el("div.dlevels", null, levels.map((l) => {
         const d = isNum(spot) ? l.strike - spot : NaN;
+        const side = l.side === "support" ? "support" : "resistance";
+        // The bar is the STUDY'S rate for this level's cell (side × IV state × wall), the number
+        // the desk can actually expect on 40/80; the AI's reversal_prob is kept as a small tag.
+        const r = studyRate(ctx.ivstate, side, { wall: /wall/i.test((l.tags || []).join(" ")) });
         return el(`div.dlevel.is-${l.side === "support" ? "sup" : "res"}`, null, [
           el("span.dl-k", { text: strikeLabel(l.strike) }),
           el("span.dl-side", { text: (l.side || "").slice(0, 3).toUpperCase() }),
-          el("span.dl-prob", null, [
-            el("i.dl-probbar", { style: `width:${clamp(l.reversal_prob ?? 0, 0, 100)}%` }),
-            el("span.dl-probtxt", { text: `${l.reversal_prob ?? "—"}%` }),
+          el("span.dl-prob", { "data-tip": `${strikeLabel(l.strike)} ${side}\n${rateLine(r)}\nbreak-even on 40/80: ${BREAK_EVEN}%${isNum(l.reversal_prob) ? `\ndesk AI prob: ${l.reversal_prob}% (its calibration tested at the base rate)` : ""}` }, [
+            el("i.dl-probbar", { style: `width:${clamp(r.win, 0, 100)}%${r.screened ? "" : ";opacity:.25"}` }),
+            el("span.dl-probtxt", { text: `${r.win.toFixed(0)}%${r.screened ? "" : " base"}` }),
           ]),
           el("span.dl-dist", { text: isNum(d) ? `${d >= 0 ? "+" : "−"}${Math.abs(d).toFixed(2)}` : "" }),
-          el("span.dl-tags", null, [screenChip(ctx.ivstate, l.side === "support" ? "support" : "resistance"), " ", (l.tags || []).join(" · ")]),
+          el("span.dl-tags", null, [screenChip(ctx.ivstate, side), " ", isNum(l.reversal_prob) ? `desk ${l.reversal_prob}% · ` : "", (l.tags || []).join(" · ")]),
           el("span.dl-why", { text: l.why || "" }),
         ]);
       }))

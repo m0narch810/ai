@@ -78,7 +78,19 @@ export const handler = async (event) => {
       const key = tapeKey(TICKER, t.date);
       let tape = null;
       try { tape = await tstore.get(key, { type: "json" }); } catch { tape = null; }
-      if (!tape || tape.date !== t.date) tape = { date: t.date, samples: [], open_walls: null, open_at: null };
+      if (!tape || tape.date !== t.date) {
+        tape = { date: t.date, samples: [], open_walls: null, open_at: null, prev_close: null };
+        // The prior session's LAST sample (its 16:00 ATM IV), so the client can print the
+        // close→open IV gap from the first sample at 09:31 (untested, information only).
+        for (let back = 1; back <= 5 && !tape.prev_close; back++) {
+          const d = new Date(Date.now() - back * 86_400_000);
+          const pd = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
+          let prev = null;
+          try { prev = await tstore.get(tapeKey(TICKER, pd), { type: "json" }); } catch { prev = null; }
+          const last = prev?.samples?.[prev.samples.length - 1];
+          if (last && Number.isFinite(last.atm)) tape.prev_close = { date: pd, atm: last.atm, t: last.t, spot: last.spot ?? null };
+        }
+      }
       const s = sampleFrom(nv, spot);
       if (s) { tape.samples.push(s); if (tape.samples.length > 200) tape.samples.shift(); }
       if (!tape.open_walls) {

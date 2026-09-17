@@ -246,7 +246,12 @@ Always route price-dependent logic through `effectiveSpot`/`fetchSessionBars` �
   deploy does NOT ship `dashboard.json`/`narrative.json`/`regime.json` (they'd bypass auth) —
   `stageWebDir()` in `src/publish.ts` filters them out; `publish()` pushes the board to the
   `dashboard` Blobs store instead. The static files still exist in `web/` for LAN viewing.
-- **`spot.mjs`** — live Yahoo spot server-side (CORS workaround). Mirrors `market.ts` session logic.
+- **`spot.mjs`** — live Yahoo spot server-side (CORS workaround). NO LONGER mirrors `market.ts`
+  (fixed 2026-09-17): Yahoo's `regularMarketPrice` only moves 09:30–16:00, so the old 08:30–17:00 "US"
+  branch served the PRIOR CLOSE all pre-market. Now: Mon–Fri 04:00–20:00 = last QQQ 1-min print with
+  `includePrePost` (session `pre`/`US`/`post`), falling to NQ=F converted if the print is >10 min old
+  while Globex is open; Globex otherwise (Sun 18:00→Fri 17:00 minus the 17:00–18:00 halt) = NQ=F
+  converted (`Asia`, ratio lookback 5d not 2d so Sunday night still has overlap); else `closed`.
 - **`yyy.mjs`** — THE front end's main data path (added 2026-09-15). One authed request fans out
   to N allowlisted YYY endpoints in parallel and returns `{ok:{ep:data}, err:{ep:msg}}`; a single
   bad route never fails the batch. 20s per-container memo, max 20 endpoints per call. The client
@@ -425,8 +430,8 @@ Three changes, all in `web/`:
 - **⧉ LEVELS button** (top bar) → `lib/levels.js` `collectLevels()` → clipboard, one line per
   price, descending, `705 "Call Wall / Max Pain"` — the exact `Batch Strikes` input format of
   `converter.pine`. Same-price sources merge into one line. Sources: GEX walls 1&2 / vol trigger /
-  max pain, 0DTE flip + walls + ±1σ, delta flip, EM ±1d, HOD/LOD confluence, session VWAP, desk
-  levels (with prob), IV walls.
+  max pain, 0DTE flip + walls + ±1σ, delta flip, EM ±1d, HOD/LOD confluence, desk
+  levels (with prob), IV walls. (Session VWAP removed from the export 2026-09-17.)
 
 
 **THE PREMISE CHANGED.** The scoring box is almost never on now, so a dashboard whose primary
@@ -505,6 +510,21 @@ page in memory from `scripts/`, so nothing preview-related is ever deployed.
 - `hard_stop_pts` / `clean_reversal_pts`: thresholds for live break detection in the browser
 - Per level: `reaction` ("clean"/"chop"/"mixed"), `tags`, `overshoot`, `clean` (bool)
 
+## SIGNAL PANEL (v3.9.3, 2026-09-17) — the board now says TAKE / SKIP
+
+`web/lib/levelsignal.js` + BOARD panel 00 "SIGNAL" (first panel, `signalPanel` in `web/lib/views/board.js`), and the
+same verdict is appended to every whole-strike line of the LEVELS export. It encodes ONLY what survived the
+2026-09-17 study run (docs/studies/): a DAY GATE (expected move left to the close ≥120 MNQ, computed from
+`/expected_move`'s ATM IV — never `zero_dte.atm_iv`, which blows past 30% after ~15:00 and would fake an open gate),
+two hard SKIPs (a support reached on falling ATM IV — five replications; a wall sitting in the top tercile of the
+session's traded-volume profile, built in-browser from `/chart` candles — worst cell in both live halves at −6 MNQ/trade),
+one MINUS (a wall before 11:30 — the afternoon is the better wall window, but 2022-23 disagrees, so it is a tilt),
+two PLUSes (0DTE flip within 1.2 pts; next heavy strike 80 MNQ–0.8E ahead, marked UNCONFIRMED at n=87) and the
+fixed bracket (15 stop / +40 target; +80 tested near zero, holding to the close lost in every group).
+**Everything else was tested and is deliberately absent**: greek size or alignment at the strike, named walls,
+OI, "already traded today", session extremes, volume climax, round numbers, stretch from VWAP/open, gap zones,
+LVN-with-a-wall. Don't re-add one without a study that clears the same both-halves bar.
+
 ## IV SCREEN + FROZEN IV WALLS (v3.9, 2026-09-16) — what the studies changed on the board
 
 Three studies on the ThetaData-derived 1-min 0DTE chains (2022-24) plus a 2025 forward test on
@@ -528,6 +548,20 @@ the day (sqrt-T) and its walls filled at half the frozen rate; frozen walls are 
   bracket (cloud open-frozen → desk file) as primary with the live value in the side column; ladder
   zones use the frozen one. LEVELS export labels GEX walls "(magnet)" and prints the frozen bracket.
 
+- **STUDY RATES ON EVERY LEVEL + SCREENED/UNSCREENED board (v3.9.2, 2026-09-17)** — user: "once
+  the IV stuff is confirmed the board gets that and a realistic probability; until then it's a
+  backup version". `studyRate(st, side, {wall})` in `web/lib/ivtape.js` is a FIXED table transcribed
+  from `docs/studies/forward_2025_report.md` (side × IV state, win|resolved on 40/80, CI, n, MNQ/fill)
+  plus the 2022-24 heavy-put/lower-IV-wall-on-falling-IV cell (24%, −10). Every level chip (STRUCTURE,
+  IV WALLS, desk levels, LEVELS export, price-panel labels) prints that rate; the desk row's bar IS the
+  study rate now and the AI `reversal_prob` is a small `desk NN%` tag (its calibration tested at the
+  base rate). Until the tape is live it prints `33% base` (= break-even on 40/80) and every panel
+  carries `UNSCREENED · LIVE ~HH:MM` (`screenTag`, ETA = first sample + 25 min ≈ 09:56) → `SCREENED ·
+  IV↑/↓/→`. Options do not trade pre-market, so no 0DTE tape exists before 09:31 and the screen
+  cannot be earlier than that + 25 min; the only earlier read is OPEN vs CLOSE (yyy-warm stores
+  `prev_close` = the prior session's last sample on the day's `ivtape` blob; `openGap()`), shown in
+  IV INTO LEVEL and labelled UNTESTED — none of the studies conditioned on it. Do not tune the table;
+  re-transcribe only from a re-run report.
 - **DAY READ (v3.9.1)** — BOARD panel 01d: open-drive bias (first-hour move in E0 from the tape's
   spot samples; persistence 62/75/83/86% and rest-of-day +0.10/+0.18/+0.30/+0.01E for |move|
   <0.25/0.5/0.8/>0.8E), next heavy strikes above/below with distance in E and the reach bucket
@@ -542,6 +576,51 @@ Reports are copied to `docs/studies/` (tracked); the event tables stay in `data/
 plus 30 min / 1 vol pt / 60-min peak for the IV state, none tuned. The 2024 holdout and the 2025
 Databento files have each been read once — do not re-cut them to find something.
 
+- **Precise-reaction lead-up (2026-09-17)** — user: look ONLY at the precise reactions and find what they share,
+  strike and whole-market, with AI. `scripts/study_precise_leadup.py` (87 features over the 2 h before each of
+  3,473 live-feed touches; dossiers in `data/study/dossiers/`), four reader agents on 48 precise dossiers, recipes
+  tested on every touch, one blind AI test. Readers agreed: already-traded level + heavy round-strike gamma/theta/OI
+  on or next to it + flip or wall within 1-2 pts. FAILED touches share it at the same rates; classifier AUC 0.50;
+  blind AI 11/29 on features. Summary `docs/studies/precise_leadup_summary.md`. ARTEFACTS: nearest-in-time same-day
+  pairing leaks each touch's outcome into the other's window (use ≥2.5 h gaps); multiple dossiers per day leak in a
+  blind test; `prior_same_side_precise` is hindsight-leaked.
+- **Live-feed precision study (2026-09-17)** — `scripts/study_ledger_greeks.py` on 60 days of NQ=F 5-min bars
+  (RTH + Globex, 1-min check) × the desk's YYY captures (`data/study/pull_strikes.mjs` → per-strike
+  gex/charm/vanna/theta/vega/dex, 0DTE, tenors, OI, volume, strike IV). USER'S definition: touch within 0.15
+  after ≥0.50 away; precise = +40 MNQ before 15 past; stop is FIXED at 15 (user: it will not change).
+  Precise ≈ 1/3 of touches at whole strikes AND at half-strikes where no options exist (RTH 32.1 vs 33.9,
+  ETH 36.5 vs 37.6). No greek at the strike cleared same-sign-in-both-halves; the gamma-peak + charm-with +
+  vanna×IV-with trio is slightly worse. Only supports on falling ATM IV held (26%/20% vs 37%/35%), the fifth
+  replication. Summary `docs/studies/live_precision_summary.md`.
+- **Open exploration for a 15-MNQ stop / let-it-run (2026-09-17)** — user: "include everything, look for
+  things rather than confirm things". DATA LAYER (reusable): `scripts/study_state_tape.py` →
+  `state_tape_222324.parquet` (every 5 min of 665 sessions: spot/E/IV, 0DTE flip/walls/OI walls, live +
+  open-frozen 19Δ IV walls, concentration, greek sums, skew, HOD/LOD, Δ5/15/30/60 of everything) and
+  `contacts_222324.parquet` (14,828 contacts × stop ladder 10-40 × run ladder 20-200 + breakeven-rule P&L);
+  `study_state_explore.py` (150-feature sweep + atlas-aligned profiles); `render_tapes.py` (665 daily text
+  tapes read by seven agents); `study_entry_variants.py` (at / 0.25-in-front / rejection entries, 30-min
+  fill window). Reports: `docs/studies/open_exploration_summary.md` (read this), `_readers.md`,
+  `reader_rules_tested.md`, `state_explore_2223.md`, `entry_variants_2223_report.md`. RESULT: 84% of fills
+  hit 15 MNQ before the close, run15→80 12.6% (BE 15.8), every stop/target at its own break-even; the only
+  feature with a spread is E (a 15 stop is 0.25E on a quiet day → 5% to 80; 0.06E on a wild day → 15%);
+  in-front entries fill 79% vs 60% and earn the same zero; rejection entries −18 MNQ/fill. Three same-sign
+  small-n "don't fade" tells (wall relocated within 15 min, call wall stepping up into a rally, call wall
+  absent at a support) and one day-level lead (afternoon IV spike ≥4 vp 14:00-14:30 → 24% vs 9% for a
+  ≥2-pt drop) — none encoded. TWO ARTEFACTS: (1) `S.grade` fills ANY time after the touch (a 10:33 contact
+  can fill at 15:45) — every study in the family shares it; fresh ≤5-min fills are only slightly better.
+  (2) `data/QQQ_raw_1min.parquet` (hfdatalibrary) is IEX-only from 2022-03 (~2% of the tape, ranges
+  35-45% narrower than NQ-converted, dividend-adjusted) — never grade on it. 2022-23 only; 2024 untouched.
+- **Reversion day-types / churn / tenure / bracket study (2026-09-17)** — `scripts/study_reversion_daytypes.py`
+  (2022-23 in-sample → `reversion_2223_report.md`; 2024 holdout read ONCE → `reversion_2024_holdout.md`;
+  2025 check → `reversion_2025_check.md`; summary `reversion_daytypes_summary.md`) + `scripts/study_live_churn.py`
+  on the cloud captures (`data/study/pull_captures.mjs` → `captures_walls.jsonl`) → `live_churn_report.md`.
+  REPLICATES: 70% of fills react ≥20 MNQ, 47% ≥40, 26% ≥80 (given 20 → 36-38% reach 80); every bracket
+  20/40…80/160 sits at its own break-even. NULL: ladder churn, level tenure, top-|gex| strike (in-sample
+  24.8 vs 33.6, holdout 31.5 vs 30.3), isolation (weak), every 10:30 day-type feature. REGIME-DEPENDENT,
+  NOT ENCODED: on >0.8E first-hour drives, approaches WITH the drive won 49/52% vs AGAINST 18/19% in
+  2022-23 and 2025 but 29 vs 35 in 2024. LIVE FEED: named call/put walls change on 3-5% of captures
+  (tenure 2.5-4 h); `vol_trigger` changes on 67% and is the spot strike 54% of the time. The 2024 holdout
+  has now been read by two studies — treat it as spent.
 - **Whole-chain walls, 2022 (2026-09-16)** — `scripts/study_wholechain_2022.py` → `wholechain_2022_report.md`:
   TD Ameritrade full-chain snapshots × ThetaData IV tape × NQ bars, 2,155 approaches. Whole-book
   heavy strikes 31.7-31.9% vs light 34.3%; the NAMED call/put gex/OI walls 28.9%; >10× median OI
