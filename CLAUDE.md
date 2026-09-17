@@ -150,6 +150,15 @@ by `netlify/functions/yyy.mjs` proxying YYY `/chart` (no auth needed at the sour
    bracket is now derived from side + entry and cannot be incoherent). Merges board × detector outcomes into `web/dashboard.json`, deploys `web/`
    **and** `netlify/functions/` to Netlify.
 
+**FLOW TAPE** (`yyy-warm.mjs`, added 2026-09-17): the warmer now snapshots `/dealer_anomalies` (the WHOLE
+session's 5-min `bar_deltas` = net traded delta ±1-ish, + prices + BUY/SELL anomalies) into the `flow` Blobs
+store, keyed by ET date, each 5-min cycle 09:15-16:05. This is real traded flow — the churn/absorption input that
+was thought lost with Altaris but lives on `/dealer_anomalies`. It was NEVER stored before (captures kept only
+`anom_up/anom_down/hiro_*`), so a testable flow history STARTS 2026-09-17. Purpose: the ABSORPTION lead
+(`docs/studies/flow_report.md`) — flow hard INTO a level that holds travels farther, the one flow read with a
+consistent sign across live + 2022-23 on a crude OHLCV-CVD proxy (`scripts/study_flow.py`). Forward-test it on the
+real bar-deltas once the `flow` store has a few weeks. Also see [[net-flow-cvd-proxy]], [[kde-confluence-null]].
+
 **IV walls** (`src/ivWalls.ts`, added 2026-08-13, from `pdfs/IV Wall Derivation Spec.pdf`):
 the four "IV wall" brackets — inner walls = the ~19Δ (|Δ|=0.1925) strikes of the front expiry,
 interpolated over the captured `iv_skew` smile (per-strike IV is already in the feed, so no

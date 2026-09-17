@@ -102,7 +102,28 @@ export const handler = async (event) => {
     }
   } catch (e) { tapeNote = ` · ivtape failed: ${String(e?.message ?? e).slice(0, 60)}`; }
 
-  const body = `warmed ${results.ok.length}/${names.length}` + (results.err.length ? ` · failed: ${results.err.join("; ")}` : "") + tapeNote;
+  // FLOW TAPE (added 2026-09-17): snapshot the day's traded-flow so it accumulates a history we can test.
+  // /dealer_anomalies returns the WHOLE session's 5-min bar_deltas (net traded delta, ±1-ish) + prices each call,
+  // so we just overwrite the day's blob with the latest full snapshot — no append needed. This is the churn/
+  // absorption input the ABSORPTION lead needs (data/study/flow_report.md); it was never stored before, so the
+  // history starts now. Store `flow` blob per ET date; keep HIRO alongside for direction.
+  let flowNote = "";
+  try {
+    const da = vals.dealer_anomalies;
+    if (da && Array.isArray(da.times) && Array.isArray(da.bar_deltas) && t.minutes >= 555 && t.minutes <= 965) {
+      const fstore = getStore("flow");
+      await fstore.setJSON(tapeKey(TICKER, t.date), {
+        date: t.date, at: Date.now(),
+        times: da.times, bar_deltas: da.bar_deltas, prices: da.prices ?? null,
+        anomalies: da.anomalies ?? null, imbalance: da.imbalance ?? null,
+        buy_count: da.buy_count ?? null, sell_count: da.sell_count ?? null, current_z: da.current_z ?? null,
+        hiro_dir: vals.flow?.sentiment ?? null, hiro_m: vals.hiro?.current_hiro_m ?? null,
+      });
+      flowNote = ` · flow ${da.bar_deltas.length} bars`;
+    }
+  } catch (e) { flowNote = ` · flow failed: ${String(e?.message ?? e).slice(0, 60)}`; }
+
+  const body = `warmed ${results.ok.length}/${names.length}` + (results.err.length ? ` · failed: ${results.err.join("; ")}` : "") + tapeNote + flowNote;
   console.log("[yyy-warm]", body);
   return { statusCode: 200, body };
 };

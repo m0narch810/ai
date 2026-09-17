@@ -1,343 +1,359 @@
 {
-  "as_of": "2026-09-17T15:00:00",
-  "scored_at": 1789671755694,
-  "generated_at": "2026-09-17T19:09:37.756Z",
+  "as_of": "2026-09-17T15:45:00",
+  "scored_at": 1789674452370,
+  "generated_at": "2026-09-17T19:58:10.330Z",
   "session": "US",
-  "spot": 716.22,
+  "spot": 717.24,
   "regime": "positive",
-  "read": "Trapped between 720 call-wall resistance and 715 vol-trigger support; 60 min to close, positive-gamma chop into OPEX. Reachable both ways within the bracket.",
+  "read": "Trapped 715–717 into the bell, VWAP 715.90 sits 1.34 pts below spot. 715 vol-trigger retested and holding on 0DTE GEX + bullish charm pin. 714 backup support confirmed. Both defend the close window on mechanical rehedging.",
   "tape": {
-    "now": "716.22, 60 min to close. Locked in 3-pt chop band 716.17–716.32 (ranges contracting). VWAP 715.81 sits 0.41 pts below. Momentum spent, no seller/buyer engine driving the move. Grinding toward mechanical floor.",
+    "now": "717.24, locked 716.54–716.67 for five consecutive bars, all closes in the middle of range, zero momentum, VWAP 15.97 sits 1.27 pts below. Dealers fading both directions at ~1-pt tick scale. 0DTE charm at 715 is +52.8k bullish (mechanical into-close force), net charm 646M across band (falling but still dominant). Last anomaly was 12:30; tape is pure mechanical theta now.",
     "direction": "ranging",
     "path": [
       {
         "strike": 715,
         "expect": "reversal",
-        "why": "Vol-trigger + 858M 0DTE GEX (dominant node) + 41.5k bullish 0DTE charm force mechanical floor. Retested once 14:45 with weak 30% run (1.03 pt overshoot, came back). Grind reaction into close; charm harvest intensifies in final hour. Dealers BUY into dips (short gamma on calls, need to hedge puts ITM)."
+        "why": "Vol-trigger + 1138M 0DTE GEX (max in band) + 52.8k bullish 0DTE charm mechanical pin. Retested 14:45 with 1.03 pt overshoot, 30% run — weak but real hold, not bounce-then-break. Theta forces peak at 15 min to close. VWAP magnet 0.85 pts below. Dealers forced rehedge on short gamma, OPEX eve."
+      },
+      {
+        "strike": 714,
+        "expect": "chop",
+        "why": "Confirmed 14:45 hold at 0.68 pt, 46% run — better hold quality than 715, less crowded, may turn cleaner on second test. Backup entry only if 715 breaks decisively."
       },
       {
         "strike": 717,
-        "expect": "speed_bump",
-        "why": "Bounce-then-break at 14:30 (0.16 pt CLEAN tick, then failed to continue downside). Bullish vanna (+198.4) + system charm drift canceled the seller push. Level is compromised; only oscillates through on any rally attempt. Pass-through, not an entry."
-      },
-      {
-        "strike": 720,
         "expect": "accelerate",
-        "why": "Terminal call wall: 792M 0DTE GEX + −143.5k bearish charm (strongest seller concentration). If 715 breaks decisively upside, dealer selling at 720 accelerates rejection. OPEX tomorrow = pin gravity + theta harvest pin at 720. Requires 3.78 pt rally; only hit on a break-higher sequence."
+        "why": "Resistance pending (0.31 pt overshoot), bounce-then-break pattern 14:30–14:45, dealers pinning. No follow-through downside. Break upside into 720 call wall (−110.7k charm seller, inert vanna). Pass-through target, not entry."
       }
     ],
     "trade": {
       "side": "long",
       "entry": 715,
-      "why": "Mechanical floor (858M 0DTE GEX + 41.5k bullish charm + vol-trigger nominal) + VWAP 0.41 pts below + already retested holding (weak but real) = high probability of touch within 10 min. Grind entry fills on dip. Stop loss sits at 714.02 (0.98 QQQ pts adverse), target 716.97 (+1.97 pts), execution window 60 min into close."
+      "why": "Vol-trigger mechanical floor + 1138M 0DTE GEX concentration + 52.8k bullish 0DTE charm pin (mechanical time-decay force, now intensifying) + VWAP 0.85 pts below + retested holding (weak 30% run but real, not broken). Approach exhausted (locked ranges, zero momentum, five identical bars). 15 min to close = peak theta-harvest window. Stop 714.02, target 716.97."
     },
-    "narrative": "The 14:30 test of 717 PRINTED the bounce-then-break archetype exactly: a 0.16 pt precision tick (mechanical defense showed up) followed by ZERO follow-through downside, then a recovery spike. This killed the short setup. Price then rode 716 (which broke clean on 1.15 pt overshoot, no hesitation) and retested 715 on a 1.03 pt dip. The 715 retest held weakly (30% run before reversal), then oscillated back up. This is the POSITIVE GAMMA SIGNATURE: dealers fade both ways lightly, but 715's structure is the cleanest anchor because of its dominant 0DTE gamma (858M, highest in band) + the bullish charm concentration (+41.5k, strongest in band for support). The charm is a SAME-DAY ONLY driver (front-loaded 0DTE, next-week is only +1.8k); this is pure time-decay pin into today's 16:00 close, OPEX tomorrow amps the pin gravity. Price will oscillate down into VWAP 715.81 (high probability, 10–15 min window), and when 715 prints, the mechanical snap-back (dealers forced to BUY to hedge short puts + time-decay accelerating late) runs 715 → 716 → 717 boundary chop into the final 20 min. The 720 call wall is the terminal reject, not a target for today. **PRIMARY TRADE: LONG 715 on the dip, CHOP reaction (not SNAP), grind-into-close structure.**"
+    "narrative": "THETA HARVEST PHASE CONFIRMED into the final 30 minutes. The 14:45 double-retest of 715 and 714 was dealer gamma-pinning, not market conviction — both held on rehedging, not new bids. Price has now locked 716.54–716.67 for five consecutive bars, closes middle of each range, zero momentum. Textbook gamma-pin signature. The 715 retest was WEAK (1.03 pt overshoot, 30% run only), but 714 was BETTER (0.68 pt, 46% run), suggesting the secondary support is less crowded. The 0DTE charm at 715 is +52.8k bullish, dealers MUST BUY delta into dips to stay neutral. Net charm across the band still 646M despite falling into close — mechanical rehedging, not speculation. The 717 resistance bounce-then-broke (14:30–14:45: 717.18 spike, no follow-through, dealers sold the rally). The 720 call wall carries −110.7k seller charm + 3563M inert vanna (IV flat); charm is the live flow, pointing DOWN. Any break above 717 is a pass-through. The 710 put wall is 7+ pts away with 15 min left and zero momentum — unreachable. The session's final 15 minutes is mechanical theta: 715 oscillates on dealer rehedges, 714 is the backstop if it breaks. Both defend the close edge. **TRADE: LONG 715, chop reaction, tight bracket, reliable into 16:00 ET.**"
   },
   "hard_stop_pts": 0.9828009828009827,
   "clean_reversal_pts": 0.1,
   "iv": {
-    "current": 14.99,
+    "current": 15.07,
     "direction": "STABLE"
   },
-  "expected_move": 4.31,
+  "expected_move": 4.34,
   "scoring_method": "ai",
   "gex_profile": [
     {
-      "strike": 710,
-      "gex_m": 113.7
-    },
-    {
       "strike": 711,
-      "gex_m": -13.8
+      "gex_m": -22
     },
     {
       "strike": 712,
-      "gex_m": 93.8
+      "gex_m": 7.1
     },
     {
       "strike": 713,
-      "gex_m": 137.2
+      "gex_m": 105.2
     },
     {
       "strike": 714,
-      "gex_m": 274.3
+      "gex_m": 287.4
     },
     {
       "strike": 715,
-      "gex_m": 752.1
+      "gex_m": 1034.5
     },
     {
       "strike": 716,
-      "gex_m": 809.4
+      "gex_m": 1161.4
     },
     {
       "strike": 717,
-      "gex_m": 529.3
+      "gex_m": 579.5
     },
     {
       "strike": 718,
-      "gex_m": 285.6
+      "gex_m": 158.7
     },
     {
       "strike": 719,
-      "gex_m": 177.3
+      "gex_m": 129.9
     },
     {
       "strike": 720,
-      "gex_m": 895.8
+      "gex_m": 728.1
     },
     {
       "strike": 721,
-      "gex_m": 163.7
+      "gex_m": 120.5
     },
     {
       "strike": 722,
-      "gex_m": 118.5
+      "gex_m": 104.1
     },
     {
       "strike": 723,
-      "gex_m": 138.3
+      "gex_m": 265.1
+    },
+    {
+      "strike": 724,
+      "gex_m": 122.5
     }
   ],
   "term_profile": [
     {
-      "strike": 710,
-      "gex": [
-        117.1,
-        0,
-        -3.4,
-        0
-      ],
-      "charm": [
-        279124.8,
-        5265.8,
-        109,
-        0
-      ]
-    },
-    {
       "strike": 711,
       "gex": [
-        -26.4,
-        12.5,
+        -33.8,
+        11.7,
         0.1,
         0
       ],
       "charm": [
-        27335,
-        1864.9,
-        6.1,
+        28631.7,
+        2153.1,
+        7.6,
         0
       ]
     },
     {
       "strike": 712,
       "gex": [
-        85.3,
-        9.1,
+        -1.8,
+        9.5,
         -0.6,
         0
       ],
       "charm": [
-        50617.2,
-        1077.9,
-        8.6,
+        55274,
+        1313,
+        11.4,
         0
       ]
     },
     {
       "strike": 713,
       "gex": [
-        123.2,
-        13.7,
+        90.9,
+        14,
         0.3,
         0
       ],
       "charm": [
-        22980.6,
-        792,
-        2,
+        27501,
+        1044.7,
+        3,
         0
       ]
     },
     {
       "strike": 714,
       "gex": [
-        262,
-        11.9,
+        275.2,
+        11.8,
         0.5,
         0
       ],
       "charm": [
-        18927.8,
-        420.9,
-        1.1,
+        25226.2,
+        653.4,
+        2.3,
         0
       ]
     },
     {
       "strike": 715,
       "gex": [
-        858,
-        -116.3,
-        10.5,
+        1140.4,
+        -116.7,
+        10.8,
         0
       ],
       "charm": [
-        41484.9,
-        1838.2,
-        -0.5,
+        77219,
+        4260,
+        30,
         0
       ]
     },
     {
       "strike": 716,
       "gex": [
-        796.1,
-        13,
+        1148.4,
+        12.6,
         0.3,
         0
       ],
       "charm": [
-        1201.8,
-        -89.5,
-        -1,
+        13624.2,
+        232.7,
+        0.1,
         0
       ]
     },
     {
       "strike": 717,
       "gex": [
-        507,
-        20.2,
-        2.1,
+        558,
+        19.4,
+        2.2,
         0
       ],
       "charm": [
-        -9671.4,
-        -431.5,
-        -11,
+        1839.7,
+        -90.4,
+        -5.1,
         0
       ]
     },
     {
       "strike": 718,
       "gex": [
-        401.6,
-        -116.2,
+        267.5,
+        -109,
         0.2,
         0
       ],
       "charm": [
-        -22387.8,
-        -2224,
-        -1.8,
+        -9802.7,
+        -1274.1,
+        -1.1,
         0
       ]
     },
     {
       "strike": 719,
       "gex": [
-        141.2,
-        35.8,
+        95.3,
+        34.3,
         0.3,
         0
       ],
       "charm": [
-        -21037.5,
-        -938.5,
-        -3.5,
+        -13471.3,
+        -647.2,
+        -2.6,
         0
       ]
     },
     {
       "strike": 720,
       "gex": [
-        792.1,
-        95.8,
-        7.9,
+        626.4,
+        93.3,
+        8.4,
         0
       ],
       "charm": [
-        -143543.1,
-        -5934.1,
-        -110.3,
+        -109674.5,
+        -4577.4,
+        -86.9,
         0
       ]
     },
     {
       "strike": 721,
       "gex": [
-        138.6,
-        24.2,
+        96.2,
+        23.4,
         0.9,
         0
       ],
       "charm": [
-        -26204.3,
-        -1449.7,
-        -28.2,
+        -21119.4,
+        -1204.9,
+        -23.3,
         0
       ]
     },
     {
       "strike": 722,
       "gex": [
-        90,
-        27.1,
-        1.3,
+        76.5,
+        26.2,
+        1.4,
         0
       ],
       "charm": [
-        -21825.8,
-        -1819.8,
-        -25.1,
+        -19674.4,
+        -1604.3,
+        -21.4,
         0
       ]
     },
     {
       "strike": 723,
       "gex": [
-        99.3,
-        37.4,
-        1.6,
+        226.8,
+        36.5,
+        1.7,
         0
       ],
       "charm": [
-        -50728.7,
-        -2995.6,
-        -34.5,
+        -43951.8,
+        -2778,
+        -30.2,
+        0
+      ]
+    },
+    {
+      "strike": 724,
+      "gex": [
+        102.6,
+        19.6,
+        0.2,
+        0
+      ],
+      "charm": [
+        -23774.3,
+        -2650.3,
+        -9.8,
         0
       ]
     }
   ],
   "coverage": [
     {
+      "strike": 724,
+      "side": "resistance",
+      "reaction": "mixed",
+      "tags": [
+        "Vega +801M",
+        "Far OTM",
+        "EOD"
+      ],
+      "prob": 5
+    },
+    {
       "strike": 723,
       "side": "resistance",
-      "reaction": "chop",
+      "reaction": "mixed",
       "tags": [
-        "Secondary"
+        "Extreme Vanna",
+        "Charm Seller",
+        "Distant"
       ],
-      "prob": 12
+      "prob": 8
     },
     {
       "strike": 722,
       "side": "resistance",
       "reaction": "chop",
       "tags": [
-        "Secondary"
+        "Charm Seller",
+        "Light OI"
       ],
-      "prob": 18
+      "prob": 10
     },
     {
       "strike": 721,
       "side": "resistance",
-      "reaction": "chop",
+      "reaction": "mixed",
       "tags": [
-        "Charm Wall"
+        "Charm Seller",
+        "OI Drop",
+        "Distant"
       ],
-      "prob": 28
+      "prob": 12
     },
     {
       "strike": 720,
@@ -345,49 +361,54 @@
       "reaction": "mixed",
       "tags": [
         "Call Wall",
-        "Max Pain"
+        "Charm Seller −114k",
+        "Pass-Through"
       ],
-      "prob": 42
+      "prob": 16
     },
     {
       "strike": 719,
       "side": "resistance",
       "reaction": "chop",
       "tags": [
-        "Charm Wall",
-        "Battleground Vol"
+        "Charm Seller",
+        "Vanna +251M",
+        "Inert IV"
       ],
-      "prob": 30
+      "prob": 23
     },
     {
       "strike": 718,
       "side": "resistance",
-      "reaction": "chop",
+      "reaction": "mixed",
       "tags": [
-        "Charm Wall",
-        "Negative Charm"
+        "Charm Flip Sell",
+        "DEX Flip",
+        "Vega +100M"
       ],
-      "prob": 25
+      "prob": 26
     },
     {
       "strike": 717,
-      "side": "resistance",
-      "reaction": "chop",
+      "side": "support",
+      "reaction": "mixed",
       "tags": [
-        "Bounce-then-Break",
-        "Battleground Vol"
+        "Resistance",
+        "Bounce-Then-Break",
+        "Dealers Pin"
       ],
-      "prob": 8
+      "prob": 28
     },
     {
       "strike": 716,
       "side": "support",
-      "reaction": "chop",
+      "reaction": "mixed",
       "tags": [
-        "Broke",
-        "Ghost"
+        "GEX +1161M",
+        "Broke 15:44",
+        "Vanna Seller"
       ],
-      "prob": 5
+      "prob": 24
     },
     {
       "strike": 715,
@@ -395,77 +416,73 @@
       "reaction": "chop",
       "tags": [
         "Vol Trigger",
-        "0DTE Gamma",
+        "0DTE GEX Max",
         "Charm"
       ],
-      "prob": 52
+      "prob": 54
     },
     {
       "strike": 714,
       "side": "support",
-      "reaction": "chop",
+      "reaction": "mixed",
       "tags": [
-        "0DTE Gamma",
-        "Secondary"
+        "Backup Support",
+        "Confirmed Hold"
       ],
-      "prob": 38
+      "prob": 42
     },
     {
       "strike": 713,
       "side": "support",
-      "reaction": "chop",
+      "reaction": "mixed",
       "tags": [
-        "0DTE Gamma",
-        "Battleground Vol"
+        "Gex +90M",
+        "Flip Pivot",
+        "Vex Negative"
       ],
-      "prob": 35
+      "prob": 14
     },
     {
       "strike": 712,
       "side": "support",
       "reaction": "chop",
       "tags": [
-        "0DTE Gamma"
+        "High vol_oi %",
+        "Contested",
+        "Charm Seller"
       ],
-      "prob": 28
+      "prob": 11
     },
     {
       "strike": 711,
       "side": "support",
       "reaction": "mixed",
       "tags": [
-        "Negative GEX",
-        "Ghost"
+        "Charm +30k",
+        "Tertiary Backstop"
       ],
-      "prob": 18
-    },
-    {
-      "strike": 710,
-      "side": "support",
-      "reaction": "chop",
-      "tags": [
-        "Put Wall",
-        "Charm",
-        "Backstop"
-      ],
-      "prob": 52
+      "prob": 8
     }
   ],
   "zero_gamma": 715,
   "vol_trigger": 715,
-  "net_gex": 4704740000,
-  "pc_ratio": 1.27,
-  "gex_0dte_ratio": 0.88,
+  "net_gex": 4908330000,
+  "pc_ratio": 1.28,
+  "gex_0dte_ratio": 0.89,
   "entropy_state": "NORMAL",
-  "entropy_ratio": 0.23,
+  "entropy_ratio": 0.25,
   "day_gate": {
     "verdict": "SELECTIVE",
     "majors": 1,
-    "minors": 0,
+    "minors": 1,
     "reasons": [
       {
         "severity": "major",
-        "label": "Negative VRP (realized 20.0 > implied 15.0) — under-hedged tape, continuation over reversal"
+        "label": "Negative VRP (realized 20.1 > implied 15.1) — under-hedged tape, continuation over reversal"
+      },
+      {
+        "severity": "minor",
+        "label": "Strongly trending tape (Hurst 0.71) — only the terminal wall is a fade, intermediates are targets"
       }
     ]
   },
@@ -483,16 +500,16 @@
   "levels": [
     {
       "strike": 715,
-      "reversal_prob": 52,
+      "reversal_prob": 54,
       "side": "support",
       "reaction": "chop",
       "tags": [
         "Vol Trigger",
-        "0DTE Gamma",
-        "0DTE Charm",
-        "Put Wall"
+        "0DTE GEX Max",
+        "Bullish Charm",
+        "Retested"
       ],
-      "why": "858M 0DTE GEX (highest in band) + 41.5k 0DTE charm (bullish) + high-touch probability below VWAP. Retested once, held weakly (1.03 pt overshoot, 30% run). Same-day pin only (tenor structure front-loaded, evaporates at close). Grind reaction expected, not tick-snap.",
+      "why": "1138M 0DTE GEX + 52.8k bullish 0DTE charm pin (mechanical into close), retested 14:45 with weak 30% run (1.03 pt overshoot, not broken), VWAP 0.85 pts below, theta forces peak 15 min to bell.",
       "outcome": "retested",
       "touched": true,
       "touchedAt": "2026-09-17T09:31:00",
@@ -501,29 +518,16 @@
       "clean": false
     },
     {
-      "strike": 720,
+      "strike": 714,
       "reversal_prob": 42,
-      "side": "resistance",
+      "side": "support",
       "reaction": "mixed",
       "tags": [
-        "Call Wall",
-        "Max Pain",
-        "Negative Charm"
+        "Backup Support",
+        "Better Hold",
+        "Light OI"
       ],
-      "why": "792M 0DTE GEX + −143.5k bearish charm (strongest sellers in band) BUT +3629 bullish vanna (mechanical squeeze fuel). Charm and vanna opposed → mixed conviction. Terminal wall, requires 3.78 pt rally. Only reached on a decisive break-higher sequence.",
-      "outcome": "untouched",
-      "touched": false
-    },
-    {
-      "strike": 714,
-      "reversal_prob": 38,
-      "side": "support",
-      "reaction": "chop",
-      "tags": [
-        "0DTE Gamma",
-        "Secondary Node"
-      ],
-      "why": "262M 0DTE GEX + 18.9k bullish charm, secondary to 715's stack. Hit on the oscillation after 716 broke. Weak but real (0.68 pt overshoot, 44% run). Backstop behind 715.",
+      "why": "Superior hold quality to 715 (46% run vs 30%, 0.68 pt overshoot), less crowded secondary support, enters only if 715 breaks decisively.",
       "outcome": "reversed",
       "touched": true,
       "touchedAt": "2026-09-17T09:34:00",
