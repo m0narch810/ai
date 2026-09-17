@@ -546,7 +546,9 @@ Databento files have each been read once — do not re-cut them to find somethin
   TD Ameritrade full-chain snapshots × ThetaData IV tape × NQ bars, 2,155 approaches. Whole-book
   heavy strikes 31.7-31.9% vs light 34.3%; the NAMED call/put gex/OI walls 28.9%; >10× median OI
   25.4% vs <0.5× 42.6%. Whole-chain heavy SUPPORT on falling IV 24.3% (−10.8 MNQ) — the same avoid
-  rule for the fourth time. Mass is a magnet on the whole book too. This was the last data on the box.
+  rule for the fourth time. Mass is a magnet on the whole book too. This was the last data on the box. Follow-up
+  (`front_of_wall_and_night_report.md`): the light strike ONE IN FRONT of a wall is not an edge
+  either (30-32% on both books); a night bracket anchored to 04:00 is reached 20% of nights at base rate.
 - **Breakouts / retest / bias / overnight (2026-09-16)** — `scripts/study_breakouts_2224.py`,
   `scripts/study_2025_breaks_asia.py` → `data/study/breaks_2224_report.md`,
   `y2025_breaks_asia_report.md`. Overnight: the prior-evening 19Δ bracket is reached on 7% of nights.

@@ -74,8 +74,12 @@ def _run_day(path, date):
                 ri = int(np.argmax(rej >= S.TP_PTS)) if (rej >= S.TP_PTS).any() else None
                 held = "broke" if (si is not None and (ri is None or si <= ri)) else "held" if ri is not None else "unresolved"
                 doi = float(oi_p.get(K, 0)) if sup else float(oi_c.get(K, 0)); dmed = medp if sup else medc
+                def hv(k):
+                    o = float(oi_p.get(k, 0)) if sup else float(oi_c.get(k, 0))
+                    return (k in heavy_gex) or bool(dmed and o >= 2 * dmed)
+                wall_b1 = hv(K - 1) if sup else hv(K + 1); wall_b2 = wall_b1 or (hv(K - 2) if sup else hv(K + 2))
                 rows.append(dict(date=date, hm=hm, K=K, side=side, spot=Sp, mins_to_close=mtc, status=status, pnl=pnl, held=held,
-                                 heavy=bool(dmed and doi >= 2 * dmed), oi_x=doi / dmed if dmed else np.nan, heavy_gex=(K in heavy_gex), **st))
+                                 heavy=bool(dmed and doi >= 2 * dmed), oi_x=doi / dmed if dmed else np.nan, heavy_gex=(K in heavy_gex), wall_b1=wall_b1, wall_b2=wall_b2, **st))
     return {"rows": rows}
 
 

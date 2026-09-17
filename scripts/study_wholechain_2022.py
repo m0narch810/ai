@@ -149,7 +149,11 @@ def _run_day(path, date):
                     heavy_all = (K in W["top3_all"]) or (dmed and doi >= 2 * dmed)
                     heavy_0 = K in W["top3_0"]
                     named = (K == W["put_wall"] or K == W["put_oi"]) if sup else (K == W["call_wall"] or K == W["call_oi"])
-                    return dict(heavy_all=bool(heavy_all), heavy_0=bool(heavy_0), named=bool(named), oi_x=(doi / dmed if dmed else np.nan), gex_all=W["gex_all"].get(K, 0.0))
+                    def hv(k):
+                        o = W["oi_p"].get(k, 0) if sup else W["oi_c"].get(k, 0)
+                        return (k in W["top3_all"]) or (dmed and o >= 2 * dmed)
+                    b1 = hv(K - 1) if sup else hv(K + 1); b2 = b1 or (hv(K - 2) if sup else hv(K + 2))
+                    return dict(heavy_all=bool(heavy_all), heavy_0=bool(heavy_0), named=bool(named), oi_x=(doi / dmed if dmed else np.nan), gex_all=W["gex_all"].get(K, 0.0), wall_b1=bool(b1), wall_b2=bool(b2))
                 a = {f"am_{k}": v for k, v in cls(W_am).items()}; p = {f"pm_{k}": v for k, v in cls(W_pm).items()} if W_pm else {}
                 rows.append(dict(date=date, hm=hm, K=K, side=side, spot=Sp, mins_to_close=mtc.get(hm, 0), iv_cls=iv_cls(hms[i - 1]), status=status, pnl=pnl, **a, **p))
     return {"rows": rows}

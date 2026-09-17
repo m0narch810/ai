@@ -68,7 +68,7 @@ def _run_day(path, date):
     # ── B. 0DTE minute series (same construction as study_2025_forward) ──
     q0 = q[(q.exp == ymd) & (q.hm >= "09:31") & (q.hm <= "15:59")]
     nq = F.nq_for(date)
-    if nq is not None and len(q0):
+    if "--asia-only" not in sys.argv and nq is not None and len(q0):
         piv = q0.pivot_table(index=["hm", "strike"], columns="cp", values="mid").reset_index()
         fwd = {}
         for hm, g in piv.groupby("hm"):
@@ -155,11 +155,15 @@ def _run_day(path, date):
                 pv["iv"] = F.black_iv(np.full(len(pv), Fc), pv.strike.to_numpy(), np.full(len(pv), T), pv.otm.to_numpy(), pv.is_call.to_numpy())
                 pv = pv.dropna(subset=["iv"]).sort_values("strike")
                 w = W.walls(pv.strike.to_numpy(float), pv.iv.to_numpy(float), Fc, T)
+                w10 = W.walls(pv.strike.to_numpy(float), pv.iv.to_numpy(float), Fc, 10 / 8760.0)   # same smile, T = hours to 04:00
+                if w and w10:
+                    for k in ("u_inner", "u_outer", "l_inner", "l_outer"): w[k + "_n"] = w10[k]
                 if w:
                     atm_iv = float(pv.iloc[(pv.strike - Fc).abs().argsort()[:2]].iv.mean()); E = Fc * atm_iv * np.sqrt(T)
                     nq_close = float(nq_all().loc[(nq_all().day == date) & (nq_all().hm <= "15:59"), "close"].iloc[-1]); ratio = nq_close / Fc
                     lo_ = ob.low.to_numpy() / ratio; hi_ = ob.high.to_numpy() / ratio; cl_ = ob.close.to_numpy() / ratio
-                    for wall in ("u_inner", "u_outer", "l_inner", "l_outer"):
+                    for wall in ("u_inner", "u_outer", "l_inner", "l_outer", "u_inner_n", "u_outer_n", "l_inner_n", "l_outer_n"):
+                        if wall not in w: continue
                         upper = wall.startswith("u")
                         for pl in (0.0, PLACEBO_E):
                             lvl = w[wall] + (pl * E if upper else -pl * E)

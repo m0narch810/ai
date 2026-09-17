@@ -1,11 +1,11 @@
 {
-  "as_of": "2026-09-16T23:45:00",
-  "scored_at": 1789616715089,
-  "generated_at": "2026-09-17T03:51:45.562Z",
+  "as_of": "2026-09-17T00:15:00",
+  "scored_at": 1789618514770,
+  "generated_at": "2026-09-17T04:15:14.778Z",
   "session": "Asia",
-  "spot": 709.3374779517083,
+  "spot": 709.8072219176139,
   "regime": "negative",
-  "read": "Rule-based alignment read: resistance $713.00 (aligned significant); no qualifying support in band. Negative gamma — bar raised to aligned dominant structure. VIX settlement this morning — expect chop.",
+  "read": "Rule-based alignment read: resistance $713.00 (aligned significant); no qualifying support in band. Negative gamma — bar raised to aligned dominant structure.",
   "hard_stop_pts": 0.9828009828009827,
   "clean_reversal_pts": 0.1,
   "iv": {
@@ -289,126 +289,148 @@
       "strike": 716,
       "side": "resistance",
       "reaction": "mixed",
-      "tags": [],
-      "prob": 10
+      "tags": [
+        "Aligned",
+        "0DTE Pin"
+      ],
+      "prob": 33
     },
     {
       "strike": 715,
       "side": "resistance",
-      "reaction": "mixed",
-      "tags": [],
-      "prob": 10
+      "reaction": "clean",
+      "tags": [
+        "Aligned"
+      ],
+      "prob": 48
     },
     {
       "strike": 714,
       "side": "resistance",
       "reaction": "mixed",
-      "tags": [],
-      "prob": 10
+      "tags": [
+        "Aligned",
+        "0DTE Pin"
+      ],
+      "prob": 18
     },
     {
       "strike": 713,
       "side": "resistance",
-      "reaction": "mixed",
-      "tags": [],
-      "prob": 10
+      "reaction": "clean",
+      "tags": [
+        "Aligned",
+        "Battleground",
+        "0DTE Pin"
+      ],
+      "prob": 56
     },
     {
       "strike": 712,
       "side": "resistance",
-      "reaction": "mixed",
-      "tags": [],
-      "prob": 10
+      "reaction": "clean",
+      "tags": [
+        "Aligned",
+        "Battleground",
+        "0DTE Pin"
+      ],
+      "prob": 56
     },
     {
       "strike": 711,
       "side": "resistance",
-      "reaction": "chop",
+      "reaction": "clean",
       "tags": [
-        "Above Wall",
-        "Weak"
+        "Aligned",
+        "Battleground",
+        "0DTE Pin"
       ],
-      "prob": 8
+      "prob": 56
     },
     {
       "strike": 710,
       "side": "resistance",
-      "reaction": "chop",
+      "reaction": "clean",
       "tags": [
         "Call Wall",
-        "Broken"
+        "Aligned",
+        "Battleground",
+        "0DTE Pin"
       ],
-      "prob": 20
+      "prob": 58
     },
     {
       "strike": 709,
       "side": "support",
       "reaction": "chop",
       "tags": [
-        "Extreme Put Vol",
-        "Exhausted"
+        "Mixed Greeks",
+        "Battleground"
       ],
-      "prob": 12
+      "prob": 36
     },
     {
       "strike": 708,
       "side": "support",
       "reaction": "chop",
       "tags": [
-        "Broke",
-        "Momentum Through"
+        "Opposed",
+        "Battleground",
+        "0DTE Pin"
       ],
-      "prob": 12
+      "prob": 18
     },
     {
       "strike": 707,
       "side": "support",
       "reaction": "chop",
       "tags": [
-        "Call Wall",
-        "Broke Early"
+        "Mixed Greeks",
+        "Battleground"
       ],
-      "prob": 12
+      "prob": 36
     },
     {
       "strike": 706,
       "side": "support",
       "reaction": "chop",
       "tags": [
-        "Broke",
-        "Vol Exhaustion"
+        "Mixed Greeks",
+        "Battleground",
+        "0DTE Pin"
       ],
-      "prob": 12
+      "prob": 36
     },
     {
       "strike": 705,
       "side": "support",
       "reaction": "chop",
       "tags": [
-        "Flip Pivot",
-        "Charm -1.9k 0DTE"
+        "Opposed",
+        "0DTE Flip",
+        "0DTE Pin"
       ],
-      "prob": 15
+      "prob": 25
     },
     {
       "strike": 704,
       "side": "support",
       "reaction": "mixed",
       "tags": [
-        "Weak Hold",
-        "29% Run"
+        "Aligned",
+        "0DTE Pin"
       ],
-      "prob": 24
+      "prob": 33
     },
     {
       "strike": 703,
       "side": "support",
-      "reaction": "chop",
+      "reaction": "mixed",
       "tags": [
-        "Flip Zone",
-        "Charm Negative"
+        "Aligned",
+        "0DTE Pin"
       ],
-      "prob": 18
+      "prob": 33
     }
   ],
   "zero_gamma": 704.72,
@@ -419,14 +441,10 @@
   "entropy_state": "CRITICAL",
   "entropy_ratio": 2.04,
   "day_gate": {
-    "verdict": "STAND DOWN",
-    "majors": 2,
+    "verdict": "SELECTIVE",
+    "majors": 1,
     "minors": 2,
     "reasons": [
-      {
-        "severity": "major",
-        "label": "VIX monthly settlement this morning — AM print distorts the open, vol positioning unwinds"
-      },
       {
         "severity": "major",
         "label": "Flow entropy CRITICAL (ρ=2.04) — positioning is disordered, walls unreliable"
