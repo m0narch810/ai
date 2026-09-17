@@ -581,6 +581,10 @@ Databento files have each been read once — do not re-cut them to find somethin
   mirrored in `capture.mjs`/`watchdog.mjs`/`regime-cron.mjs`/`news-cron.mjs` — extend annually, keep in sync.
 - **Windows:** `netlify` is a `.cmd` shim — spawn with `shell: true` (handled in `publish.ts`).
 - **Netlify deploy must include `--functions netlify/functions`** or the live-spot function won't deploy.
+- **A git push DEPLOYS** (the site is git-connected with auto-builds on, seen 2026-09-17). Since
+  everything is committed that is fine for the code, but a git deploy publishes `web/` as-is — the
+  three private JSONs are now guarded by forced 404 redirects in `netlify.toml`, which is the only
+  thing standing between a push and an auth bypass. Never remove those rules.
 - **NEVER deploy from the Netlify UI** (the "trigger/publish deploy" button, incl. the prompt after
   changing env vars). UI deploys build from the last git-COMMITTED state — the login system and
   recent work live in uncommitted files, so a UI deploy resurrects the pre-auth site AND re-exposes

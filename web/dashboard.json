@@ -1,9 +1,9 @@
 {
-  "as_of": "2026-09-17T00:15:00",
-  "scored_at": 1789618514770,
-  "generated_at": "2026-09-17T04:15:14.778Z",
+  "as_of": "2026-09-17T00:30:00",
+  "scored_at": 1789619413921,
+  "generated_at": "2026-09-17T04:39:03.693Z",
   "session": "Asia",
-  "spot": 709.8072219176139,
+  "spot": 709.4639474809906,
   "regime": "negative",
   "read": "Rule-based alignment read: resistance $713.00 (aligned significant); no qualifying support in band. Negative gamma — bar raised to aligned dominant structure.",
   "hard_stop_pts": 0.9828009828009827,

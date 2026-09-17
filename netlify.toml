@@ -71,3 +71,23 @@
   for = "/lib/*"
   [headers.values]
     Cache-Control = "no-cache"
+
+# The private desk JSONs are tracked in git (LAN viewing) but must NEVER be served by Netlify:
+# the board reaches the phone through dashboard.mjs + Blobs behind the login token. `npm run
+# publish` filters them out of the staged dir, but a git-triggered deploy publishes web/ as-is,
+# so these forced 404s are what actually guarantees it (seen exposed after a push, 2026-09-17).
+[[redirects]]
+  from = "/dashboard.json"
+  to = "/index.html"
+  status = 404
+  force = true
+[[redirects]]
+  from = "/narrative.json"
+  to = "/index.html"
+  status = 404
+  force = true
+[[redirects]]
+  from = "/regime.json"
+  to = "/index.html"
+  status = 404
+  force = true
