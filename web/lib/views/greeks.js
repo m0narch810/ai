@@ -14,7 +14,7 @@
 import { el, isNum, compact, compactSigned, strikeLabel, asciiSpine, asciiSpark, sum, nearestBy } from "../util.js";
 import { panel, tag, segmented, nodata, rule, skeleton } from "../ui.js";
 import { spine, termMatrix, matrix, stat } from "../draw.js";
-import { GREEKS, GREEK_BY_KEY, greek, termGrid, levelMarks, boardMarks } from "../data.js";
+import { GREEKS, GREEK_BY_KEY, greek, termGrid, levelMarks, boardMarks, frontExpiryIndex } from "../data.js";
 import { liveIvWalls, wallZones } from "../ivwalls.js";
 import { etNow } from "../util.js";
 
@@ -24,7 +24,7 @@ export const JP = "希臘";
 export const EPS = [...GREEKS.map((g) => g.key), "levels"];
 
 let sel = "gex";
-let expIdx = 0;   // today's expiry by default; null = whole chain
+let expIdx = "front";   // the first expiry that can still trade, by default; null = whole chain
 
 const refresh = () => document.dispatchEvent(new CustomEvent("view:refresh"));
 
@@ -54,12 +54,12 @@ export function render(host, ctx) {
 
   const zones = wallZones(liveIvWalls(ok.net_iv, spot, etNow().minutes) || ctx.desk?.board?.iv_walls || null);
 
-  host.replaceChildren(
+  host.replaceChildren(...[
     bookPanel(live, spot),
     alignPanel(all, spot, marks),
     ladderPanel(ok, spot, marks, err, zones),
     tenorPanel(ok, spot),
-  );
+  ].filter(Boolean));
 }
 
 /* ── G0 BOOK ─────────────────────────────────────────────────────────────── */
@@ -178,8 +178,8 @@ function alignPanel(all, spot, marks) {
 function ladderPanel(ok, spot, marks, err, zones = []) {
   const meta = GREEK_BY_KEY[sel];
   // the chosen expiry column, clamped to what THIS greek carries (/gex has three, the rest eight)
-  const nExp = greek(sel, ok[sel], null).expiries.length;
-  const ei = expIdx === null ? null : Math.min(expIdx, Math.max(0, nExp - 1));
+  const allExp = greek(sel, ok[sel], null).expiries;
+  const ei = expIdx === null ? null : Math.min(expIdx === "front" ? frontExpiryIndex(allExp) : expIdx, Math.max(0, allExp.length - 1));
   const g = greek(sel, ok[sel], ei);
 
   const greekPick = segmented(
@@ -197,7 +197,7 @@ function ladderPanel(ok, spot, marks, err, zones = []) {
   }
 
   const expPick = segmented(
-    [...g.expiries.map((e, i) => ({ label: isNum(e.dte) ? `${e.dte}DTE` : e.short, value: i, title: `${e.label}${isNum(e.dte) ? ` \u00b7 ${e.dte}d` : ""}` })),
+    [...g.expiries.map((e, i) => ({ label: e.tag ?? e.short, value: i, title: `${e.label}${isNum(e.dte) ? ` · ${e.dte} calendar days${e.expired ? " · expired" : ""}` : ""}` })),
      { label: "CHAIN", value: null, title: "every expiry summed" }],
     ei,
     (v) => { expIdx = v; refresh(); },

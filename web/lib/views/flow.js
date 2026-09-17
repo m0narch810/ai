@@ -28,14 +28,14 @@ const signedRows = (list, key) => (list || [])
 export function render(host, ctx) {
   const { ok, err } = ctx.yyy;
   const zones = wallZones(liveIvWalls(ok.net_iv, ctx.spot, etNow().minutes) || ctx.desk?.board?.iv_walls || null);
-  host.replaceChildren(
+  host.replaceChildren(...[
     dealerPanel(ok.dealer_delta, ctx.spot, err, ctx, zones),
     anomalyPanel(ok.dealer_anomalies),
     dexPanel(ok.dex_ladder, ctx.spot, zones),
     expiryPanel(ok.option_matrix),
     crossPanel(ok.scanner),
     notePanel(),
-  );
+  ].filter(Boolean));
 }
 
 /* ── F0 DEALER INVENTORY ─────────────────────────────────────────────────── */

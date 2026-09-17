@@ -272,7 +272,48 @@ Always route price-dependent logic through `effectiveSpot`/`fetchSessionBars` �
 - **`watchdog.mjs`** — scheduled `*/15 * * * *`, 09:50–16:00 ET Mon–Fri. Alerts via ntfy if board
   stale > `WATCHDOG_STALE_MIN` (35). Fires once on stall + once on recovery (Blobs state).
 
-## Front end (rebuilt 2026-09-15 · v2 2026-09-16 · v3 2026-09-16)
+## Front end (rebuilt 2026-09-15 · v2 2026-09-16 · v3 2026-09-16 · v3.8 2026-09-16)
+
+**v3.8 — "still kinda laggy, drag still not perfect, nullnullnull in boxes, header flickers".**
+- **Lag had three sources, all fixed:** (1) `lib/topo.js` (the IV terrain, mounted on BOARD) ran a
+  60fps full redraw of ~2,600 sorted quads and LEAKED a loop on every repaint — it now redraws
+  only when the view changed (~24fps while auto-turning), skips frames during scroll, and retires
+  itself when its canvas leaves the document; (2) `lib/bg.js` did ~40k sine evaluations + thousands
+  of `fillText` per frame — it samples the field once into a typed grid, blits pre-rendered glyph
+  sprites, renders at 1×, 10fps, paused during scroll; (3) CSS: `backdrop-filter` on the sticky
+  rail (re-blurred over the animating canvas every frame) is gone, and the MARCHING spot lines
+  (`.sp-spot`/`.cc-spot`) and the double per-bar halo no longer carry `drop-shadow` filters — an
+  animated stroke with a filter re-rasterises its whole ladder every frame.
+- **Drag is POINTER EVENTS now, not HTML5 DnD** (`initLayoutControls` in app.js). Native DnD dropped
+  `dragend` when the source node was moved mid-drag, its ghost was a frozen snapshot, and a late
+  `before(null)` printed "null". Pointer capture is held on the VIEW ROOT, never the panel: moving
+  the panel in the DOM releases any capture on it, which killed the drag after its first reorder
+  ("can't drag that same box again"). Touch does not drag (it scrolls); ↑↓⇔ serve touch. Edge
+  auto-scroll while dragging. `.p-label` carries `.p-handle`, no `draggable` attribute.
+- **"nullnullnull"**: panels return `null` when their data is missing and every view passed them
+  straight to `host.replaceChildren(a, null, b)`, which stringifies null into a TEXT node. Views
+  now `.filter(Boolean)`, and `paintView` strips any non-element child of the view root.
+- **Rail flicker**: compacting shrinks the page; near the bottom of a short tab the browser clamps
+  scrollY back past the expand threshold → expand → compact → … The rail now only compacts when
+  there is >160px of scroll room below (`ROOM_PX`), so the clamp can never happen.
+- **Two "0DTE" ladder tabs**: YYY floors `dte` from the wall clock, so after the 16:00 close today's
+  expired chain AND tomorrow's both read 0. `data.js` now computes CALENDAR dte from the expiry
+  date vs the ET date (`calendarDte`, `isExpired`, `dteTag`, `frontExpiryIndex`); tabs read
+  `EXP'D | 1DTE | 2DTE …` after the close and the ladders default to the first TRADEABLE expiry.
+  `lib/ivwalls.js` picks its front expiry the same way (it used to take column 0 blindly — the
+  expired chain, whose ATM IV blows out to 50%+ as it dies) and T is minutes to that expiry's
+  16:00 ET, so overnight it counts down to the next close. Note the live bracket is recomputed on
+  every poll against live spot — it MOVES with price; the spec's fixed bracket is the desk's frozen
+  one (`board.iv_walls`), shown alongside when present.
+- **LEVELS export** (`lib/levels.js`): everything outside ±2.5% of spot is dropped (`REACH_PCT`),
+  the IV rich/cheap anomaly strikes are gone, and vanna + charm walls are in — top-2 |net| per
+  sign on the whole chain (`Vanna Wall +/−`, `Charm Wall +/−`, ≥30% of the biggest bar) plus the
+  front expiry's top-1 per sign (`0DTE Vanna +`, or `1DTE …` after the close). `vanna`/`charm`
+  joined `CORE_EPS` so the button works from any tab.
+- **Headless smoke test exists but is not checked in:** `node_modules/puppeteer-core` + local
+  Chrome against `npm run preview` (`?all=1`), plus the real `index.html` with the Netlify
+  functions stubbed — it caught the pointer-capture bug. Rebuild it in the scratchpad when
+  touching the drag code; the preview harness renders views WITHOUT app.js.
 
 **v3 — user verdict on v2: "looks vibecoded… kept the same font and logo… 'TORII · QQQ
 optionsflow with YYY' is incredibly corny… forget all my old design requirements… monochrome
@@ -463,6 +504,69 @@ page in memory from `scripts/`, so nothing preview-related is ever deployed.
   register is DECISION LAYER, not commentator — keep hedging language out of any prompt edits.
 - `hard_stop_pts` / `clean_reversal_pts`: thresholds for live break detection in the browser
 - Per level: `reaction` ("clean"/"chop"/"mixed"), `tags`, `overshoot`, `clean` (bool)
+
+## IV SCREEN + FROZEN IV WALLS (v3.9, 2026-09-16) — what the studies changed on the board
+
+Three studies on the ThetaData-derived 1-min 0DTE chains (2022-24) plus a 2025 forward test on
+Databento OPRA quotes (`data/study/`, `pdfs/IV Dynamics at Intraday Reversals*.pdf`) settled this:
+positioning at a strike (OI, gamma, vega, charm, vanna) is the SAME at holds and breaks; the only
+thing that separated them was the 0DTE ATM-IV tape INTO the level, and as a rule on every strike
+approach it is a SCREEN (rising 35.6% vs falling 30.7% on 40/80), with one strong avoid rule:
+put-side levels reached on FALLING IV held 21-24% (−10 MNQ/fill). "Vol rolled over" did NOT time
+entries. Turns print ~1 strike in front of walls; which strike catches a turn is a coin flip on every
+ladder feature; light-OI strikes out-hold heavy ones. The live IV-wall bracket shrinks ~4x through
+the day (sqrt-T) and its walls filled at half the frozen rate; frozen walls are ~break-even.
+- `web/lib/ivtape.js` — sample/merge/state/screen. Thresholds (30 min, 1 vol pt, 60-min peak) were
+  fixed BEFORE outcomes were looked at; do not tune them. `screen()` returns tone/label/why per side;
+  the `why` strings carry the study rates — never print them as a probability of anything.
+- Cloud: `yyy-warm.mjs` appends an ATM-IV sample every 5 min (09:31-16:00) and freezes the OPEN IV
+  bracket into Blobs store `ivtape` (key `QQQ/<date>`); `yyy.mjs` serves it as the pseudo-endpoint
+  `ivtape` (in `CORE_EPS`), so a page opened at 13:00 has the morning. The browser adds a 60 s sample
+  on every live poll (`ivt.record` in `mergePart`, localStorage `ivtape.v1.<date>`).
+- BOARD: panel 01c "IV INTO LEVEL" (tape chart + state + per-side screen); a screen chip on every
+  row of STRUCTURE, IV WALLS and the desk levels; rail chip `0DTE IV`. IV WALLS now shows the FROZEN
+  bracket (cloud open-frozen → desk file) as primary with the live value in the side column; ladder
+  zones use the frozen one. LEVELS export labels GEX walls "(magnet)" and prints the frozen bracket.
+
+- **DAY READ (v3.9.1)** — BOARD panel 01d: open-drive bias (first-hour move in E0 from the tape's
+  spot samples; persistence 62/75/83/86% and rest-of-day +0.10/+0.18/+0.30/+0.01E for |move|
+  <0.25/0.5/0.8/>0.8E), next heavy strikes above/below with distance in E and the reach bucket
+  (96/71/42/13% at <0.4/0.8/1.5/>1.5E), and the break note (75% retest in ~13 min; heavy strikes
+  reclaim 71%). `openDrive()`/`wallTargets()` in `web/lib/ivtape.js`. No breakout ENTRY rule exists —
+  continuation at the break tested break-even (`data/study/breaks_2224_report.md`).
+
+## Studies (offline, not part of the pipeline)
+
+Reports are copied to `docs/studies/` (tracked); the event tables stay in `data/study/*.parquet`
+(ignored). Every script is pre-registered: thresholds are the desk's own (40/80 MNQ, 0.15 fill tol)
+plus 30 min / 1 vol pt / 60-min peak for the IV state, none tuned. The 2024 holdout and the 2025
+Databento files have each been read once — do not re-cut them to find something.
+
+- **Whole-chain walls, 2022 (2026-09-16)** — `scripts/study_wholechain_2022.py` → `wholechain_2022_report.md`:
+  TD Ameritrade full-chain snapshots × ThetaData IV tape × NQ bars, 2,155 approaches. Whole-book
+  heavy strikes 31.7-31.9% vs light 34.3%; the NAMED call/put gex/OI walls 28.9%; >10× median OI
+  25.4% vs <0.5× 42.6%. Whole-chain heavy SUPPORT on falling IV 24.3% (−10.8 MNQ) — the same avoid
+  rule for the fourth time. Mass is a magnet on the whole book too. This was the last data on the box.
+- **Breakouts / retest / bias / overnight (2026-09-16)** — `scripts/study_breakouts_2224.py`,
+  `scripts/study_2025_breaks_asia.py` → `data/study/breaks_2224_report.md`,
+  `y2025_breaks_asia_report.md`. Overnight: the prior-evening 19Δ bracket is reached on 7% of nights.
+
+- **IV walls (2026-09-16)** — `scripts/study_ivwalls_2224.py` → `data/study/ivwalls_2224_report.md`:
+  frozen-at-open inner walls reached 37-41% of days, outer 25-28%; when reached, 28-34% win on 40/80
+  (≈ break-even), placebo displaced 0.25E slightly worse; live bracket much worse (moving target).
+- **2025 forward test + 2022-24 approach test** — `scripts/study_2025_forward*.py`,
+  `scripts/study_approach_2224.py` → `data/study/forward_2025_report.md`: the IV screen numbers above.
+- **Reversal atlas (2026-09-16)** — `scripts/study_0dte_atlas.py` → `data/study/atlas_read.md`,
+  `atlas_sample.md`: the qualitative read the paper is built on.
+
+- **0DTE alignment study (2026-09-16)** — `scripts/study_0dte_alignment.py` builds ~120k resting-
+  order calls from the ThetaData-derived 1-min 0DTE QQQ share (`Downloads/shareddata/qqq_share`,
+  2022-24) using a port of `evaluateStrike` + `gradeTradeCall`, graded on NQ 1-min bars converted
+  to QQQ; `scripts/study_0dte_alignment_report.py` prints the null, in-sample (2022-23) and holdout
+  (2024) tables to `data/study/0dte_alignment_report.md`. RESULT: alignment classes, the
+  gex/vex/charm triad and wall mass all hold at the random-walk base rate (~31%) on the 40/80
+  bracket, in-sample and holdout. 0DTE-only positioning — not a test of whole-chain walls. Do not
+  add an alignment prior that has not beaten this harness first; the 2024 holdout has been read once.
 
 ## Gotchas
 

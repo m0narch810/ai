@@ -38,3 +38,7 @@ dist/
 
 # Local Netlify folder
 .netlify
+
+# offline study outputs: keep the markdown reports (copied to docs/studies/), not the event tables
+data/study/
+__pycache__/

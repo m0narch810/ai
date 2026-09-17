@@ -20,7 +20,7 @@ export const EPS = ["flux", "bias", "hurst", "history", "macro", "macro_extended
 
 export function render(host, ctx) {
   const { ok, err } = ctx.yyy;
-  host.replaceChildren(
+  host.replaceChildren(...[
     statePanel(ok.flux, ok.bias, ok.levels, err, ctx),
     factorPanel(ok.flux),
     votePanel(ok.bias),
@@ -29,7 +29,7 @@ export function render(host, ctx) {
     deskVolPanel(ctx.regime),
     pulsePanel(ctx.macro),
     macroPanel(ok.macro, ok.macro_extended),
-  );
+  ].filter(Boolean));
 }
 
 /* ── R0 STATE ────────────────────────────────────────────────────────────── */

@@ -82,7 +82,14 @@ export const EP = {
   macro_extended: () => `/macro_extended`,
   scanner:    () => `/scanner`,
   chart:      (t) => `/chart?ticker=${t}&interval=5min`,
+  // ── not upstream: the day's 0DTE ATM-IV tape + open-frozen IV walls, written by yyy-warm.mjs
+  //    into the "ivtape" Blobs store every 5 min in the session. Served here so the client's
+  //    one batched call carries it (see pull()).
+  ivtape:     () => null,
 };
+
+export const etDate = (d = new Date()) => new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
+export const tapeKey = (ticker, date = etDate()) => `${ticker}/${date}`;
 
 /**
  * Per-endpoint trimming. A few payloads carry grids the terminal never draws and that would
@@ -132,6 +139,11 @@ export async function fetchUpstream(name, ticker) {
 async function pull(name, ticker) {
   const key = cacheKey(name, ticker);
   const now = Date.now();
+  if (name === "ivtape") {
+    let tape = null;
+    try { tape = await getStore("ivtape").get(tapeKey(ticker), { type: "json" }); } catch { tape = null; }
+    return { val: tape || { date: etDate(), samples: [], open_walls: null }, src: "blob", age: 0 };
+  }
 
   const m = memo.get(key);
   if (m && now - m.at < MEMO_MS) return { val: m.val, src: "memo", age: now - m.at };

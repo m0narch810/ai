@@ -13,6 +13,7 @@
 // (IV has moved since the open).
 
 import { isNum } from "./util.js";
+import { calendarDte, isExpired } from "./data.js";
 
 const DELTA_STAR = 0.1925;
 const W_U_PCT = 1.56 / 750;
@@ -81,31 +82,41 @@ function computeIvWalls(smile, spot, tYears, dte) {
   };
 }
 
-/** Time to expiry in years, the desk's convention: ≥1 DTE calendar/365; 0DTE = time to 16:00 ET, floored at 30 min. */
+/**
+ * Time to expiry in years: the minutes from now (ET) to that expiry's 16:00 ET close, floored
+ * at 30 min. Inside RTH this is exactly the desk's 0DTE convention (src/ivWalls.ts); overnight
+ * it keeps counting down to the NEXT close instead of pretending a 24h day, which is what the
+ * spec's prior-evening bracket implies.
+ */
 function tYearsFor(dte, nowMinutesEt) {
-  const d = dte ?? 0;
-  if (d >= 1) return d / 365;
-  const minsToClose = Math.max(16 * 60 - nowMinutesEt, 30);
-  return minsToClose / (60 * 24 * 365);
+  const d = isNum(dte) ? dte : 0;
+  const mins = Math.max(d * 1440 + (16 * 60 - nowMinutesEt), 30);
+  return mins / (60 * 24 * 365);
 }
 
 /**
- * Walls from the live /net_iv payload: the front expiry's column of per-strike IVs.
+ * Walls from the live /net_iv payload: the FRONT TRADEABLE expiry's column of per-strike IVs.
+ *
+ * "Front" is by calendar, not by the feed's `dte_list`: after the close YYY still serves the
+ * expired chain in column 0 (its IVs blow out to 40-50% as the last prints die) and floors
+ * tomorrow's dte to 0 as well. Building the bracket on that column produced an overnight wall
+ * roughly twice as wide as the real one, which then snapped inward at the open (2026-09-16).
  * Returns null when the chain is too thin for a 19Δ crossing on either wing.
  */
 export function liveIvWalls(netIv, spot, nowMinutesEt) {
   const rows = netIv?.rows;
+  const exps = netIv?.expiries;
   const dtes = netIv?.dte_list;
   if (!Array.isArray(rows) || !Array.isArray(dtes) || !dtes.length || !isNum(spot)) return null;
-  // Front expiry = column 0. If it is empty (post-close, before the next chain), fall to column 1.
-  for (const j of [0, 1]) {
-    if (!isNum(dtes[j])) continue;
+  const cal = dtes.map((d, j) => { const c = calendarDte(exps?.[j]); return isNum(c) ? c : (isNum(d) ? d : null); });
+  const order = cal.map((d, j) => j).filter((j) => isNum(cal[j]) && !isExpired(cal[j]));
+  for (const j of order.slice(0, 2)) {
     const smile = rows
       .filter((r) => isNum(r?.strike) && isNum(r?.cells?.[j]))
       .map((r) => ({ strike: r.strike, sigma: r.cells[j] }));
     if (smile.length < 8) continue;
-    const w = computeIvWalls(smile, spot, tYearsFor(dtes[j], nowMinutesEt), dtes[j]);
-    if (w) return w;
+    const w = computeIvWalls(smile, spot, tYearsFor(cal[j], nowMinutesEt), cal[j]);
+    if (w) return { ...w, expiry: String(exps?.[j] ?? "").match(/^\s*([\d-]{4,10})/)?.[1] ?? null };
   }
   return null;
 }

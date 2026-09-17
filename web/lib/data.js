@@ -6,7 +6,7 @@
 // those three dialects, everything is funnelled through `greek()` here and the views only ever
 // see {rows:[{strike, put, call, net}], expiries, totals}.
 
-import { isNum, sum } from "./util.js";
+import { isNum, sum, etNow } from "./util.js";
 
 /* ── greek catalogue ─────────────────────────────────────────────────────── */
 
@@ -43,17 +43,72 @@ export const GREEK_BY_KEY = Object.fromEntries(GREEKS.map((g) => [g.key, g]));
 
 /* ── expiries ────────────────────────────────────────────────────────────── */
 
-/** "09-16 (0d)" / "09-16 - 0DTE" / "09-16" all collapse to a short "09-16" + dte. */
+const MS_DAY = 86_400_000;
+
+/** Today's ET calendar date as a UTC-midnight epoch — a day counter that ignores wall-clock. */
+function etDayUtc(now = etNow()) {
+  const year = new Date().getUTCFullYear();
+  // etNow only carries month/day; pick the year that puts the date within ±6 months of now
+  const d = Date.UTC(year, +now.month - 1, +now.day);
+  const t = Date.now();
+  if (d - t > 183 * MS_DAY) return Date.UTC(year - 1, +now.month - 1, +now.day);
+  if (t - d > 183 * MS_DAY) return Date.UTC(year + 1, +now.month - 1, +now.day);
+  return d;
+}
+
+/**
+ * Calendar days from today (ET) to an expiry given as "YYYY-MM-DD" or "MM-DD" (any suffix).
+ * YYY's own `dte` is floored from the wall clock, so after the 16:00 close BOTH today's expired
+ * chain and tomorrow's read 0 — which is how the ladders grew two "0DTE" tabs. Calendar days
+ * are what the tabs mean by DTE.
+ */
+export function calendarDte(exp) {
+  const m = String(exp ?? "").match(/^\s*(?:(\d{4})-)?(\d{2})-(\d{2})/);
+  if (!m) return null;
+  const today = etDayUtc();
+  const yr = m[1] ? +m[1] : new Date(today).getUTCFullYear();
+  let d = Date.UTC(yr, +m[2] - 1, +m[3]);
+  if (!m[1]) {   // MM-DD: pick the year that lands nearest today (December → January wrap)
+    if (d - today > 183 * MS_DAY) d = Date.UTC(yr - 1, +m[2] - 1, +m[3]);
+    else if (today - d > 183 * MS_DAY) d = Date.UTC(yr + 1, +m[2] - 1, +m[3]);
+  }
+  return Math.round((d - today) / MS_DAY);
+}
+
+/** True once an expiry can no longer trade: a past date, or today after the 16:00 ET close. */
+export function isExpired(dte, now = etNow()) {
+  if (!isNum(dte)) return false;
+  return dte < 0 || (dte === 0 && now.minutes >= 960);
+}
+
+/** Short tab label for an expiry: 0DTE / 1DTE / … / EXP'D. */
+export function dteTag(dte, expired = isExpired(dte)) {
+  if (!isNum(dte)) return null;
+  return expired ? "EXP'D" : `${dte}DTE`;
+}
+
+/**
+ * "09-16 (0d)" / "09-16 - 0DTE" / {exp:"2026-09-16", dte:0} all collapse to a short "09-16" plus
+ * a CALENDAR dte, an `expired` flag and a ready `tag`. The feed's own dte is kept as `feedDte`.
+ */
 function expiryList(raw) {
+  const now = etNow();
   return (raw || []).map((e, i) => {
-    if (typeof e === "string") {
-      const m = e.match(/^\s*([\d-]+)/);
-      return { label: e, short: m ? m[1] : e, dte: null, i };
-    }
-    const label = e?.label ?? e?.exp ?? e?.date ?? "";
+    const str = typeof e === "string";
+    const label = str ? e : (e?.label ?? e?.exp ?? e?.date ?? "");
     const m = String(label).match(/^\s*([\d-]{4,10})/);
-    return { label, short: m ? m[1] : label, dte: isNum(e?.dte) ? e.dte : null, i };
+    const feedDte = !str && isNum(e?.dte) ? e.dte : null;
+    const cal = calendarDte((!str && e?.exp) || label);
+    const dte = isNum(cal) ? cal : feedDte;
+    const expired = isExpired(dte, now);
+    return { label, short: m ? m[1] : label, dte, feedDte, expired, tag: dteTag(dte, expired), i };
   });
+}
+
+/** Index of the first expiry that can still trade (today's before the close, else the next). */
+export function frontExpiryIndex(expiries) {
+  const i = (expiries || []).findIndex((e) => !e.expired);
+  return i < 0 ? 0 : i;
 }
 
 /* ── greek normaliser ────────────────────────────────────────────────────── */

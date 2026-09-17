@@ -9,7 +9,9 @@
 // Window: 08:30–16:30 ET Mon–Fri, skipping US market holidays. Off-hours the chain is static
 // and the blobs age gracefully (the proxy serves them stale-on-error up to 30 min, then live).
 import { connectLambda, getStore } from "@netlify/blobs";
-import { EP, fetchUpstream, cacheKey } from "./yyy.mjs";
+import { EP, fetchUpstream, cacheKey, tapeKey } from "./yyy.mjs";
+import { sampleFrom } from "../../web/lib/ivtape.js";
+import { liveIvWalls } from "../../web/lib/ivwalls.js";
 
 function etParts(d = new Date()) {
   const p = new Intl.DateTimeFormat("en-CA", {
@@ -43,8 +45,9 @@ export const handler = async (event) => {
   if (!inWindow(t)) return { statusCode: 200, body: `outside warm window (${t.date} ${t.minutes}m)` };
 
   const store = getStore("yyy-cache");
-  const names = Object.keys(EP);
+  const names = Object.keys(EP).filter((n) => n !== "ivtape");
   const results = { ok: [], err: [] };
+  const vals = {};
 
   // Bounded parallelism: YYY is one small Railway box; thirty simultaneous requests is rude.
   let i = 0;
@@ -53,6 +56,7 @@ export const handler = async (event) => {
       const name = names[i++];
       try {
         const val = await fetchUpstream(name, TICKER);
+        vals[name] = val;
         await store.setJSON(cacheKey(name, TICKER), { at: Date.now(), val });
         results.ok.push(name);
       } catch (e) {
@@ -62,7 +66,31 @@ export const handler = async (event) => {
   };
   await Promise.all(Array.from({ length: CONCURRENCY }, worker));
 
-  const body = `warmed ${results.ok.length}/${names.length}` + (results.err.length ? ` · failed: ${results.err.join("; ")}` : "");
+  // IV TAPE: one ATM-IV sample per run inside the cash session, plus the OPEN-FROZEN IV-wall
+  // bracket (the spec's fixed bracket; the live one shrinks ~4x through the day). Studies in
+  // data/study/ — see web/lib/ivtape.js for what the tape is used for.
+  let tapeNote = "";
+  try {
+    const nv = vals.net_iv;
+    const spot = nv?.spot ?? vals.gex?.spot;
+    if (nv && Number.isFinite(spot) && t.minutes >= 571 && t.minutes <= 960) {
+      const tstore = getStore("ivtape");
+      const key = tapeKey(TICKER, t.date);
+      let tape = null;
+      try { tape = await tstore.get(key, { type: "json" }); } catch { tape = null; }
+      if (!tape || tape.date !== t.date) tape = { date: t.date, samples: [], open_walls: null, open_at: null };
+      const s = sampleFrom(nv, spot);
+      if (s) { tape.samples.push(s); if (tape.samples.length > 200) tape.samples.shift(); }
+      if (!tape.open_walls) {
+        const w = liveIvWalls(nv, spot, t.minutes);
+        if (w) { tape.open_walls = w; tape.open_at = new Date().toISOString(); }
+      }
+      await tstore.setJSON(key, tape);
+      tapeNote = ` · ivtape ${tape.samples.length} samples${tape.open_walls ? " · open walls frozen" : ""}`;
+    }
+  } catch (e) { tapeNote = ` · ivtape failed: ${String(e?.message ?? e).slice(0, 60)}`; }
+
+  const body = `warmed ${results.ok.length}/${names.length}` + (results.err.length ? ` · failed: ${results.err.join("; ")}` : "") + tapeNote;
   console.log("[yyy-warm]", body);
   return { statusCode: 200, body };
 };

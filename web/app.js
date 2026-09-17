@@ -15,6 +15,7 @@ import { toast, skeleton, decode, decodeAll } from "./lib/ui.js";
 import { spark } from "./lib/draw.js";
 import { initTips } from "./lib/tip.js";
 import { collectLevels, formatLevels, copyText } from "./lib/levels.js";
+import * as ivt from "./lib/ivtape.js";
 
 import * as board from "./lib/views/board.js";
 import * as greeks from "./lib/views/greeks.js";
@@ -27,10 +28,10 @@ const VIEWS = [board, greeks, vol, flow, regime, narrative];
 const VIEW_BY_ID = Object.fromEntries(VIEWS.map((v) => [v.ID, v]));
 
 /**
- * Always fetched, whatever tab is open — feeds the rail and the LEVELS button. net_iv and
- * flow are here because the IV-anomaly pass that feeds LEVELS needs them from any tab.
+ * Always fetched, whatever tab is open — feeds the rail and the LEVELS button. net_iv, flow,
+ * vanna and charm are here because LEVELS (IV walls, vanna/charm walls) needs them from any tab.
  */
-const CORE_EPS = ["gex", "chart", "atr", "expected_move", "levels", "zero_dte", "dealer_delta", "net_iv", "flow"];
+const CORE_EPS = ["gex", "chart", "atr", "expected_move", "levels", "zero_dte", "dealer_delta", "net_iv", "flow", "vanna", "charm", "ivtape"];
 
 /* ── cadence ─────────────────────────────────────────────────────────────── */
 
@@ -61,7 +62,14 @@ const S = {
   dragLock: false,
   paintAfterDrag: false,
   lastVals: new Map(),       // "view|key" → last rendered text, for the change flash
+  ivLocal: ivt.loadLocal(),  // today's browser-side IV tape samples (see lib/ivtape.js)
 };
+
+/** The merged IV tape (cloud 5-min samples + this browser's) and its state, computed per paint. */
+function ivTape() {
+  const tape = ivt.merge(S.yyy.ok?.ivtape, S.ivLocal);
+  return { tape, state: ivt.state(tape), cloud: S.yyy.ok?.ivtape || null };
+}
 
 const currentSpot = () => (isNum(S.spot) ? S.spot : S.yyy.ok?.gex?.spot);
 
@@ -84,13 +92,22 @@ function buildChrome() {
   // The rail compacts once the header has scrolled away. Scroll position with hysteresis, not
   // an IntersectionObserver: compacting shrinks the rail, which moves the page, which used to
   // flip the observer straight back — the flicker between the two rail states on some scrolls.
+  //
+  // The remaining flicker (2026-09-16, "if I scroll a certain amount"): compacting shrinks the
+  // page, so near the BOTTOM of a short tab the browser clamps scrollY back up past the expand
+  // threshold, which expands the rail, which lets the user scroll again, which compacts… A
+  // compaction is therefore only allowed when there is more scroll room below than the rail
+  // can give up (ROOM_PX), so the clamp can never happen. A short page simply keeps the full
+  // rail — the right outcome, since there is nothing to scroll to anyway.
   const rail = $("#rail"), sentinel = $("#railSentinel");
   if (rail && sentinel) {
     let compact = false, raf = 0;
+    const ROOM_PX = 160;
     const check = () => {
       raf = 0;
       const y = window.scrollY, top = sentinel.offsetTop;
-      if (!compact && y > top + 28) { compact = true; rail.classList.add("compact"); }
+      const room = document.documentElement.scrollHeight - window.innerHeight - y;
+      if (!compact && y > top + 28 && room > ROOM_PX) { compact = true; rail.classList.add("compact"); }
       else if (compact && y < top - 4) { compact = false; rail.classList.remove("compact"); }
     };
     window.addEventListener("scroll", () => { if (!raf) raf = requestAnimationFrame(check); }, { passive: true });
@@ -178,55 +195,97 @@ function initLayoutControls() {
     setTimeout(() => pnl.classList.remove("moved"), 500);
   });
 
-  // drag by the label bar (pointer devices)
-  let dragging = null, dragRaf = 0, lastOver = null;
-  host.addEventListener("dragstart", (e) => {
-    const label = e.target.closest?.(".p-label");
-    if (!label) { e.preventDefault(); return; }
-    dragging = label.closest(".pnl");
-    dragging.classList.add("dragging");
-    S.dragLock = true;    // hold re-renders: replacing the DOM mid-drag detaches the held panel
-    e.dataTransfer.effectAllowed = "move";
-    try {
-      e.dataTransfer.setData("text/plain", dragging.dataset.key);
-      // ghost = the whole panel, not just its title bar
-      e.dataTransfer.setDragImage(dragging, Math.min(160, e.offsetX), 14);
-    } catch { /* firefox needs data set; setDragImage is best-effort */ }
-  });
-  host.addEventListener("dragover", (e) => {
-    if (!dragging) return;
-    e.preventDefault();
-    e.dataTransfer.dropEffect = "move";
-    const over = e.target.closest?.(".pnl");
-    if (!over || over === dragging) return;
-    const y = e.clientY;
-    if (dragRaf) return;
-    const d = dragging;   // captured: dragend can null `dragging` before this frame runs
-    dragRaf = requestAnimationFrame(() => {
-      dragRaf = 0;
-      if (!d || d !== dragging || !d.isConnected || !over.isConnected) return;
-      const r = over.getBoundingClientRect();
-      const before = y < r.top + r.height / 2;
-      // Already in the requested slot → nothing to do. This is the stutter fix: moving the
-      // dragged panel changes the layout under the cursor, and without this check a tall
-      // neighbour flip-flopped the dragged panel above and below itself every frame.
-      if (before && over.previousElementSibling === d) return;
-      if (!before && over.nextElementSibling === d) return;
-      lastOver = over;
-      flip(() => (before ? over.before(d) : over.after(d)));
-    });
-  });
-  host.addEventListener("drop", (e) => { if (dragging) e.preventDefault(); });
-  host.addEventListener("dragend", () => {
-    if (!dragging) return;
-    cancelAnimationFrame(dragRaf); dragRaf = 0;
-    dragging.classList.remove("dragging");
-    dragging = null; lastOver = null;
+  // Drag by the label bar — POINTER EVENTS, not HTML5 drag-and-drop (v3.8).
+  //
+  // Native DnD was the source of every "finnicky" report: Chrome and Firefox both drop or
+  // delay `dragend` when the source node is moved in the DOM mid-drag (which a live reorder
+  // does on every frame), the ghost image is a frozen snapshot, `dragover` fires on the
+  // browser's own cadence, and `before(null)` from a late frame printed the word "null" into
+  // the grid. Pointer events are deterministic: one down, a stream of moves we throttle to a
+  // frame, one up. The panel itself is what moves — no ghost — and the other panels slide.
+  // Touch is deliberately NOT a drag (it must keep scrolling); the ↑↓ buttons serve touch.
+  let drag = null;   // { pnl, label, id, x0, y0, live, raf, lastX, lastY, scrollTimer }
+  const AUTOSCROLL_EDGE = 56, AUTOSCROLL_STEP = 14, START_PX = 6;
+
+  const endDrag = () => {
+    if (!drag) return;
+    const d = drag; drag = null;
+    clearInterval(d.scrollTimer);
+    cancelAnimationFrame(d.raf);
+    try { host.releasePointerCapture(d.id); } catch { /* already released */ }
+    if (d.live) {
+      d.pnl.classList.remove("dragging");
+      document.body.classList.remove("is-dragging");
+      captureLayout(host);
+      d.pnl.classList.add("moved");
+      setTimeout(() => d.pnl.classList.remove("moved"), 500);
+    }
     S.dragLock = false;
-    captureLayout(host);
     // a data tick that arrived mid-drag was held back; paint it now
     if (S.paintAfterDrag) { S.paintAfterDrag = false; paintView(); }
+  };
+
+  /** Where the pointer is → which panel, and whether the dragged one belongs before it. */
+  const place = (d, x, y) => {
+    const stack = document.elementsFromPoint(x, y);
+    const over = stack.map((n) => n.closest?.(".pnl")).find((p) => p && p.parentElement === host && p !== d.pnl);
+    if (!over) return;
+    const r = over.getBoundingClientRect(), m = d.pnl.getBoundingClientRect();
+    // two half-width panels on the same grid row: left/right decides; otherwise top/bottom
+    const sameRow = Math.abs(r.top - m.top) < 8 && r.width < host.clientWidth * 0.75;
+    const before = sameRow ? x < r.left + r.width / 2 : y < r.top + r.height / 2;
+    // already in the requested slot → nothing to do (this is what stops the flip-flop: moving
+    // the dragged panel changes the layout under the cursor, and a tall neighbour would
+    // otherwise bounce it above and below itself every frame)
+    if (before && over.previousElementSibling === d.pnl) return;
+    if (!before && over.nextElementSibling === d.pnl) return;
+    for (const k of host.children) for (const an of k.getAnimations?.() || []) an.cancel();
+    flip(() => (before ? over.before(d.pnl) : over.after(d.pnl)));
+  };
+
+  host.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0 || e.pointerType === "touch") return;
+    const label = e.target.closest?.(".p-handle");
+    if (!label || !host.contains(label)) return;
+    // the label bar also carries the seg controls and the ↑↓⇔ buttons — those are clicks
+    if (e.target.closest?.("button, .seg, .p-tools, .p-lay, a, input, select")) return;
+    const pnl = label.closest(".pnl");
+    if (!pnl || pnl.parentElement !== host) return;
+    drag = { pnl, label, id: e.pointerId, x0: e.clientX, y0: e.clientY, live: false, raf: 0, lastX: e.clientX, lastY: e.clientY, scrollTimer: 0 };
   });
+
+  host.addEventListener("pointermove", (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const d = drag;
+    d.lastX = e.clientX; d.lastY = e.clientY;
+    if (!d.live) {
+      if (Math.hypot(e.clientX - d.x0, e.clientY - d.y0) < START_PX) return;
+      d.live = true;
+      S.dragLock = true;    // hold re-renders: replacing the DOM mid-drag detaches the held panel
+      d.pnl.classList.add("dragging");
+      document.body.classList.add("is-dragging");
+      // capture on the HOST, never on the panel: moving the panel in the DOM (which every
+      // reorder does) releases any capture held on it — the drag died after its first move
+      try { host.setPointerCapture(d.id); } catch { /* best effort */ }
+      // auto-scroll while the pointer rests near the top or bottom edge of the viewport
+      d.scrollTimer = setInterval(() => {
+        if (!drag || drag !== d) return;
+        const vh = window.innerHeight;
+        if (d.lastY < AUTOSCROLL_EDGE) window.scrollBy(0, -AUTOSCROLL_STEP);
+        else if (d.lastY > vh - AUTOSCROLL_EDGE) window.scrollBy(0, AUTOSCROLL_STEP);
+        else return;
+        if (!d.raf) d.raf = requestAnimationFrame(() => { d.raf = 0; if (drag === d) place(d, d.lastX, d.lastY); });
+      }, 16);
+    }
+    e.preventDefault();
+    if (d.raf) return;
+    d.raf = requestAnimationFrame(() => { d.raf = 0; if (drag === d && d.pnl.isConnected) place(d, d.lastX, d.lastY); });
+  });
+
+  host.addEventListener("pointerup", (e) => { if (drag && e.pointerId === drag.id) endDrag(); });
+  host.addEventListener("pointercancel", (e) => { if (drag && e.pointerId === drag.id) endDrag(); });
+  host.addEventListener("lostpointercapture", (e) => { if (drag?.live && e.pointerId === drag.id) endDrag(); });
+  window.addEventListener("blur", endDrag);
 }
 
 function setView(id) {
@@ -308,7 +367,9 @@ function paintRail() {
   if (isNum(gx?.vol_trigger)) chips.push(chip("VT", String(gx.vol_trigger), "", true));
   if (isNum(gx?.put_wall)) chips.push(chip("PW", String(gx.put_wall), "hot"));
   if (isNum(z?.gamma_flip)) chips.push(chip("0DTE FLIP", String(z.gamma_flip), "", true));
-  if (isNum(em?.atm_iv)) chips.push(chip("IV", `${em.atm_iv.toFixed(1)}%`, "", true));
+  const ivs = ivTape().state;
+  if (ivs.status === "ok") chips.push(chip("0DTE IV", `${(100 * ivs.atm).toFixed(1)} ${ivt.fmtDelta(ivs.d30)}/30m`, ivs.cls === "rising" ? "cool" : ivs.cls === "falling" ? "hot" : ""));
+  else if (isNum(em?.atm_iv)) chips.push(chip("IV", `${em.atm_iv.toFixed(1)}%`, "", true));
   if (isNum(em?.moves?.["1d"]?.move_pts)) chips.push(chip("EM", `±${em.moves["1d"].move_pts.toFixed(2)}`, "", true));
   if (isNum(atr?.atr)) chips.push(chip("ATR", atr.atr.toFixed(2), "", true));
   $("#railChips").replaceChildren(...chips);
@@ -333,9 +394,16 @@ function paintView() {
   if (!v) return;
   if (S.dragLock) { S.paintAfterDrag = true; return; }
 
+  const iv = ivTape();
   const ctx = {
     yyy: S.yyy,
     pending: S.pending,
+    ivtape: iv.tape,
+    ivstate: iv.state,
+    ivcloud: iv.cloud,
+    ivtape: iv.tape,
+    ivstate: iv.state,
+    ivcloud: iv.cloud,
     wait: (ep, kind = "rows", n) => (S.pending.has(ep) && S.yyy.ok[ep] === undefined ? skeleton(kind, n) : null),
     deskPending: S.deskPending,
     spot: currentSpot(),
@@ -353,6 +421,10 @@ function paintView() {
     console.error("[view]", S.view, e);
     host.replaceChildren(el("div.chart-empty", { text: `render error: ${e?.message ?? e}` }));
   }
+  // Panels that have nothing to show return null, and `replaceChildren(a, null, b)` stringifies
+  // that into a "null" TEXT NODE — four missing panels printed "nullnullnullnull" in the grid.
+  // The views are fixed to filter, and this is the belt to that suspender.
+  for (const n of Array.from(host.childNodes)) if (n.nodeType !== 1) n.remove();
   applyLayout(host);
   if (first) {
     Array.from(host.children).forEach((c, i) => c.style.setProperty("--i", String(i)));
@@ -405,6 +477,7 @@ function mergePart(part) {
   if (got.length) {
     S.yyy = { ok: { ...S.yyy.ok, ...part.ok }, err: { ...S.yyy.err }, at: Date.now() };
     for (const k of got) delete S.yyy.err[k];
+    if (part.ok.net_iv) S.ivLocal = ivt.record(part.ok.net_iv, currentSpot());
     if (!S.lastLive) document.dispatchEvent(new CustomEvent("yyy:first"));
     S.lastLive = Date.now();
     S.lastErr = null;

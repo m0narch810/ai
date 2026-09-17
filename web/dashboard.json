@@ -1,63 +1,51 @@
 {
-  "as_of": "2026-09-16T00:00:00",
-  "scored_at": 1789531211270,
-  "generated_at": "2026-09-16T04:12:44.799Z",
+  "as_of": "2026-09-16T23:45:00",
+  "scored_at": 1789616715089,
+  "generated_at": "2026-09-17T03:51:45.562Z",
   "session": "Asia",
-  "spot": 706.5382591253065,
+  "spot": 709.3374779517083,
   "regime": "negative",
-  "read": "Rule-based alignment read: resistance $709.00 (aligned significant), support $700.00 (mixed dominant). Negative gamma — bar raised to aligned dominant structure. VIX settlement this morning — expect chop.",
+  "read": "Rule-based alignment read: resistance $713.00 (aligned significant); no qualifying support in band. Negative gamma — bar raised to aligned dominant structure. VIX settlement this morning — expect chop.",
   "hard_stop_pts": 0.9828009828009827,
   "clean_reversal_pts": 0.1,
   "iv": {
-    "current": 20.02,
+    "current": 18.91,
     "direction": "STABLE"
   },
-  "expected_move": 12.45,
+  "expected_move": 11.98,
   "scoring_method": "rule",
   "gex_profile": [
     {
-      "strike": 700,
-      "gex_m": -1334.1
-    },
-    {
-      "strike": 701,
-      "gex_m": -51
-    },
-    {
-      "strike": 702,
-      "gex_m": -48.8
-    },
-    {
       "strike": 703,
-      "gex_m": -49.9
+      "gex_m": -63.3
     },
     {
       "strike": 704,
-      "gex_m": -78.2
+      "gex_m": -69.2
     },
     {
       "strike": 705,
-      "gex_m": -229.4
+      "gex_m": -204.1
     },
     {
       "strike": 706,
-      "gex_m": -55.3
+      "gex_m": -62.2
     },
     {
       "strike": 707,
-      "gex_m": -41.1
+      "gex_m": 12.6
     },
     {
       "strike": 708,
-      "gex_m": -65.2
+      "gex_m": -22.5
     },
     {
       "strike": 709,
-      "gex_m": -31.7
+      "gex_m": -10.5
     },
     {
       "strike": 710,
-      "gex_m": 47.4
+      "gex_m": 124.5
     },
     {
       "strike": 711,
@@ -65,377 +53,374 @@
     },
     {
       "strike": 712,
-      "gex_m": -53.4
+      "gex_m": 6.9
     },
     {
       "strike": 713,
-      "gex_m": 11.3
+      "gex_m": 12.6
+    },
+    {
+      "strike": 714,
+      "gex_m": 12.7
+    },
+    {
+      "strike": 715,
+      "gex_m": -4.5
+    },
+    {
+      "strike": 716,
+      "gex_m": 14.9
     }
   ],
   "term_profile": [
     {
-      "strike": 700,
-      "gex": [
-        -133.8,
-        -1131.3,
-        -68.9,
-        0
-      ],
-      "charm": [
-        17407.8,
-        325768.6,
-        900.9,
-        0
-      ]
-    },
-    {
-      "strike": 701,
-      "gex": [
-        -28.9,
-        -18.5,
-        -3.6,
-        0
-      ],
-      "charm": [
-        3347.6,
-        4010.5,
-        35.9,
-        0
-      ]
-    },
-    {
-      "strike": 702,
-      "gex": [
-        -20,
-        -25.6,
-        -3.2,
-        0
-      ],
-      "charm": [
-        2568.6,
-        4266.6,
-        21.7,
-        0
-      ]
-    },
-    {
       "strike": 703,
       "gex": [
-        -19.5,
-        -27.6,
-        -2.8,
+        -57.1,
+        -5.8,
+        -0.4,
         0
       ],
       "charm": [
-        1423,
-        2164,
-        8.9,
+        5413.6,
+        110.4,
+        0.7,
         0
       ]
     },
     {
       "strike": 704,
       "gex": [
-        -18.7,
-        -41.2,
-        -18.3,
+        -44.4,
+        -24.9,
+        0.1,
         0
       ],
       "charm": [
-        476.6,
-        836.5,
-        -42.8,
+        2265.8,
+        32.9,
+        -0.8,
         0
       ]
     },
     {
       "strike": 705,
       "gex": [
-        -27.8,
-        -183.5,
-        -18.1,
+        -184.4,
+        -18.5,
+        -1.1,
         0
       ],
       "charm": [
-        -1662.3,
-        -16688.1,
-        -143.9,
+        -13108.6,
+        -437.4,
+        -19.3,
         0
       ]
     },
     {
       "strike": 706,
       "gex": [
-        -29.7,
-        -23.7,
-        -1.9,
+        -60.2,
+        -2.2,
+        0.2,
         0
       ],
       "charm": [
-        -3122.6,
-        -3380,
-        -42.1,
+        -9078.3,
+        -501.4,
+        -2.7,
         0
       ]
     },
     {
       "strike": 707,
       "gex": [
-        -8.1,
-        -32.4,
-        -0.6,
+        7.3,
+        5.3,
+        0,
         0
       ],
       "charm": [
-        -3207.5,
-        -6719.8,
-        -115.1,
+        -11552.1,
+        -497.6,
+        -2.3,
         0
       ]
     },
     {
       "strike": 708,
       "gex": [
-        -22.1,
-        -41.3,
-        -1.8,
+        -21.2,
+        -1.2,
+        -0.1,
         0
       ],
       "charm": [
-        -7372,
-        -11212,
-        -152.2,
+        -19522.9,
+        -724.8,
+        -4.2,
         0
       ]
     },
     {
       "strike": 709,
       "gex": [
-        -1.8,
-        -26.9,
-        -3,
+        -4.6,
+        -6,
+        0.1,
         0
       ],
       "charm": [
-        -7524.6,
-        -11784.3,
-        -188.3,
+        -16445.3,
+        -701,
+        -1.6,
         0
       ]
     },
     {
       "strike": 710,
       "gex": [
-        -45.4,
-        102.5,
-        -9.6,
+        128.7,
+        -2.2,
+        -2,
         0
       ],
       "charm": [
-        -28940.3,
-        -224295.4,
-        -774.1,
+        -228112.3,
+        -3304.5,
+        -78.4,
         0
       ]
     },
     {
       "strike": 711,
       "gex": [
-        -1.5,
-        -21.5,
-        8.5,
+        -22.7,
+        8.3,
+        0,
         0
       ],
       "charm": [
-        -8916.9,
-        -18601.1,
-        -530.7,
+        -22838.8,
+        -1314.4,
+        -2.1,
         0
       ]
     },
     {
       "strike": 712,
       "gex": [
-        7.7,
-        -59.4,
-        -1.7,
+        6.4,
+        0.6,
+        -0.1,
         0
       ],
       "charm": [
-        -11188.4,
-        -35369.7,
-        -212.7,
+        -48363.2,
+        -1441.3,
+        -11.8,
         0
       ]
     },
     {
       "strike": 713,
       "gex": [
-        15,
-        -1.3,
-        -2.5,
+        9.4,
+        3,
+        0.1,
         0
       ],
       "charm": [
-        -8033.8,
-        -17531.5,
-        -356.7,
+        -21193.8,
+        -1376.4,
+        -4,
+        0
+      ]
+    },
+    {
+      "strike": 714,
+      "gex": [
+        9.1,
+        3.5,
+        0.1,
+        0
+      ],
+      "charm": [
+        -23414.2,
+        -1199.1,
+        -2.3,
+        0
+      ]
+    },
+    {
+      "strike": 715,
+      "gex": [
+        46.5,
+        -57.3,
+        6.4,
+        0
+      ],
+      "charm": [
+        -106988.1,
+        -12393.6,
+        -221.1,
+        0
+      ]
+    },
+    {
+      "strike": 716,
+      "gex": [
+        16.2,
+        -1.3,
+        0,
+        0
+      ],
+      "charm": [
+        -16711.6,
+        -1476.5,
+        -2.8,
         0
       ]
     }
   ],
   "coverage": [
     {
+      "strike": 716,
+      "side": "resistance",
+      "reaction": "mixed",
+      "tags": [],
+      "prob": 10
+    },
+    {
+      "strike": 715,
+      "side": "resistance",
+      "reaction": "mixed",
+      "tags": [],
+      "prob": 10
+    },
+    {
+      "strike": 714,
+      "side": "resistance",
+      "reaction": "mixed",
+      "tags": [],
+      "prob": 10
+    },
+    {
       "strike": 713,
       "side": "resistance",
-      "reaction": "clean",
-      "tags": [
-        "Call Wall",
-        "Aligned",
-        "0DTE Pin"
-      ],
-      "prob": 52
+      "reaction": "mixed",
+      "tags": [],
+      "prob": 10
     },
     {
       "strike": 712,
       "side": "resistance",
       "reaction": "mixed",
-      "tags": [
-        "Mixed Greeks"
-      ],
-      "prob": 32
+      "tags": [],
+      "prob": 10
     },
     {
       "strike": 711,
       "side": "resistance",
-      "reaction": "mixed",
+      "reaction": "chop",
       "tags": [
-        "Aligned"
+        "Above Wall",
+        "Weak"
       ],
-      "prob": 33
+      "prob": 8
     },
     {
       "strike": 710,
       "side": "resistance",
-      "reaction": "clean",
+      "reaction": "chop",
       "tags": [
         "Call Wall",
-        "Aligned",
-        "Battleground"
+        "Broken"
       ],
-      "prob": 52
+      "prob": 20
     },
     {
       "strike": 709,
-      "side": "resistance",
-      "reaction": "clean",
+      "side": "support",
+      "reaction": "chop",
       "tags": [
-        "Aligned",
-        "Battleground"
+        "Extreme Put Vol",
+        "Exhausted"
       ],
-      "prob": 56
+      "prob": 12
     },
     {
       "strike": 708,
-      "side": "resistance",
+      "side": "support",
       "reaction": "chop",
       "tags": [
-        "Mixed Greeks",
-        "Battleground"
+        "Broke",
+        "Momentum Through"
       ],
-      "prob": 36
+      "prob": 12
     },
     {
       "strike": 707,
-      "side": "resistance",
+      "side": "support",
       "reaction": "chop",
       "tags": [
-        "Mixed Greeks",
-        "Battleground"
+        "Call Wall",
+        "Broke Early"
       ],
-      "prob": 36
+      "prob": 12
     },
     {
       "strike": 706,
       "side": "support",
       "reaction": "chop",
       "tags": [
-        "Mixed Greeks",
-        "Battleground"
+        "Broke",
+        "Vol Exhaustion"
       ],
-      "prob": 36
+      "prob": 12
     },
     {
       "strike": 705,
       "side": "support",
       "reaction": "chop",
       "tags": [
-        "Opposed",
-        "Battleground",
-        "0DTE Flip"
+        "Flip Pivot",
+        "Charm -1.9k 0DTE"
       ],
-      "prob": 18
+      "prob": 15
     },
     {
       "strike": 704,
       "side": "support",
-      "reaction": "chop",
+      "reaction": "mixed",
       "tags": [
-        "Mixed Greeks",
-        "Battleground"
+        "Weak Hold",
+        "29% Run"
       ],
-      "prob": 36
+      "prob": 24
     },
     {
       "strike": 703,
       "side": "support",
       "reaction": "chop",
       "tags": [
-        "Mixed Greeks",
-        "Battleground"
+        "Flip Zone",
+        "Charm Negative"
       ],
-      "prob": 36
-    },
-    {
-      "strike": 702,
-      "side": "support",
-      "reaction": "mixed",
-      "tags": [
-        "Mixed Greeks"
-      ],
-      "prob": 6
-    },
-    {
-      "strike": 701,
-      "side": "support",
-      "reaction": "mixed",
-      "tags": [
-        "Aligned"
-      ],
-      "prob": 33
-    },
-    {
-      "strike": 700,
-      "side": "support",
-      "reaction": "chop",
-      "tags": [
-        "Major Wall",
-        "Max Pain",
-        "Mixed Greeks"
-      ],
-      "prob": 40
+      "prob": 18
     }
   ],
-  "zero_gamma": 704.54,
-  "vol_trigger": 704.54,
-  "net_gex": -3550560000,
-  "pc_ratio": 0.86,
-  "gex_0dte_ratio": 0.15,
-  "entropy_state": "NORMAL",
-  "entropy_ratio": 0.67,
+  "zero_gamma": 704.72,
+  "vol_trigger": 704.72,
+  "net_gex": -3523300000,
+  "pc_ratio": 1.26,
+  "gex_0dte_ratio": 0.77,
+  "entropy_state": "CRITICAL",
+  "entropy_ratio": 2.04,
   "day_gate": {
-    "verdict": "SELECTIVE",
-    "majors": 1,
+    "verdict": "STAND DOWN",
+    "majors": 2,
     "minors": 2,
     "reasons": [
       {
@@ -443,67 +428,74 @@
         "label": "VIX monthly settlement this morning — AM print distorts the open, vol positioning unwinds"
       },
       {
+        "severity": "major",
+        "label": "Flow entropy CRITICAL (ρ=2.04) — positioning is disordered, walls unreliable"
+      },
+      {
         "severity": "minor",
         "label": "Negative net gamma — dealers amplify moves, non-dominant levels get blown through"
       },
       {
         "severity": "minor",
-        "label": "Strongly trending tape (Hurst 0.69) — only the terminal wall is a fade, intermediates are targets"
+        "label": "Strongly trending tape (Hurst 0.92) — only the terminal wall is a fade, intermediates are targets"
       }
     ]
   },
   "iv_walls": {
-    "u_inner": 705.68,
-    "u_outer": 707.15,
-    "l_inner": 703.6,
-    "l_outer": 701.92,
-    "spot_at_calc": 704.68,
-    "sigma_atm_pct": 14.66,
+    "u_inner": 710.41,
+    "u_outer": 711.88,
+    "l_inner": 697.68,
+    "l_outer": 696,
+    "spot_at_calc": 704.54,
+    "sigma_atm_pct": 24.7,
     "delta": 0.1925,
-    "computed_at": "2026-09-15T15:06:07",
+    "computed_at": "2026-09-16T00:15:00",
     "dte": 0
   },
   "levels": [
     {
-      "strike": 709,
+      "strike": 713,
       "reversal_prob": 56,
       "side": "resistance",
       "reaction": "clean",
       "tags": [
         "Aligned",
-        "Battleground"
+        "Battleground",
+        "0DTE Pin"
       ],
-      "why": "significant node; aligned: charm− drift, 0DTE charm confirms; battleground vol/OI; durable across tenors",
+      "why": "significant node; aligned: charm− drift, 0DTE charm confirms; battleground vol/OI; 0DTE-heavy, today-only",
       "outcome": "untouched",
       "touched": false
     },
     {
-      "strike": 713,
-      "reversal_prob": 52,
+      "strike": 715,
+      "reversal_prob": 48,
+      "side": "resistance",
+      "reaction": "clean",
+      "tags": [
+        "Aligned"
+      ],
+      "why": "significant node; aligned: charm− drift, 0DTE charm confirms",
+      "outcome": "untouched",
+      "touched": false
+    },
+    {
+      "strike": 710,
+      "reversal_prob": 30,
       "side": "resistance",
       "reaction": "clean",
       "tags": [
         "Call Wall",
         "Aligned",
+        "Battleground",
         "0DTE Pin"
       ],
-      "why": "significant node (call wall); aligned: charm− drift, 0DTE charm confirms; 0DTE-heavy, today-only",
-      "outcome": "untouched",
-      "touched": false
-    },
-    {
-      "strike": 700,
-      "reversal_prob": 40,
-      "side": "support",
-      "reaction": "chop",
-      "tags": [
-        "Major Wall",
-        "Max Pain",
-        "Mixed Greeks"
-      ],
-      "why": "dominant node (major wall); mixed: put-side gamma, charm+ drift, 0DTE charm confirms; against: dex− vulnerable; durable across tenors",
-      "outcome": "untouched",
-      "touched": false
+      "why": "dominant node (call wall); aligned: call-side gamma, charm− drift, 0DTE charm confirms; battleground vol/OI; 0DTE-heavy, today-only; counter-node $709 inside the bracket — bounce-then-break risk",
+      "outcome": "pending",
+      "touched": true,
+      "touchedAt": "2026-09-16T20:33:00",
+      "overshoot": 0.11,
+      "clean": false
     }
   ]
 }

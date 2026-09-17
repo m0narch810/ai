@@ -33,13 +33,13 @@ export function render(host, ctx) {
   const age = msAgo(n.scored_at ?? n.generated_at);
   const stale = !(age < 20 * 60 * 60_000);   // anything older than the current session
 
-  host.replaceChildren(
+  host.replaceChildren(...[
     openPanel(n, stale),
     callPanel(n),
     zonePanel(n, ctx.spot),
     levelPanel(n, ctx.spot),
     driverPanel(n),
-  );
+  ].filter(Boolean));
 }
 
 /* ── N0 THE CALL ─────────────────────────────────────────────────────────── */

@@ -18,7 +18,10 @@ export function panel({ idx, title, tools, body, note, cls = "", flush = false }
     el("button.p-laybtn", { type: "button", title: "move down", "data-lay": "down", text: "\u2193" }),
     el("button.p-laybtn", { type: "button", title: "toggle width", "data-lay": "width", text: "\u21d4" }),
   ]);
-  const label = el("div.p-label", { draggable: "true" }, [
+  // Not `draggable`: the label is a pointer-event drag handle (app.js), so the browser's native
+  // drag-and-drop never starts — its ghost image, dropped `dragend`s and mid-drag DOM rules were
+  // the source of every "finnicky" drag report.
+  const label = el("div.p-label.p-handle", null, [
     el("span.p-label-l", null, [
       idx ? el("i.p-ix", { text: idx }) : null,
       el("span.p-title", { text: title, "data-decode": "" }),

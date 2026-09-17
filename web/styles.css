@@ -156,9 +156,9 @@ body { min-height: 100dvh; overflow-x: hidden; }
   padding: 14px 18px 12px;
   margin: 12px 0 0;
   border: 1px solid var(--edge-2);
-  background: color-mix(in srgb, var(--bg) 84%, transparent);
-  -webkit-backdrop-filter: blur(14px) saturate(1.1);
-  backdrop-filter: blur(14px) saturate(1.1);
+  /* no backdrop-filter: a sticky blur over an animating canvas re-blurs on every frame, and
+     was the single most expensive thing on the page while scrolling (v3.8) */
+  background: color-mix(in srgb, var(--bg) 94%, transparent);
   transition: padding .28s var(--ease), border-color .28s var(--ease), box-shadow .28s var(--ease);
 }
 /* corner brackets — drawn with four tiny gradients so no extra elements are needed */
@@ -397,7 +397,7 @@ body { min-height: 100dvh; overflow-x: hidden; }
 .sp-rule  { stroke: var(--edge); stroke-width: 1; }
 .sp-grid  { stroke: var(--edge); stroke-width: 1; stroke-dasharray: 1 4; }
 .sp-zebra { fill: var(--zebra); }
-.sp-spot  { stroke: var(--acc); stroke-width: 1; stroke-dasharray: 4 3; filter: drop-shadow(0 0 4px var(--acc-glow)); }
+.sp-spot  { stroke: var(--acc); stroke-width: 1; stroke-dasharray: 4 3; }
 .sp-spot-tag { font-size: 8px; letter-spacing: .14em; fill: var(--acc); font-family: var(--mono); }
 .sp-k { font-size: 10px; fill: var(--ink2); font-family: var(--mono); }
 .sp-k.is-mark { fill: var(--ink); font-weight: 500; }
@@ -491,7 +491,7 @@ body { min-height: 100dvh; overflow-x: hidden; }
 .cc-body.up { fill: var(--acc); fill-opacity: .85; }
 .cc-body.dn { fill: var(--neg); fill-opacity: .9; stroke: var(--neg-2); stroke-width: .6; }
 .cc-vwap { fill: none; stroke: var(--ink); stroke-width: 1; stroke-dasharray: 4 3; stroke-opacity: .7; }
-.cc-spot { stroke: var(--acc); stroke-width: 1; stroke-dasharray: 2 3; filter: drop-shadow(0 0 3px var(--acc-glow)); }
+.cc-spot { stroke: var(--acc); stroke-width: 1; stroke-dasharray: 2 3; }
 .cc-spot-tag { fill: var(--acc); }
 .cc-spot-txt { font-size: 9px; font-family: var(--mono); fill: var(--bg); font-weight: 500; }
 .cone .cc-spot-txt { fill: var(--acc); }
@@ -511,7 +511,11 @@ body { min-height: 100dvh; overflow-x: hidden; }
 
 /* ════════════════ BOARD ════════════════ */
 .ladder { display: flex; flex-direction: column; }
-.ladder-row { display: grid; align-items: center; gap: 10px; grid-template-columns: 96px 60px 1fr 120px; padding: 6px 0; border-bottom: 1px dashed var(--edge); font-size: 11px; }
+.ladder-row { display: grid; align-items: center; gap: 10px; grid-template-columns: 96px 60px 1fr 120px auto; padding: 6px 0; border-bottom: 1px dashed var(--edge); font-size: 11px; }
+.lr-scr { justify-self: end; white-space: nowrap; }
+.lr-scr .tag { font-size: 8.5px; padding: 0; }
+.lr-desk.is-live::before { content: "live "; }
+.dl-tags .tag { font-size: 8.5px; margin-right: 4px; }
 .ladder-row:last-child { border-bottom: 0; }
 .lr-name { font-size: 9px; letter-spacing: .16em; color: var(--ink3); }
 .lr-price { font-size: 13px; font-weight: 500; color: var(--ink); }
@@ -960,9 +964,9 @@ body { min-height: 100dvh; overflow-x: hidden; }
 /* ── v3.6 ────────────────────────────────────────────────────────────────── */
 
 /* gamma ladder glow: lit bars carry a second, wider halo; the spine and spot rail glow too */
-.spine .sp-bar.p { filter: drop-shadow(0 0 3px var(--acc-glow)) drop-shadow(0 0 9px var(--acc-dim)); }
+/* v3.8: the double per-bar halo and the halo on the MARCHING spot line are gone — an animated
+   stroke with a filter re-rasterises its ladder every frame, on every ladder on screen */
 .spine .sp-spine { filter: drop-shadow(0 0 4px var(--acc-glow)); }
-.spine .sp-spot { filter: drop-shadow(0 0 6px var(--acc-glow)); }
 .spine .sp-markbar { filter: drop-shadow(0 0 5px var(--acc-glow)); }
 
 /* IV-wall zones on every ladder */
@@ -975,9 +979,10 @@ body { min-height: 100dvh; overflow-x: hidden; }
 .lr-desk { font-size: 9px; letter-spacing: .1em; color: var(--ink3); }
 .lr-desk::before { content: "desk "; color: var(--ink4); }
 
-/* layout controls */
-.p-label[draggable="true"] { cursor: grab; }
-.p-label[draggable="true"]:active { cursor: grabbing; }
+/* layout controls — the label bar is a pointer-event drag handle (app.js), not native DnD */
+.p-handle { cursor: grab; user-select: none; -webkit-user-select: none; }
+body.is-dragging, body.is-dragging * { cursor: grabbing !important; user-select: none; -webkit-user-select: none; }
+body.is-dragging .tip { display: none; }
 .p-lay { display: inline-flex; gap: 2px; margin-left: 6px; opacity: 0; transition: opacity .15s var(--ease); }
 .pnl:hover .p-lay, .pnl:focus-within .p-lay { opacity: 1; }
 @media (hover: none) { .p-lay { opacity: .7; } }
@@ -986,7 +991,7 @@ body { min-height: 100dvh; overflow-x: hidden; }
   width: 18px; height: 18px; cursor: pointer; padding: 0; transition: color .12s var(--ease), border-color .12s var(--ease);
 }
 .p-laybtn:hover { color: var(--acc); border-color: var(--acc-line); }
-.pnl.dragging { opacity: .5; outline: 1px dashed var(--acc-line); outline-offset: 2px; }
+.pnl.dragging { opacity: .55; outline: 1px dashed var(--acc-line); outline-offset: 2px; z-index: 5; }
 .pnl.moved { animation: flashbg 1s var(--ease) both; }
 .foot .kbtn { padding: 2px 2px; font-size: 9px; }
 

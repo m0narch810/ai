@@ -34,6 +34,11 @@ const PALETTES = [
 
 const reduced = () => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
+// Skip frames while the page scrolls: a canvas repaint under a scroll is pure jank.
+let lastScroll = 0;
+window.addEventListener("scroll", () => { lastScroll = performance.now(); }, { passive: true, capture: true });
+const scrolling = () => performance.now() - lastScroll < 120;
+
 const catmull = (p0, p1, p2, p3, t) =>
   0.5 * (2 * p1 + (-p0 + p2) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t * t + (-p0 + 3 * p1 - 3 * p2 + p3) * t * t * t);
 
@@ -185,7 +190,7 @@ export function mountTopo(host, o) {
   const mono = `"Geist Mono", ui-monospace, monospace`;
 
   function draw() {
-    const dpr = Math.min(2, devicePixelRatio || 1);
+    const dpr = Math.min(1.5, devicePixelRatio || 1);
     const W = canvas.offsetWidth, H = canvas.offsetHeight;
     if (!W || !H) return;
     if (canvas.width !== W * dpr || canvas.height !== H * dpr) { canvas.width = W * dpr; canvas.height = H * dpr; }
@@ -291,17 +296,26 @@ export function mountTopo(host, o) {
     ctx.fillText(mode === "signed" ? `+${fmtVal(maxAbs)}` : fmtVal(minV + maxAbs), lx + lw, ly + lh + 11);
   }
 
-  // loop
-  let raf = 0, visible = true;
+  // loop — draws only when the view changed, capped at ~24fps while auto-turning. Every repaint
+  // of the owning panel mounts a fresh instance, so this one retires itself the moment its
+  // canvas leaves the document (the old build kept every loop alive forever — the board tab
+  // accumulated one 60fps terrain per data tick, which is what "laggy" was).
+  let raf = 0, visible = true, last = 0, dirty = true, dead = false, mo = null;
+  const FRAME_MS = 42;
   const frame = (now) => {
+    if (dead) return;
+    if (!canvas.isConnected) { destroy(); return; }
     raf = requestAnimationFrame(frame);
-    if (document.hidden || !visible) return;
-    if (!reduced() && now > view.dragUntil) view.yaw += 0.0026;
+    if (document.hidden || !visible || scrolling()) return;
+    if (!reduced() && now > view.dragUntil) { if (now - last < FRAME_MS) return; view.yaw += 0.0026 * 2.5; dirty = true; }
+    if (!dirty) return;
+    dirty = false; last = now;
     draw();
   };
-  const io = new IntersectionObserver(([e]) => { visible = e.isIntersecting; }, { threshold: 0 });
+  const io = new IntersectionObserver(([e]) => { visible = e.isIntersecting; if (visible) dirty = true; }, { threshold: 0 });
   io.observe(wrap);
   raf = requestAnimationFrame(frame);
+  const destroy = () => { dead = true; cancelAnimationFrame(raf); io.disconnect(); mo?.disconnect(); };
 
   // interaction
   let dragging = false, lx = 0, ly = 0;
@@ -315,6 +329,7 @@ export function mountTopo(host, o) {
       view.pitch = Math.max(-0.35, Math.min(1.4, view.pitch + (e.clientY - ly) * 0.004));
       lx = e.clientX; ly = e.clientY;
       view.dragUntil = performance.now() + 6000;
+      dirty = true;
       return;
     }
     const rect = canvas.getBoundingClientRect();
@@ -333,17 +348,19 @@ export function mountTopo(host, o) {
     e.preventDefault();
     view.zoom = Math.max(0.5, Math.min(2.5, view.zoom * (1 - Math.sign(e.deltaY) * 0.08)));
     view.dragUntil = performance.now() + 6000;
+    dirty = true;
   }, { passive: false });
-  canvas.addEventListener("dblclick", () => { view.yaw = 0.62; view.pitch = 0.52; view.zoom = 1; view.dragUntil = performance.now() + 6000; });
+  canvas.addEventListener("dblclick", () => { view.yaw = 0.62; view.pitch = 0.52; view.zoom = 1; view.dragUntil = performance.now() + 6000; dirty = true; });
   palBtn.addEventListener("click", () => {
     palIdx = (palIdx + 1) % PALETTES.length;
     ramp = rampOf(PALETTES[palIdx].stops);
     palBtn.textContent = PALETTES[palIdx].label;
     try { localStorage.setItem(PAL_KEY, PALETTES[palIdx].id); } catch { /* optional */ }
+    dirty = true;
   });
-  const mo = new MutationObserver(refreshPal);
+  mo = new MutationObserver(() => { refreshPal(); dirty = true; });
   mo.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
 
   if (reduced()) draw();
-  return { destroy: () => { cancelAnimationFrame(raf); io.disconnect(); mo.disconnect(); } };
+  return { destroy };
 }

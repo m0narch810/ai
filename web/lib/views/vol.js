@@ -22,7 +22,7 @@ export const EPS = ["iv_surface", "net_iv", "expected_move", "probability", "vol
 export function render(host, ctx) {
   const { ok, err } = ctx.yyy;
   const anom = findIvAnomalies({ net_iv: ok.net_iv, flow: ok.flow, spot: ctx.spot });
-  host.replaceChildren(
+  host.replaceChildren(...[
     statePanel(ok, ctx),
     anomalyPanel(anom, ctx),
     surfacePanel(ok.iv_surface, anom, ctx),
@@ -32,7 +32,7 @@ export function render(host, ctx) {
     conePanel(ok.probability, ctx.spot),
     distPanel(ok.probability),
     forecastPanel(ok.vol_forecast),
-  );
+  ].filter(Boolean));
 }
 
 /* ── V0 STATE ────────────────────────────────────────────────────────────── */
